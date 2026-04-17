@@ -4,15 +4,21 @@ import {
   MeshStandardMaterial,
   PlaneGeometry,
 } from 'three';
-import { CHUNK_SIZE, CHUNK_RESOLUTION } from '../config.js';
+import {
+  CHUNK_SIZE,
+  CHUNK_RESOLUTION,
+  SLOPE_ROCK_THRESHOLD,
+} from '../config.js';
 import { groundHeight } from './Ground.js';
 
-function colorForVertex(y) {
-  if (y < 1) return [0.85, 0.8, 0.6];
-  if (y < 10) return [0.35, 0.55, 0.25];
-  if (y < 25) return [0.45, 0.5, 0.35];
-  if (y < 40) return [0.5, 0.45, 0.4];
-  return [0.95, 0.95, 0.95];
+const ROCK = [0.48, 0.44, 0.40];
+
+function colorByHeight(y) {
+  if (y < 1) return [0.85, 0.80, 0.60];       // sand
+  if (y < 10) return [0.35, 0.55, 0.25];      // grass
+  if (y < 25) return [0.40, 0.48, 0.30];      // darker grass
+  if (y < 40) return [0.55, 0.52, 0.45];      // scrub
+  return [0.96, 0.96, 0.96];                  // snow
 }
 
 export function buildChunk(cx, cz) {
@@ -25,28 +31,34 @@ export function buildChunk(cx, cz) {
   geo.rotateX(-Math.PI / 2);
 
   const positions = geo.attributes.position;
-  const colors = new Float32Array(positions.count * 3);
-
   const chunkOriginX = cx * CHUNK_SIZE + CHUNK_SIZE / 2;
   const chunkOriginZ = cz * CHUNK_SIZE + CHUNK_SIZE / 2;
 
   for (let i = 0; i < positions.count; i++) {
-    const localX = positions.getX(i);
-    const localZ = positions.getZ(i);
-    const worldX = chunkOriginX + localX;
-    const worldZ = chunkOriginZ + localZ;
-
-    const y = groundHeight(worldX, worldZ);
-    positions.setY(i, y);
-
-    const [r, g, b] = colorForVertex(y);
-    colors[i * 3] = r;
-    colors[i * 3 + 1] = g;
-    colors[i * 3 + 2] = b;
+    const worldX = chunkOriginX + positions.getX(i);
+    const worldZ = chunkOriginZ + positions.getZ(i);
+    positions.setY(i, groundHeight(worldX, worldZ));
   }
 
-  geo.setAttribute('color', new BufferAttribute(colors, 3));
   geo.computeVertexNormals();
+
+  // Color after normals so we can bias toward rock on steep slopes.
+  const normals = geo.attributes.normal;
+  const colors = new Float32Array(positions.count * 3);
+  for (let i = 0; i < positions.count; i++) {
+    const y = positions.getY(i);
+    const ny = normals.getY(i);
+    let rgb;
+    if (ny < SLOPE_ROCK_THRESHOLD && y > 0.5) {
+      rgb = ROCK;
+    } else {
+      rgb = colorByHeight(y);
+    }
+    colors[i * 3] = rgb[0];
+    colors[i * 3 + 1] = rgb[1];
+    colors[i * 3 + 2] = rgb[2];
+  }
+  geo.setAttribute('color', new BufferAttribute(colors, 3));
 
   const mat = new MeshStandardMaterial({
     vertexColors: true,

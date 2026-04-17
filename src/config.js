@@ -63,10 +63,24 @@ export const THROTTLE_RATE = 0.5;
 export const PLANE_BOTTOM_OFFSET = 0.5;
 export const BRAKE_STRENGTH = 1.5;
 
-// Fog / lighting
-export const FOG_COLOR = 0x88bbee;
+// Sky / fog / lighting
+export const HORIZON_COLOR = 0xcfe2f3; // warm pale blue, matches fog
+export const ZENITH_COLOR = 0x3b72c4;  // deeper overhead blue
+export const SUN_DIRECTION = [0.35, 0.45, -0.5]; // normalized in Sky.js
+export const SUN_COLOR = 0xfff1c8;
+export const FOG_COLOR = HORIZON_COLOR;
 export const FOG_NEAR = 150;
 export const FOG_FAR = 420;
+
+// Terrain coloring — slope threshold (vertex normal.y below this = rock).
+export const SLOPE_ROCK_THRESHOLD = 0.72;
+
+// Scatter density per chunk
+export const TREES_PER_CHUNK = 18;
+export const ROCKS_PER_CHUNK = 10;
+export const TREE_MIN_HEIGHT = 1.5;
+export const TREE_MAX_HEIGHT = 24;
+export const TREE_MAX_SLOPE = 0.35;   // tan of slope: reject steep spots
 
 // Camera
 export const CAMERA_FOV = 70;

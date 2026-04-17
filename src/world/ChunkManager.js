@@ -1,10 +1,12 @@
+import { Group } from 'three';
 import { CHUNK_SIZE, VIEW_DISTANCE_CHUNKS } from '../config.js';
 import { buildChunk } from './Terrain.js';
+import { buildScatter, disposeScatter } from './Scatter.js';
 
 export class ChunkManager {
   constructor(scene) {
     this.scene = scene;
-    this.chunks = new Map();
+    this.chunks = new Map(); // "cx,cz" → { group, terrain, scatter }
   }
 
   update(planePos) {
@@ -19,18 +21,23 @@ export class ChunkManager {
         const key = `${cx},${cz}`;
         needed.add(key);
         if (!this.chunks.has(key)) {
-          const mesh = buildChunk(cx, cz);
-          this.chunks.set(key, mesh);
-          this.scene.add(mesh);
+          const terrain = buildChunk(cx, cz);
+          const scatter = buildScatter(cx, cz);
+          const group = new Group();
+          group.add(terrain);
+          group.add(scatter);
+          this.scene.add(group);
+          this.chunks.set(key, { group, terrain, scatter });
         }
       }
     }
 
-    for (const [key, mesh] of this.chunks) {
+    for (const [key, entry] of this.chunks) {
       if (!needed.has(key)) {
-        this.scene.remove(mesh);
-        mesh.geometry.dispose();
-        mesh.material.dispose();
+        this.scene.remove(entry.group);
+        entry.terrain.geometry.dispose();
+        entry.terrain.material.dispose();
+        disposeScatter(entry.scatter);
         this.chunks.delete(key);
       }
     }

@@ -1,7 +1,7 @@
 import { Renderer } from './core/Renderer.js';
 import { Clock } from './core/Clock.js';
 import { Input } from './core/Input.js';
-import { addLighting } from './world/Sky.js';
+import { Sky } from './world/Sky.js';
 import { ChunkManager } from './world/ChunkManager.js';
 import { buildRunwayMesh, isOnRunway } from './world/Runway.js';
 import { groundHeight } from './world/Ground.js';
@@ -13,7 +13,7 @@ const renderer = new Renderer();
 const clock = new Clock();
 const input = new Input();
 
-addLighting(renderer.scene);
+const sky = new Sky(renderer.scene);
 
 const chunks = new ChunkManager(renderer.scene);
 const runwayMesh = buildRunwayMesh();
@@ -52,6 +52,7 @@ function renderStep() {
   const renderDt = Math.min(0.1, (now - lastRenderTime) / 1000);
   lastRenderTime = now;
   chaseCamera.update(plane, input, renderDt);
+  sky.update(renderer.camera);
   renderer.render();
   hud.update(plane);
 }
