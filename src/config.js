@@ -30,7 +30,11 @@ export const MAX_THRUST = 15000;
 // lift to equal weight at ~40 m/s. 9810 / 40^2 ≈ 6.1, so 6.0 gives takeoff ~40 m/s.
 export const LIFT_COEFFICIENT = 6.0;
 export const DRAG_COEFFICIENT = 0.3;
-export const ROLLING_FRICTION = 0.5;
+// Starting value from docs was 0.5, but that caps rolling speed at ~30 m/s —
+// below takeoff speed (~40 m/s), so the plane can never lift off the runway.
+// 0.05 is closer to real aircraft tire friction and still slows the plane on
+// landing (brakes add BRAKE_STRENGTH on top of this).
+export const ROLLING_FRICTION = 0.05;
 
 // Angular controls
 export const PITCH_RATE = 1.5;
