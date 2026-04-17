@@ -17,8 +17,9 @@ export function applyControls(plane, input, dt, touch) {
   const keyRoll = input.getAxis('KeyA', 'KeyD');
   const keyYaw = input.getAxis('KeyQ', 'KeyE');
 
-  // Joystick: push up = nose up, push right = roll right (flight-sim default).
-  const joyPitch = touch && touch.enabled ? -touch.joyY : 0;
+  // Joystick: push up = nose down, push right = roll right (pitch axis
+  // inverted per user preference; roll left untouched).
+  const joyPitch = touch && touch.enabled ? touch.joyY : 0;
   const joyRoll = touch && touch.enabled ? -touch.joyX : 0;
   // Yaw buttons inverted per user preference — ← yaws right, → yaws left.
   const joyYaw =
