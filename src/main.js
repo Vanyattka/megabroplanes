@@ -5,6 +5,7 @@ import { Sky } from './world/Sky.js';
 import { ChunkManager } from './world/ChunkManager.js';
 import { VillageManager } from './world/VillageManager.js';
 import { isOnFlatGround } from './world/Villages.js';
+import { Water } from './world/Water.js';
 import { groundHeight } from './world/Ground.js';
 import { Clouds } from './world/Clouds.js';
 import { PlaneShadow, makeShadowTexture } from './world/Shadow.js';
@@ -24,6 +25,7 @@ const sky = new Sky(renderer.scene);
 
 const chunks = new ChunkManager(renderer.scene);
 const villages = new VillageManager(renderer.scene);
+const water = new Water(renderer.scene);
 
 const plane = new Plane();
 renderer.scene.add(plane.mesh);
@@ -104,6 +106,7 @@ function renderStep() {
   lastRenderTime = now;
   chaseCamera.update(plane, input, renderDt);
   sky.update(renderer.camera);
+  water.update(renderer.camera.position);
   clouds.update(renderDt, plane.position, getGroundHeight);
   if (!plane.crashed) planeShadow.update(plane, getGroundHeight);
   else planeShadow.mesh.visible = false;

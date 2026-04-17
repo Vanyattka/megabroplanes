@@ -93,6 +93,16 @@ export const FOG_FAR = 420;
 // Terrain coloring — slope threshold (vertex normal.y below this = rock).
 export const SLOPE_ROCK_THRESHOLD = 0.72;
 
+// Biomes — a low-frequency noise field selects between lake/forest/hills/
+// mountain. Parameters blend smoothly across boundaries.
+export const BIOME_SCALE = 0.0006;              // biome feature size (~1700m across)
+export const MAX_TREE_FACTOR = 2.8;             // forest peak tree-density multiplier
+export const MAX_ROCK_FACTOR = 2.5;             // mountain peak rock-density multiplier
+
+// Water
+export const WATER_LEVEL = -4;
+export const WATER_COLOR = 0x3a6fa0;
+
 // Clouds
 export const CLOUD_COUNT = 55;
 export const CLOUD_ALTITUDE = 180;
@@ -123,9 +133,11 @@ export const EXPLOSION_DRAG = 0.9;
 export const EXPLOSION_LIFE_MIN = 0.9;
 export const EXPLOSION_LIFE_MAX = 2.0;
 
-// Scatter density per chunk
-export const TREES_PER_CHUNK = 18;
-export const ROCKS_PER_CHUNK = 10;
+// Scatter density per chunk — these are candidate counts. Biome acceptance
+// filters them down, so forests can reach ~60 trees and mountains ~30 rocks
+// without blowing up memory in flat plains.
+export const TREES_PER_CHUNK = 60;
+export const ROCKS_PER_CHUNK = 30;
 export const TREE_MIN_HEIGHT = 1.5;
 export const TREE_MAX_HEIGHT = 24;
 export const TREE_MAX_SLOPE = 0.35;   // tan of slope: reject steep spots

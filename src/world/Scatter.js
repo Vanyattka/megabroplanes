@@ -21,6 +21,12 @@ import {
 } from '../config.js';
 import { groundHeight } from './Ground.js';
 import { isInVillageArea } from './Villages.js';
+import { biomeAt } from './Biome.js';
+import {
+  MAX_TREE_FACTOR,
+  MAX_ROCK_FACTOR,
+  WATER_LEVEL,
+} from '../config.js';
 
 // Shared geometries and materials — one set for the whole world. Do not
 // dispose per-chunk; only dispose the per-chunk InstancedMesh instance buffer.
@@ -64,7 +70,12 @@ export function buildScatter(cx, cz) {
     if (isInVillageArea(x, z)) continue;
     const y = groundHeight(x, z);
     if (y < TREE_MIN_HEIGHT || y > TREE_MAX_HEIGHT) continue;
+    if (y <= WATER_LEVEL + 0.5) continue;
     if (slopeAt(x, z) > TREE_MAX_SLOPE) continue;
+    // Biome acceptance: forests keep almost every candidate, mountains reject
+    // most, lakes reject all.
+    const b = biomeAt(x, z);
+    if (prng() > b.trees / MAX_TREE_FACTOR) continue;
 
     const s = 0.8 + prng() * 0.7;
     _pos.set(x, y, z);
@@ -95,6 +106,9 @@ export function buildScatter(cx, cz) {
     if (isInVillageArea(x, z)) continue;
     const y = groundHeight(x, z);
     if (y < 0.3) continue;
+    if (y <= WATER_LEVEL + 0.5) continue;
+    const b = biomeAt(x, z);
+    if (prng() > b.rocks / MAX_ROCK_FACTOR) continue;
 
     const s = 0.4 + prng() * 1.2;
     _pos.set(x, y - s * 0.3, z);
