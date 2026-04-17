@@ -40,11 +40,21 @@ function crashesEnabled() {
   return crashToggleEl ? crashToggleEl.checked : CRASH_ENABLED_DEFAULT;
 }
 
-// Multiplayer: default to same-host WebSocket, override with ?server=ws://...
+// Multiplayer: default to same-host WebSocket at /ws (nginx proxy), which works
+// over both http and https. Override with ?server=ws://... for LAN/dev setups
+// where the WebSocket server is reached directly on another port.
 const mpStatusEl = document.getElementById('mp-status');
 const params = new URLSearchParams(window.location.search);
-const defaultHost = window.location.hostname || 'localhost';
-const serverUrl = params.get('server') || `ws://${defaultHost}:3030`;
+function defaultServerUrl() {
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.host || 'localhost';
+  // Dev (Vite on :5173) won't proxy /ws — fall back to direct :3030.
+  if (window.location.port === '5173') {
+    return `ws://${window.location.hostname || 'localhost'}:3030`;
+  }
+  return `${proto}//${host}/ws`;
+}
+const serverUrl = params.get('server') || defaultServerUrl();
 const mp = new MultiplayerClient(serverUrl);
 mp.onStatusChange(({ connected, count, id }) => {
   if (!mpStatusEl) return;
