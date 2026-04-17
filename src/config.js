@@ -24,10 +24,15 @@ export const RUNWAY_Y = 0.02;
 // Villages — one village per grid cell, each with an airport + houses + roads.
 export const VILLAGE_CELL_SIZE = 1800;          // meters per cell
 export const VILLAGE_CHANCE = 0.75;             // probability of non-home cell having a village
-export const VILLAGE_HOUSES_MIN = 5;
-export const VILLAGE_HOUSES_MAX = 9;
-export const VILLAGE_HOUSE_RING_MIN = 140;      // meters from airport center
-export const VILLAGE_HOUSE_RING_MAX = 230;
+export const VILLAGE_HOUSES_MIN = 6;
+export const VILLAGE_HOUSES_MAX = 12;
+// Village sits alongside the runway, not around it. Its flat zone touches the
+// airport's so the connector road never leaves flat ground.
+export const VILLAGE_PERP_OFFSET = 80;          // distance (m) from runway centerline to village main street
+export const VILLAGE_HALF_L = 100;              // village rect half-length (along runway)
+export const VILLAGE_HALF_W = 45;               // village rect half-width (perpendicular)
+export const VILLAGE_STREET_SIDE_OFFSET = 12;   // house row distance from street centerline
+export const VILLAGE_HOUSE_SPACING = 14;        // distance between adjacent houses in the same row
 export const VILLAGE_VIEW_CELLS = 1;            // cells around plane kept in scene
 
 // Physics

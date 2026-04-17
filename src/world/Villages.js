@@ -5,8 +5,11 @@ import {
   VILLAGE_CHANCE,
   VILLAGE_HOUSES_MIN,
   VILLAGE_HOUSES_MAX,
-  VILLAGE_HOUSE_RING_MIN,
-  VILLAGE_HOUSE_RING_MAX,
+  VILLAGE_PERP_OFFSET,
+  VILLAGE_HALF_L,
+  VILLAGE_HALF_W,
+  VILLAGE_STREET_SIDE_OFFSET,
+  VILLAGE_HOUSE_SPACING,
   RUNWAY_LENGTH,
   RUNWAY_WIDTH,
   RUNWAY_MARGIN,
@@ -15,6 +18,24 @@ import {
 } from '../config.js';
 
 const villageCache = new Map();
+
+// Smoothstep distance from a rotated rectangle: 0 inside, 1 once further than
+// RUNWAY_BLEND from the rect, smoothstep between.
+function rectFlatFactor(x, z, cx, cz, angle, halfL, halfW) {
+  const dx = x - cx;
+  const dz = z - cz;
+  const c = Math.cos(-angle);
+  const s = Math.sin(-angle);
+  const lx = dx * c - dz * s;
+  const lz = dx * s + dz * c;
+  const distX = Math.max(0, Math.abs(lx) - halfL);
+  const distZ = Math.max(0, Math.abs(lz) - halfW);
+  const d = Math.sqrt(distX * distX + distZ * distZ);
+  if (d <= 0) return 0;
+  if (d >= RUNWAY_BLEND) return 1;
+  const t = d / RUNWAY_BLEND;
+  return t * t * (3 - 2 * t);
+}
 
 function buildVillage(gcx, gcz, isHome) {
   const prng = alea(`village-data:${gcx}:${gcz}`);
@@ -26,66 +47,84 @@ function buildVillage(gcx, gcz, isHome) {
     airportZ = 0;
     angle = 0;
   } else {
-    // Keep the airport comfortably inside the cell so neighboring cells don't
-    // place villages touching each other.
     const margin = 300;
     const inner = VILLAGE_CELL_SIZE - 2 * margin;
     airportX = gcx * VILLAGE_CELL_SIZE + margin + prng() * inner;
     airportZ = gcz * VILLAGE_CELL_SIZE + margin + prng() * inner;
-    // Snap runway orientation to 4 cardinals — keeps houses/roads easy to place.
     angle = Math.floor(prng() * 4) * (Math.PI / 2);
   }
+
+  // Runway unit vectors
+  const fx = Math.cos(angle);
+  const fz = Math.sin(angle);
+  const px = -Math.sin(angle); // perpendicular (CCW around +Y from forward)
+  const pz = Math.cos(angle);
+  // Which side of the runway does the village sit on?
+  const sideSign = prng() < 0.5 ? 1 : -1;
+
+  const villageCx = airportX + px * sideSign * VILLAGE_PERP_OFFSET;
+  const villageCz = airportZ + pz * sideSign * VILLAGE_PERP_OFFSET;
 
   const houseCount =
     VILLAGE_HOUSES_MIN +
     Math.floor(prng() * (VILLAGE_HOUSES_MAX - VILLAGE_HOUSES_MIN + 1));
 
+  // Houses line a main street parallel to the runway, alternating sides.
+  const rowLen = Math.ceil(houseCount / 2);
+  const rowStart = -((rowLen - 1) * VILLAGE_HOUSE_SPACING) / 2;
   const houses = [];
-  const roads = [];
   for (let i = 0; i < houseCount; i++) {
-    // Bias houses away from the runway axis so they don't sit on the strip.
-    let theta;
-    let ringRadius;
-    let tries = 0;
-    do {
-      theta = prng() * Math.PI * 2;
-      ringRadius =
-        VILLAGE_HOUSE_RING_MIN +
-        prng() * (VILLAGE_HOUSE_RING_MAX - VILLAGE_HOUSE_RING_MIN);
-      tries++;
-    } while (tries < 6 && houseTooCloseToRunway(theta, ringRadius, angle));
-
-    const x = airportX + Math.cos(theta) * ringRadius;
-    const z = airportZ + Math.sin(theta) * ringRadius;
-    const rot = prng() * Math.PI * 2;
-    const variant = prng() < 0.5 ? 0 : 1;
-    houses.push({ x, z, rot, variant });
-
-    // Road from the house toward the apron area near the runway.
-    const apronR = Math.max(
-      RUNWAY_WIDTH / 2 + RUNWAY_MARGIN + 10,
-      VILLAGE_HOUSE_RING_MIN * 0.6
-    );
-    const sx = airportX + Math.cos(theta) * apronR;
-    const sz = airportZ + Math.sin(theta) * apronR;
-    roads.push({ x1: x, z1: z, x2: sx, z2: sz });
+    const slot = Math.floor(i / 2);
+    const sideOfStreet = i % 2 === 0 ? -1 : 1; // alternating rows
+    const along = rowStart + slot * VILLAGE_HOUSE_SPACING;
+    const offsetPerp = sideOfStreet * VILLAGE_STREET_SIDE_OFFSET;
+    const hx = villageCx + fx * along + px * sideSign * offsetPerp;
+    const hz = villageCz + fz * along + pz * sideSign * offsetPerp;
+    // Door faces the street: houseRot rotates local -Z onto the vector pointing
+    // back toward street center.
+    const signOffset = Math.sign(sideSign * offsetPerp) || 1;
+    const rot = Math.atan2(px * signOffset, pz * signOffset);
+    const variant = prng() < 0.55 ? 0 : 1;
+    houses.push({ x: hx, z: hz, rot, variant });
   }
 
-  return { gcx, gcz, airportX, airportZ, angle, houses, roads, isHome };
-}
+  // Main street (along runway direction) + connector to the runway apron.
+  const streetHalfLen =
+    Math.max((rowLen - 1) * VILLAGE_HOUSE_SPACING * 0.5 + 12, 20);
+  const msx1 = villageCx - fx * streetHalfLen;
+  const msz1 = villageCz - fz * streetHalfLen;
+  const msx2 = villageCx + fx * streetHalfLen;
+  const msz2 = villageCz + fz * streetHalfLen;
 
-// Reject house positions that would fall on the runway strip itself.
-function houseTooCloseToRunway(theta, ringRadius, angle) {
-  const x = Math.cos(theta) * ringRadius;
-  const z = Math.sin(theta) * ringRadius;
-  const c = Math.cos(-angle);
-  const s = Math.sin(-angle);
-  const lx = x * c - z * s;
-  const lz = x * s + z * c;
-  return (
-    Math.abs(lx) < RUNWAY_LENGTH / 2 + RUNWAY_MARGIN &&
-    Math.abs(lz) < RUNWAY_WIDTH / 2 + RUNWAY_MARGIN + 8
-  );
+  // Connector stops at the edge of the runway flat zone so it never crosses.
+  const apronPerp = RUNWAY_WIDTH / 2 + RUNWAY_MARGIN - 2;
+  const cx1 = villageCx;
+  const cz1 = villageCz;
+  const cx2 = airportX + px * sideSign * apronPerp;
+  const cz2 = airportZ + pz * sideSign * apronPerp;
+
+  const roads = [
+    { x1: msx1, z1: msz1, x2: msx2, z2: msz2 },
+    { x1: cx1, z1: cz1, x2: cx2, z2: cz2 },
+  ];
+
+  return {
+    gcx,
+    gcz,
+    airportX,
+    airportZ,
+    angle,
+    houses,
+    roads,
+    villageRect: {
+      cx: villageCx,
+      cz: villageCz,
+      halfL: VILLAGE_HALF_L,
+      halfW: VILLAGE_HALF_W,
+      angle,
+    },
+    isHome,
+  };
 }
 
 export function getVillage(gcx, gcz) {
@@ -105,27 +144,17 @@ export function getVillage(gcx, gcz) {
   return v;
 }
 
-// Returns the flat-zone factor contribution from a specific village: 0 inside
-// its runway zone, 1 outside the blend, smoothstep between.
 function airportFlatFactorFor(x, z, v) {
-  const dx = x - v.airportX;
-  const dz = z - v.airportZ;
-  const c = Math.cos(-v.angle);
-  const s = Math.sin(-v.angle);
-  const lx = dx * c - dz * s;
-  const lz = dx * s + dz * c;
   const halfL = RUNWAY_LENGTH / 2 + RUNWAY_MARGIN;
   const halfW = RUNWAY_WIDTH / 2 + RUNWAY_MARGIN;
-  const distX = Math.max(0, Math.abs(lx) - halfL);
-  const distZ = Math.max(0, Math.abs(lz) - halfW);
-  const d = Math.sqrt(distX * distX + distZ * distZ);
-  if (d <= 0) return 0;
-  if (d >= RUNWAY_BLEND) return 1;
-  const t = d / RUNWAY_BLEND;
-  return t * t * (3 - 2 * t);
+  const fA = rectFlatFactor(x, z, v.airportX, v.airportZ, v.angle, halfL, halfW);
+  if (fA === 0) return 0;
+  const r = v.villageRect;
+  const fV = rectFlatFactor(x, z, r.cx, r.cz, r.angle, r.halfL, r.halfW);
+  return Math.min(fA, fV);
 }
 
-// Minimum over all nearby villages (3x3 cells). 1 = full noise, 0 = dead flat.
+// Min flat factor across all nearby villages (airport + village rects).
 export function villageFlatFactor(x, z) {
   const pcx = Math.floor(x / VILLAGE_CELL_SIZE);
   const pcz = Math.floor(z / VILLAGE_CELL_SIZE);
@@ -166,26 +195,35 @@ export function isOnAnyRunway(x, z) {
   return false;
 }
 
-// True if (x,z) is inside any nearby village's built-up area (houses + airport).
-// Used by scatter to avoid placing trees on roads/houses/runway.
+// Inside any nearby village's airport rect or village rect (plus a small pad).
+// Used by scatter to skip trees/rocks there.
 export function isInVillageArea(x, z) {
   const pcx = Math.floor(x / VILLAGE_CELL_SIZE);
   const pcz = Math.floor(z / VILLAGE_CELL_SIZE);
-  const r = VILLAGE_HOUSE_RING_MAX + 30;
-  const r2 = r * r;
+  const pad = 12;
   for (let dcx = -1; dcx <= 1; dcx++) {
     for (let dcz = -1; dcz <= 1; dcz++) {
       const v = getVillage(pcx + dcx, pcz + dcz);
       if (!v) continue;
-      const dx = x - v.airportX;
-      const dz = z - v.airportZ;
-      if (dx * dx + dz * dz < r2) return true;
+      const hL = RUNWAY_LENGTH / 2 + RUNWAY_MARGIN + pad;
+      const hW = RUNWAY_WIDTH / 2 + RUNWAY_MARGIN + pad;
+      if (
+        rectFlatFactor(x, z, v.airportX, v.airportZ, v.angle, hL, hW) === 0
+      ) {
+        return true;
+      }
+      const r = v.villageRect;
+      if (
+        rectFlatFactor(x, z, r.cx, r.cz, r.angle, r.halfL + pad, r.halfW + pad) ===
+        0
+      ) {
+        return true;
+      }
     }
   }
   return false;
 }
 
-// Spawn pose at the home village (0,0), facing down its runway.
 export function getHomeSpawnPose() {
   const v = getVillage(0, 0);
   const offset = -RUNWAY_LENGTH / 2 + 50;
