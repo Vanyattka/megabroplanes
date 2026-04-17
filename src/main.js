@@ -6,7 +6,7 @@ import { ChunkManager } from './world/ChunkManager.js';
 import { VillageManager } from './world/VillageManager.js';
 import { isOnFlatGround } from './world/Villages.js';
 import { Water } from './world/Water.js';
-import { groundHeight } from './world/Ground.js';
+import { groundHeight, physicsFloor } from './world/Ground.js';
 import { Clouds } from './world/Clouds.js';
 import { PlaneShadow, makeShadowTexture } from './world/Shadow.js';
 import { Explosion } from './effects/Explosion.js';
@@ -70,6 +70,7 @@ const chaseCamera = new ChaseCamera(renderer.camera);
 const hud = new Hud();
 
 const getGroundHeight = groundHeight;
+const getPhysicsFloor = physicsFloor;
 
 // Prime chunks and villages before first frame
 chunks.update(plane.position);
@@ -90,7 +91,7 @@ function physicsStep(dt) {
     resetHeld = false;
   }
   const wasCrashed = plane.crashed;
-  plane.update(dt, input, getGroundHeight, isOnFlatGround, crashesEnabled());
+  plane.update(dt, input, getPhysicsFloor, isOnFlatGround, crashesEnabled());
   if (!wasCrashed && plane.crashed && plane.crashImpact) {
     explosion.trigger(plane.crashImpact.position, plane.crashImpact.velocity);
     plane.mesh.visible = false;
@@ -107,8 +108,8 @@ function renderStep() {
   chaseCamera.update(plane, input, renderDt);
   sky.update(renderer.camera);
   water.update(renderer.camera.position);
-  clouds.update(renderDt, plane.position, getGroundHeight);
-  if (!plane.crashed) planeShadow.update(plane, getGroundHeight);
+  clouds.update(renderDt, plane.position, getPhysicsFloor);
+  if (!plane.crashed) planeShadow.update(plane, getPhysicsFloor);
   else planeShadow.mesh.visible = false;
   explosion.update(renderDt);
   remotes.update(renderDt);

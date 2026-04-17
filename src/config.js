@@ -134,10 +134,10 @@ export const EXPLOSION_LIFE_MIN = 0.9;
 export const EXPLOSION_LIFE_MAX = 2.0;
 
 // Scatter density per chunk — these are candidate counts. Biome acceptance
-// filters them down, so forests can reach ~60 trees and mountains ~30 rocks
-// without blowing up memory in flat plains.
-export const TREES_PER_CHUNK = 60;
-export const ROCKS_PER_CHUNK = 30;
+// filters them down; a pure forest keeps nearly all candidates, mountains
+// reject most trees but keep most rocks.
+export const TREES_PER_CHUNK = 140;
+export const ROCKS_PER_CHUNK = 40;
 export const TREE_MIN_HEIGHT = 1.5;
 export const TREE_MAX_HEIGHT = 24;
 export const TREE_MAX_SLOPE = 0.35;   // tan of slope: reject steep spots
