@@ -42,6 +42,11 @@ export const DRAG_COEFFICIENT = 1.8;
 // plane can point one way and drift another — pulling the nose down doesn't
 // feel like diving. 2.0/s means velocity half-aligns with forward in ~0.35s.
 export const VELOCITY_ALIGN_RATE = 2.0;
+// Alignment authority ramps up between these forward-speed thresholds. Below
+// LOW, the plane is effectively stalled and gravity dominates — the nose-up
+// attitude no longer pulls velocity upward, so the plane actually falls.
+export const VELOCITY_ALIGN_LOW_SPEED = 15;
+export const VELOCITY_ALIGN_HIGH_SPEED = 35;
 // Starting value from docs was 0.5, but that caps rolling speed at ~30 m/s —
 // below takeoff speed (~40 m/s), so the plane can never lift off the runway.
 // 0.05 is closer to real aircraft tire friction and still slows the plane on

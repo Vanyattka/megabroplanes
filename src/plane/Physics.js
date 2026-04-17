@@ -7,6 +7,8 @@ import {
   LIFT_REFERENCE_SPEED,
   DRAG_COEFFICIENT,
   VELOCITY_ALIGN_RATE,
+  VELOCITY_ALIGN_LOW_SPEED,
+  VELOCITY_ALIGN_HIGH_SPEED,
   ROLLING_FRICTION,
   COUPLING_COEFF,
   ANGULAR_DAMPING,
@@ -66,9 +68,14 @@ export function step(plane, dt, getHeight, isOnRunway, braking) {
   // in the air — on the ground the runway constrains motion.
   if (!plane.onGround) {
     const speedNow = plane.velocity.length();
-    if (speedNow > 0.01) {
-      const blend = Math.min(1, VELOCITY_ALIGN_RATE * dt);
-      // Target velocity: same speed, along forward axis.
+    // Only apply alignment if the plane is flying forward fast enough. Below
+    // stall speed, gravity takes over and the plane drops.
+    const alignT =
+      (forwardSpeed - VELOCITY_ALIGN_LOW_SPEED) /
+      (VELOCITY_ALIGN_HIGH_SPEED - VELOCITY_ALIGN_LOW_SPEED);
+    const alignFactor = Math.max(0, Math.min(1, alignT));
+    if (speedNow > 0.01 && alignFactor > 0) {
+      const blend = Math.min(1, VELOCITY_ALIGN_RATE * alignFactor * dt);
       plane.velocity.x += (_forward.x * speedNow - plane.velocity.x) * blend;
       plane.velocity.y += (_forward.y * speedNow - plane.velocity.y) * blend;
       plane.velocity.z += (_forward.z * speedNow - plane.velocity.z) * blend;
