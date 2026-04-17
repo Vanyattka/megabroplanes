@@ -16,6 +16,9 @@ export const NOISE_SEED = 'plane-mvp-seed';
 export const RUNWAY_LENGTH = 600;
 export const RUNWAY_WIDTH = 30;
 export const RUNWAY_MARGIN = 20;
+// Distance beyond the flat zone over which terrain height ramps from 0 to
+// full noise. Prevents a sudden wall of hills at the runway ends.
+export const RUNWAY_BLEND = 150;
 export const RUNWAY_CHUNK = { cx: 0, cz: 0 };
 export const RUNWAY_Y = 0.02;
 

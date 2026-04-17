@@ -4,9 +4,8 @@ import {
   MeshStandardMaterial,
   PlaneGeometry,
 } from 'three';
-import { CHUNK_SIZE, CHUNK_RESOLUTION, RUNWAY_CHUNK } from '../config.js';
-import { heightAt } from './Noise.js';
-import { isInRunwayFlatZone } from './Runway.js';
+import { CHUNK_SIZE, CHUNK_RESOLUTION } from '../config.js';
+import { groundHeight } from './Ground.js';
 
 function colorForVertex(y) {
   if (y < 1) return [0.85, 0.8, 0.6];
@@ -28,7 +27,6 @@ export function buildChunk(cx, cz) {
   const positions = geo.attributes.position;
   const colors = new Float32Array(positions.count * 3);
 
-  const isRunwayChunk = cx === RUNWAY_CHUNK.cx && cz === RUNWAY_CHUNK.cz;
   const chunkOriginX = cx * CHUNK_SIZE + CHUNK_SIZE / 2;
   const chunkOriginZ = cz * CHUNK_SIZE + CHUNK_SIZE / 2;
 
@@ -38,12 +36,7 @@ export function buildChunk(cx, cz) {
     const worldX = chunkOriginX + localX;
     const worldZ = chunkOriginZ + localZ;
 
-    let y = heightAt(worldX, worldZ);
-
-    if (isRunwayChunk && isInRunwayFlatZone(worldX, worldZ)) {
-      y = 0;
-    }
-
+    const y = groundHeight(worldX, worldZ);
     positions.setY(i, y);
 
     const [r, g, b] = colorForVertex(y);

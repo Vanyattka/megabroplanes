@@ -3,8 +3,8 @@ import { Clock } from './core/Clock.js';
 import { Input } from './core/Input.js';
 import { addLighting } from './world/Sky.js';
 import { ChunkManager } from './world/ChunkManager.js';
-import { buildRunwayMesh, isOnRunway, isInRunwayFlatZone } from './world/Runway.js';
-import { heightAt } from './world/Noise.js';
+import { buildRunwayMesh, isOnRunway } from './world/Runway.js';
+import { groundHeight } from './world/Ground.js';
 import { Plane } from './plane/Plane.js';
 import { ChaseCamera } from './camera/ChaseCamera.js';
 import { Hud } from './ui/Hud.js';
@@ -26,11 +26,7 @@ const chaseCamera = new ChaseCamera(renderer.camera);
 
 const hud = new Hud();
 
-function getGroundHeight(x, z) {
-  // Runway flat zone is forced to y=0 in the mesh, so physics must match.
-  if (isInRunwayFlatZone(x, z)) return 0;
-  return heightAt(x, z);
-}
+const getGroundHeight = groundHeight;
 
 // Prime chunks before first frame
 chunks.update(plane.position);
