@@ -171,6 +171,13 @@ export function villageFlatFactor(x, z) {
   return minF;
 }
 
+// True anywhere ground is fully flat — runway strips and village rects both
+// count. Physics uses this for the soft-landing / taxi path so you can roll
+// around a village without "rough landing"ing.
+export function isOnFlatGround(x, z) {
+  return villageFlatFactor(x, z) === 0;
+}
+
 export function isOnAnyRunway(x, z) {
   const pcx = Math.floor(x / VILLAGE_CELL_SIZE);
   const pcz = Math.floor(z / VILLAGE_CELL_SIZE);

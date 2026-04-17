@@ -3,8 +3,8 @@ import { Clock } from './core/Clock.js';
 import { Input } from './core/Input.js';
 import { Sky } from './world/Sky.js';
 import { ChunkManager } from './world/ChunkManager.js';
-import { isOnRunway } from './world/Runway.js';
 import { VillageManager } from './world/VillageManager.js';
+import { isOnFlatGround } from './world/Villages.js';
 import { groundHeight } from './world/Ground.js';
 import { Clouds } from './world/Clouds.js';
 import { PlaneShadow, makeShadowTexture } from './world/Shadow.js';
@@ -88,7 +88,7 @@ function physicsStep(dt) {
     resetHeld = false;
   }
   const wasCrashed = plane.crashed;
-  plane.update(dt, input, getGroundHeight, isOnRunway, crashesEnabled());
+  plane.update(dt, input, getGroundHeight, isOnFlatGround, crashesEnabled());
   if (!wasCrashed && plane.crashed && plane.crashImpact) {
     explosion.trigger(plane.crashImpact.position, plane.crashImpact.velocity);
     plane.mesh.visible = false;
