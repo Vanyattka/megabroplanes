@@ -3,7 +3,8 @@ import { Clock } from './core/Clock.js';
 import { Input } from './core/Input.js';
 import { Sky } from './world/Sky.js';
 import { ChunkManager } from './world/ChunkManager.js';
-import { buildRunwayMesh, isOnRunway } from './world/Runway.js';
+import { isOnRunway } from './world/Runway.js';
+import { VillageManager } from './world/VillageManager.js';
 import { groundHeight } from './world/Ground.js';
 import { Clouds } from './world/Clouds.js';
 import { PlaneShadow, makeShadowTexture } from './world/Shadow.js';
@@ -22,8 +23,7 @@ const input = new Input();
 const sky = new Sky(renderer.scene);
 
 const chunks = new ChunkManager(renderer.scene);
-const runwayMesh = buildRunwayMesh();
-renderer.scene.add(runwayMesh);
+const villages = new VillageManager(renderer.scene);
 
 const plane = new Plane();
 renderer.scene.add(plane.mesh);
@@ -69,8 +69,9 @@ const hud = new Hud();
 
 const getGroundHeight = groundHeight;
 
-// Prime chunks before first frame
+// Prime chunks and villages before first frame
 chunks.update(plane.position);
+villages.update(plane.position);
 
 let lastRenderTime = performance.now();
 let resetHeld = false;
@@ -94,6 +95,7 @@ function physicsStep(dt) {
     if (crashBannerEl) crashBannerEl.style.display = 'block';
   }
   chunks.update(plane.position);
+  villages.update(plane.position);
 }
 
 function renderStep() {

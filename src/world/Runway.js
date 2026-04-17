@@ -1,32 +1,17 @@
 import {
-  Mesh,
-  MeshStandardMaterial,
-  PlaneGeometry,
   CanvasTexture,
-  Quaternion,
-  Vector3,
+  MeshStandardMaterial,
   RepeatWrapping,
 } from 'three';
-import {
-  RUNWAY_LENGTH,
-  RUNWAY_WIDTH,
-  RUNWAY_MARGIN,
-  RUNWAY_Y,
-  PLANE_BOTTOM_OFFSET,
-} from '../config.js';
+import { getHomeSpawnPose, isOnAnyRunway } from './Villages.js';
 
-export function isInRunwayFlatZone(x, z) {
-  const halfL = RUNWAY_LENGTH / 2 + RUNWAY_MARGIN;
-  const halfW = RUNWAY_WIDTH / 2 + RUNWAY_MARGIN;
-  return Math.abs(x) <= halfL && Math.abs(z) <= halfW;
-}
+// Backwards-compatible exports — every runway now lives inside a village, so
+// these just delegate to the village-aware lookups.
+export const getSpawnPose = getHomeSpawnPose;
+export const isOnRunway = isOnAnyRunway;
 
-export function isOnRunway(x, z) {
-  const halfL = RUNWAY_LENGTH / 2;
-  const halfW = RUNWAY_WIDTH / 2;
-  return Math.abs(x) <= halfL && Math.abs(z) <= halfW;
-}
-
+// Shared runway texture (canvas-painted asphalt) reused by every village's
+// airport mesh.
 function makeRunwayTexture() {
   const c = document.createElement('canvas');
   c.width = 2048;
@@ -53,29 +38,14 @@ function makeRunwayTexture() {
   return tex;
 }
 
-export function buildRunwayMesh() {
-  const geo = new PlaneGeometry(RUNWAY_LENGTH, RUNWAY_WIDTH);
-  geo.rotateX(-Math.PI / 2);
-  // Texture was drawn with length along canvas X; our runway length is on world X.
-  // After rotateX(-PI/2), PlaneGeometry's X maps to world X, so UVs align naturally.
-  const mat = new MeshStandardMaterial({
-    map: makeRunwayTexture(),
-    roughness: 0.9,
-    metalness: 0.0,
-  });
-  const mesh = new Mesh(geo, mat);
-  mesh.position.set(0, RUNWAY_Y, 0);
-  return mesh;
-}
-
-export function getSpawnPose() {
-  const position = new Vector3(-RUNWAY_LENGTH / 2 + 50, PLANE_BOTTOM_OFFSET, 0);
-  // Plane nose points toward local -Z. Rotating -Z around +Y by +π/2 gives -X,
-  // which would face the plane off the runway. Use -π/2 so the nose faces +X,
-  // lined up with the full length of the runway ahead.
-  const quaternion = new Quaternion().setFromAxisAngle(
-    new Vector3(0, 1, 0),
-    -Math.PI / 2
-  );
-  return { position, quaternion };
+let cachedRunwayMaterial = null;
+export function getRunwayMaterial() {
+  if (!cachedRunwayMaterial) {
+    cachedRunwayMaterial = new MeshStandardMaterial({
+      map: makeRunwayTexture(),
+      roughness: 0.9,
+      metalness: 0.0,
+    });
+  }
+  return cachedRunwayMaterial;
 }

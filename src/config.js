@@ -19,8 +19,16 @@ export const RUNWAY_MARGIN = 20;
 // Distance beyond the flat zone over which terrain height ramps from 0 to
 // full noise. Prevents a sudden wall of hills at the runway ends.
 export const RUNWAY_BLEND = 150;
-export const RUNWAY_CHUNK = { cx: 0, cz: 0 };
 export const RUNWAY_Y = 0.02;
+
+// Villages — one village per grid cell, each with an airport + houses + roads.
+export const VILLAGE_CELL_SIZE = 1800;          // meters per cell
+export const VILLAGE_CHANCE = 0.75;             // probability of non-home cell having a village
+export const VILLAGE_HOUSES_MIN = 5;
+export const VILLAGE_HOUSES_MAX = 9;
+export const VILLAGE_HOUSE_RING_MIN = 140;      // meters from airport center
+export const VILLAGE_HOUSE_RING_MAX = 230;
+export const VILLAGE_VIEW_CELLS = 1;            // cells around plane kept in scene
 
 // Physics
 export const GRAVITY = 9.81;

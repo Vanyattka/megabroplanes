@@ -20,7 +20,7 @@ import {
   TREE_MAX_SLOPE,
 } from '../config.js';
 import { groundHeight } from './Ground.js';
-import { isInRunwayFlatZone } from './Runway.js';
+import { isInVillageArea } from './Villages.js';
 
 // Shared geometries and materials — one set for the whole world. Do not
 // dispose per-chunk; only dispose the per-chunk InstancedMesh instance buffer.
@@ -61,7 +61,7 @@ export function buildScatter(cx, cz) {
   for (let i = 0; i < TREES_PER_CHUNK; i++) {
     const x = chunkOriginX + prng() * CHUNK_SIZE;
     const z = chunkOriginZ + prng() * CHUNK_SIZE;
-    if (isInRunwayFlatZone(x, z)) continue;
+    if (isInVillageArea(x, z)) continue;
     const y = groundHeight(x, z);
     if (y < TREE_MIN_HEIGHT || y > TREE_MAX_HEIGHT) continue;
     if (slopeAt(x, z) > TREE_MAX_SLOPE) continue;
@@ -92,7 +92,7 @@ export function buildScatter(cx, cz) {
   for (let i = 0; i < ROCKS_PER_CHUNK; i++) {
     const x = chunkOriginX + prng() * CHUNK_SIZE;
     const z = chunkOriginZ + prng() * CHUNK_SIZE;
-    if (isInRunwayFlatZone(x, z)) continue;
+    if (isInVillageArea(x, z)) continue;
     const y = groundHeight(x, z);
     if (y < 0.3) continue;
 
