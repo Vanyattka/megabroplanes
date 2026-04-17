@@ -13,6 +13,8 @@ Built with Three.js, simplex-noise, and Vite. Vanilla JavaScript, no frameworks.
 | `Q` / `E` | Yaw left / right |
 | `Shift` / `Ctrl` | Throttle up / down |
 | `Space` | Brake (when on ground) |
+| `R` | Reset to runway |
+| Mouse drag | Look around (releases back to chase view) |
 
 ## Run
 

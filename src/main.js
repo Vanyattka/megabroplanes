@@ -35,13 +35,27 @@ function getGroundHeight(x, z) {
 // Prime chunks before first frame
 chunks.update(plane.position);
 
+let lastRenderTime = performance.now();
+let resetHeld = false;
+
 function physicsStep(dt) {
+  if (input.isPressed('KeyR')) {
+    if (!resetHeld) {
+      plane.reset();
+      resetHeld = true;
+    }
+  } else {
+    resetHeld = false;
+  }
   plane.update(dt, input, getGroundHeight, isOnRunway);
   chunks.update(plane.position);
 }
 
 function renderStep() {
-  chaseCamera.update(plane);
+  const now = performance.now();
+  const renderDt = Math.min(0.1, (now - lastRenderTime) / 1000);
+  lastRenderTime = now;
+  chaseCamera.update(plane, input, renderDt);
   renderer.render();
   hud.update(plane);
 }

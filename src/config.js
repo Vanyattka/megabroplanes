@@ -55,3 +55,8 @@ export const CAMERA_NEAR = 0.1;
 export const CAMERA_FAR = FOG_FAR * 1.5;
 export const CAMERA_OFFSET = [0, 3, 12]; // behind and above in plane's local frame
 export const CAMERA_LERP = 0.1;
+
+// Mouse look
+export const MOUSE_LOOK_SENSITIVITY = 0.003; // radians per pixel of drag
+export const MOUSE_LOOK_RECENTER = 3.0; // 1/s decay toward zero when not dragging
+export const MOUSE_LOOK_PITCH_LIMIT = Math.PI / 2 - 0.1;

@@ -6,15 +6,26 @@ import { getSpawnPose } from '../world/Runway.js';
 
 export class Plane {
   constructor() {
-    const spawn = getSpawnPose();
-    this.position = spawn.position.clone();
+    this.position = new Vector3();
     this.velocity = new Vector3();
-    this.quaternion = spawn.quaternion.clone();
+    this.quaternion = new Quaternion();
     this.angularVelocity = new Vector3();
     this.throttle = 0;
     this.onGround = true;
 
     this.mesh = buildPlaneMesh();
+    this.reset();
+  }
+
+  reset() {
+    const spawn = getSpawnPose();
+    this.position.copy(spawn.position);
+    this.velocity.set(0, 0, 0);
+    this.quaternion.copy(spawn.quaternion);
+    this.angularVelocity.set(0, 0, 0);
+    this.throttle = 0;
+    this.onGround = true;
+    this._roughLogged = false;
     this.syncMesh();
   }
 
