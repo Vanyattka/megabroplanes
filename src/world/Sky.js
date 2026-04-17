@@ -67,9 +67,12 @@ export class Sky {
     this.mesh.renderOrder = -1; // draw before everything else
     scene.add(this.mesh);
 
-    const hemi = new HemisphereLight(0xfff4e0, 0x334422, 0.65);
+    // Bright, flat sunny-day lighting: strong sky fill plus a warm sun.
+    // No shadow maps — they're expensive with streaming chunks and we fake
+    // shadows separately as ground decals.
+    const hemi = new HemisphereLight(0xffffff, 0x3a4d2e, 0.85);
     scene.add(hemi);
-    const sun = new DirectionalLight(0xfff1c8, 1.0);
+    const sun = new DirectionalLight(0xfff1c8, 1.1);
     sun.position.copy(sunDir).multiplyScalar(500);
     scene.add(sun);
   }

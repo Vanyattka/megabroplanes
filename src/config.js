@@ -75,6 +75,22 @@ export const FOG_FAR = 420;
 // Terrain coloring — slope threshold (vertex normal.y below this = rock).
 export const SLOPE_ROCK_THRESHOLD = 0.72;
 
+// Clouds
+export const CLOUD_COUNT = 55;
+export const CLOUD_ALTITUDE = 180;
+export const CLOUD_ALTITUDE_JITTER = 50;
+export const CLOUD_AREA = 1200;         // half-extent of the cloud field around the plane
+export const CLOUD_SIZE_MIN = 80;
+export const CLOUD_SIZE_MAX = 180;
+export const CLOUD_WIND = [3.0, 0.0, 2.0]; // m/s drift
+export const CLOUD_OPACITY = 0.9;
+
+// Shadows
+export const PLANE_SHADOW_SIZE = 14;
+export const PLANE_SHADOW_OPACITY = 0.5;
+export const PLANE_SHADOW_FADE_ALT = 400; // shadow fades to 0 by this altitude above ground
+export const CLOUD_SHADOW_OPACITY = 0.28;
+
 // Scatter density per chunk
 export const TREES_PER_CHUNK = 18;
 export const ROCKS_PER_CHUNK = 10;
