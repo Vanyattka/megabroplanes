@@ -70,10 +70,12 @@ export function buildRunwayMesh() {
 
 export function getSpawnPose() {
   const position = new Vector3(-RUNWAY_LENGTH / 2 + 50, PLANE_BOTTOM_OFFSET, 0);
-  // Plane nose points toward local -Z; rotate +90° around Y so nose faces +X.
+  // Plane nose points toward local -Z. Rotating -Z around +Y by +π/2 gives -X,
+  // which would face the plane off the runway. Use -π/2 so the nose faces +X,
+  // lined up with the full length of the runway ahead.
   const quaternion = new Quaternion().setFromAxisAngle(
     new Vector3(0, 1, 0),
-    Math.PI / 2
+    -Math.PI / 2
   );
   return { position, quaternion };
 }
