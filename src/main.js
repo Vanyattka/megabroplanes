@@ -9,6 +9,8 @@ import { Clouds } from './world/Clouds.js';
 import { PlaneShadow, makeShadowTexture } from './world/Shadow.js';
 import { Explosion } from './effects/Explosion.js';
 import { CRASH_ENABLED_DEFAULT } from './config.js';
+import { MultiplayerClient } from './net/Client.js';
+import { RemotePlaneManager } from './net/RemotePlaneManager.js';
 import { Plane } from './plane/Plane.js';
 import { ChaseCamera } from './camera/ChaseCamera.js';
 import { Hud } from './ui/Hud.js';
@@ -37,6 +39,19 @@ const crashBannerEl = document.getElementById('crash-banner');
 function crashesEnabled() {
   return crashToggleEl ? crashToggleEl.checked : CRASH_ENABLED_DEFAULT;
 }
+
+// Multiplayer: default to same-host WebSocket, override with ?server=ws://...
+const mpStatusEl = document.getElementById('mp-status');
+const params = new URLSearchParams(window.location.search);
+const defaultHost = window.location.hostname || 'localhost';
+const serverUrl = params.get('server') || `ws://${defaultHost}:3030`;
+const mp = new MultiplayerClient(serverUrl);
+mp.onStatusChange(({ connected, count, id }) => {
+  if (!mpStatusEl) return;
+  if (!connected) mpStatusEl.textContent = 'mp: offline';
+  else mpStatusEl.textContent = `mp: P${id ?? '?'} · ${count} other${count === 1 ? '' : 's'}`;
+});
+const remotes = new RemotePlaneManager(renderer.scene, mp);
 
 const chaseCamera = new ChaseCamera(renderer.camera);
 
@@ -81,6 +96,8 @@ function renderStep() {
   if (!plane.crashed) planeShadow.update(plane, getGroundHeight);
   else planeShadow.mesh.visible = false;
   explosion.update(renderDt);
+  remotes.update(renderDt);
+  mp.sendState(plane);
   renderer.render();
   hud.update(plane);
 }
