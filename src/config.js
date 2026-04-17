@@ -38,6 +38,10 @@ export const LIFT_REFERENCE_SPEED = 45;
 // fast for a calm sim. 1.8 puts full-throttle cruise around 90 m/s, half
 // throttle around 65 m/s.
 export const DRAG_COEFFICIENT = 1.8;
+// Rate at which velocity bends to follow the nose direction. Without this, the
+// plane can point one way and drift another — pulling the nose down doesn't
+// feel like diving. 2.0/s means velocity half-aligns with forward in ~0.35s.
+export const VELOCITY_ALIGN_RATE = 2.0;
 // Starting value from docs was 0.5, but that caps rolling speed at ~30 m/s —
 // below takeoff speed (~40 m/s), so the plane can never lift off the runway.
 // 0.05 is closer to real aircraft tire friction and still slows the plane on

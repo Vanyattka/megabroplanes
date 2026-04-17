@@ -8,9 +8,9 @@ Built with Three.js, simplex-noise, and Vite. Vanilla JavaScript, no frameworks.
 
 | Key | Action |
 |---|---|
-| `W` / `S` | Pitch down / up |
+| `S` / `W` | Pitch nose down / up |
 | `A` / `D` | Roll left / right |
-| `Q` / `E` | Yaw left / right |
+| `Q` / `E` | Yaw right / left |
 | `Shift` / `Ctrl` | Throttle up / down |
 | `Space` | Brake (when on ground) |
 | `R` | Reset to runway |

@@ -6,6 +6,7 @@ import {
   LIFT_COEFFICIENT,
   LIFT_REFERENCE_SPEED,
   DRAG_COEFFICIENT,
+  VELOCITY_ALIGN_RATE,
   ROLLING_FRICTION,
   COUPLING_COEFF,
   ANGULAR_DAMPING,
@@ -59,6 +60,21 @@ export function step(plane, dt, getHeight, isOnRunway, braking) {
 
   // Semi-implicit Euler
   plane.velocity.addScaledVector(_accel, dt);
+
+  // Velocity alignment: bleed the component of velocity that's perpendicular
+  // to the nose, so the plane actually moves where it's pointed. Only apply
+  // in the air — on the ground the runway constrains motion.
+  if (!plane.onGround) {
+    const speedNow = plane.velocity.length();
+    if (speedNow > 0.01) {
+      const blend = Math.min(1, VELOCITY_ALIGN_RATE * dt);
+      // Target velocity: same speed, along forward axis.
+      plane.velocity.x += (_forward.x * speedNow - plane.velocity.x) * blend;
+      plane.velocity.y += (_forward.y * speedNow - plane.velocity.y) * blend;
+      plane.velocity.z += (_forward.z * speedNow - plane.velocity.z) * blend;
+    }
+  }
+
   plane.position.addScaledVector(plane.velocity, dt);
 
   // Roll-to-yaw coupling

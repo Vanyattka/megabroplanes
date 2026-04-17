@@ -7,12 +7,14 @@ import {
 } from '../config.js';
 
 export function applyControls(plane, input, dt) {
-  const pitchInput = input.getAxis('KeyW', 'KeyS');
+  // Inverted: S pitches nose down, W pitches nose up (flight-sim style).
+  const pitchInput = input.getAxis('KeyS', 'KeyW');
   // D banks right, A banks left. The sign here comes out of empirical testing:
   // positive local angularVelocity.z rotates the plane such that pressing A rolls
   // right, which is backwards — so we flip by making A the positive key.
   const rollInput = input.getAxis('KeyA', 'KeyD');
-  const yawInput = input.getAxis('KeyE', 'KeyQ');
+  // Inverted: Q yaws right, E yaws left.
+  const yawInput = input.getAxis('KeyQ', 'KeyE');
 
   const targetPitch = pitchInput * PITCH_RATE;
   const targetRoll = rollInput * ROLL_RATE;
