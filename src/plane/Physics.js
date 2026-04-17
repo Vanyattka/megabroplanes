@@ -4,6 +4,7 @@ import {
   MASS,
   MAX_THRUST,
   LIFT_COEFFICIENT,
+  LIFT_REFERENCE_SPEED,
   DRAG_COEFFICIENT,
   ROLLING_FRICTION,
   COUPLING_COEFF,
@@ -34,7 +35,11 @@ export function step(plane, dt, getHeight, isOnRunway, braking) {
   _thrust.copy(_forward).multiplyScalar(MAX_THRUST * plane.throttle);
 
   const forwardSpeed = plane.velocity.dot(_forward);
-  const liftMag = LIFT_COEFFICIENT * forwardSpeed * forwardSpeed;
+  // Clamp the speed used for lift so it saturates — a real wing stalls past
+  // its max coefficient of lift. Arcade version: lift grows with speed up to
+  // LIFT_REFERENCE_SPEED, then stays flat. Prevents runaway climbing.
+  const liftSpeed = Math.min(Math.abs(forwardSpeed), LIFT_REFERENCE_SPEED);
+  const liftMag = LIFT_COEFFICIENT * liftSpeed * liftSpeed;
   _lift.copy(_up).multiplyScalar(liftMag);
 
   const speed = plane.velocity.length();

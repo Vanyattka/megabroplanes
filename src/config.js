@@ -26,10 +26,18 @@ export const RUNWAY_Y = 0.02;
 export const GRAVITY = 9.81;
 export const MASS = 1000;
 export const MAX_THRUST = 15000;
-// Tuned from starting value 2.0: weight is MASS*GRAVITY = 9810 N, and we want
-// lift to equal weight at ~40 m/s. 9810 / 40^2 ≈ 6.1, so 6.0 gives takeoff ~40 m/s.
+// Weight is MASS*GRAVITY = 9810 N; lift equals weight when
+// LIFT_COEFFICIENT * forwardSpeed² ≈ 9810, so at LIFT=6 that's ~40 m/s takeoff.
 export const LIFT_COEFFICIENT = 6.0;
-export const DRAG_COEFFICIENT = 0.3;
+// Cap the forward speed fed into the lift term. Without this, lift grows
+// quadratically forever and the plane balloons upward at cruise no matter how
+// hard you pitch down. At 45 m/s, lift maxes at 6*45² ≈ 12150 N ≈ 1.24× weight,
+// so level flight holds altitude and pitching down actually descends.
+export const LIFT_REFERENCE_SPEED = 45;
+// Starting value 0.3 gave terminal speed ~225 m/s at full throttle — way too
+// fast for a calm sim. 1.8 puts full-throttle cruise around 90 m/s, half
+// throttle around 65 m/s.
+export const DRAG_COEFFICIENT = 1.8;
 // Starting value from docs was 0.5, but that caps rolling speed at ~30 m/s —
 // below takeoff speed (~40 m/s), so the plane can never lift off the runway.
 // 0.05 is closer to real aircraft tire friction and still slows the plane on
