@@ -96,6 +96,20 @@ export const PLANE_SHADOW_OPACITY = 0.5;
 export const PLANE_SHADOW_FADE_ALT = 400; // shadow fades to 0 by this altitude above ground
 export const CLOUD_SHADOW_OPACITY = 0.28;
 
+// Crashes — only trigger on steep, fast impacts so normal takeoff/landing and
+// shallow "rough landings" stay non-fatal.
+export const CRASH_ENABLED_DEFAULT = true;
+export const CRASH_MIN_SPEED = 35;        // total speed (m/s)
+export const CRASH_MIN_DOWN_SPEED = 18;   // downward component of velocity
+export const CRASH_MIN_DIVE_DOT = 0.5;    // -velY / |vel|  — 0.5 ≈ 30° below horizon
+
+// Explosion particles
+export const EXPLOSION_PARTICLE_COUNT = 80;
+export const EXPLOSION_GRAVITY = 12;
+export const EXPLOSION_DRAG = 0.9;
+export const EXPLOSION_LIFE_MIN = 0.9;
+export const EXPLOSION_LIFE_MAX = 2.0;
+
 // Scatter density per chunk
 export const TREES_PER_CHUNK = 18;
 export const ROCKS_PER_CHUNK = 10;

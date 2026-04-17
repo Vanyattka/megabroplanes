@@ -12,6 +12,8 @@ export class Plane {
     this.angularVelocity = new Vector3();
     this.throttle = 0;
     this.onGround = true;
+    this.crashed = false;
+    this.crashImpact = null;
 
     this.mesh = buildPlaneMesh();
     this.reset();
@@ -26,6 +28,9 @@ export class Plane {
     this.throttle = 0;
     this.onGround = true;
     this._roughLogged = false;
+    this.crashed = false;
+    this.crashImpact = null;
+    this.mesh.visible = true;
     this.syncMesh();
   }
 
@@ -34,10 +39,11 @@ export class Plane {
     this.mesh.quaternion.copy(this.quaternion);
   }
 
-  update(dt, input, getHeight, isOnRunway) {
+  update(dt, input, getHeight, isOnRunway, crashesEnabled) {
+    if (this.crashed) return;
     applyControls(this, input, dt);
     const braking = input.isPressed('Space');
-    physicsStep(this, dt, getHeight, isOnRunway, braking);
+    physicsStep(this, dt, getHeight, isOnRunway, braking, crashesEnabled);
     this.syncMesh();
 
     const prop = this.mesh.getObjectByName('propeller');

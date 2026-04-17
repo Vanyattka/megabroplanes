@@ -14,6 +14,9 @@ import {
   ANGULAR_DAMPING,
   PLANE_BOTTOM_OFFSET,
   BRAKE_STRENGTH,
+  CRASH_MIN_SPEED,
+  CRASH_MIN_DOWN_SPEED,
+  CRASH_MIN_DIVE_DOT,
 } from '../config.js';
 
 const _forward = new Vector3();
@@ -29,7 +32,8 @@ const _deltaQ = new Quaternion();
 const _axis = new Vector3();
 const _worldUp = new Vector3(0, 1, 0);
 
-export function step(plane, dt, getHeight, isOnRunway, braking) {
+export function step(plane, dt, getHeight, isOnRunway, braking, crashesEnabled) {
+  if (plane.crashed) return;
   _forward.set(0, 0, -1).applyQuaternion(plane.quaternion);
   _up.set(0, 1, 0).applyQuaternion(plane.quaternion);
   _right.set(1, 0, 0).applyQuaternion(plane.quaternion);
@@ -120,12 +124,33 @@ export function step(plane, dt, getHeight, isOnRunway, braking) {
       plane.angularVelocity.z *= 0.1;
       plane.onGround = true;
     } else {
-      plane.velocity.set(0, 0, 0);
-      plane.angularVelocity.set(0, 0, 0);
-      plane.onGround = true;
-      if (!plane._roughLogged) {
-        console.warn('Rough landing at', plane.position.toArray());
-        plane._roughLogged = true;
+      // Crash only for steep, fast impacts. A shallow bump or a rough landing
+      // on terrain still just stops the plane — you only explode when you're
+      // actually flying nose-first into the ground at speed.
+      const speed = plane.velocity.length();
+      const downSpeed = -plane.velocity.y;
+      const diveDot = speed > 0.01 ? downSpeed / speed : 0;
+      const isCrashImpact =
+        speed >= CRASH_MIN_SPEED &&
+        downSpeed >= CRASH_MIN_DOWN_SPEED &&
+        diveDot >= CRASH_MIN_DIVE_DOT;
+
+      if (crashesEnabled && isCrashImpact) {
+        plane.crashed = true;
+        plane.crashImpact = {
+          position: plane.position.clone(),
+          velocity: plane.velocity.clone(),
+        };
+        plane.velocity.set(0, 0, 0);
+        plane.angularVelocity.set(0, 0, 0);
+      } else {
+        plane.velocity.set(0, 0, 0);
+        plane.angularVelocity.set(0, 0, 0);
+        plane.onGround = true;
+        if (!plane._roughLogged) {
+          console.warn('Rough landing at', plane.position.toArray());
+          plane._roughLogged = true;
+        }
       }
     }
   } else {

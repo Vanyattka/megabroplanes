@@ -35,6 +35,35 @@
         pointer-events: none;
         text-shadow: 0 1px 2px rgba(0,0,0,0.6);
       }
+      #settings {
+        position: absolute;
+        bottom: 12px;
+        right: 12px;
+        color: #ffffff;
+        background: rgba(0, 0, 0, 0.35);
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        line-height: 1.4;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+      }
+      #settings label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+      #crash-banner {
+        position: absolute;
+        top: 40%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: #fff;
+        background: rgba(180, 30, 20, 0.75);
+        padding: 14px 22px;
+        border-radius: 8px;
+        font-size: 22px;
+        font-weight: bold;
+        letter-spacing: 1px;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+        display: none;
+        pointer-events: none;
+      }
     </style>
   </head>
   <body>
@@ -44,6 +73,10 @@
       <div class="row"><span class="label">THR</span><span id="hud-thr">0%</span></div>
     </div>
     <div id="hint">S/W nose down/up · A/D roll · Q/E yaw · Shift/Ctrl throttle · Space brake · R reset · drag mouse to look</div>
+    <div id="settings">
+      <label><input type="checkbox" id="crashes-enabled" checked /> crashes</label>
+    </div>
+    <div id="crash-banner">CRASHED — press R to respawn</div>
     <canvas id="horizon" width="260" height="260" style="position:absolute; top:12px; right:12px; pointer-events:none;"></canvas>
     <script type="module" src="/src/main.js"></script>
   </body>
