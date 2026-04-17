@@ -39,10 +39,10 @@ export class Plane {
     this.mesh.quaternion.copy(this.quaternion);
   }
 
-  update(dt, input, getHeight, isOnRunway, crashesEnabled) {
+  update(dt, input, getHeight, isOnRunway, crashesEnabled, touch) {
     if (this.crashed) return;
-    applyControls(this, input, dt);
-    const braking = input.isPressed('Space');
+    applyControls(this, input, dt, touch);
+    const braking = input.isPressed('Space') || !!(touch && touch.brake);
     physicsStep(this, dt, getHeight, isOnRunway, braking, crashesEnabled);
     this.syncMesh();
 

@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>megabroplanes</title>
     <style>
-      html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #88bbee; font-family: monospace; }
-      canvas { display: block; }
+      html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #88bbee; font-family: monospace; touch-action: none; -webkit-user-select: none; user-select: none; }
+      canvas { display: block; touch-action: none; }
       #hud {
         position: absolute;
         top: 12px;
@@ -48,6 +48,99 @@
         text-shadow: 0 1px 2px rgba(0,0,0,0.6);
       }
       #settings label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+      /* Mobile touch UI */
+      #touch-ui { position: absolute; inset: 0; pointer-events: none; }
+      #touch-ui > * { pointer-events: auto; }
+      #touch-ui.hidden { display: none; }
+      .joy {
+        position: absolute;
+        bottom: 18px; left: 18px;
+        width: 150px; height: 150px;
+        touch-action: none;
+      }
+      .joy-base {
+        position: absolute; inset: 0;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.12);
+        border: 2px solid rgba(255,255,255,0.4);
+      }
+      .joy-knob {
+        position: absolute;
+        width: 58px; height: 58px;
+        left: 50%; top: 50%;
+        margin-left: -29px; margin-top: -29px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.45);
+        border: 2px solid rgba(255,255,255,0.75);
+        pointer-events: none;
+      }
+      .throttle {
+        position: absolute;
+        bottom: 18px; right: 18px;
+        width: 58px; height: 220px;
+        touch-action: none;
+      }
+      .throttle-track {
+        position: absolute; inset: 0;
+        background: rgba(255,255,255,0.12);
+        border: 2px solid rgba(255,255,255,0.4);
+        border-radius: 10px;
+      }
+      .throttle-fill {
+        position: absolute;
+        left: 2px; right: 2px; bottom: 2px;
+        height: 0%;
+        background: rgba(120,200,120,0.45);
+        border-radius: 8px;
+        pointer-events: none;
+      }
+      .throttle-label {
+        position: absolute;
+        top: 6px; left: 0; right: 0;
+        text-align: center;
+        color: white;
+        font-size: 11px;
+        font-family: monospace;
+        pointer-events: none;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+      }
+      .throttle-value {
+        position: absolute;
+        bottom: 4px; left: 0; right: 0;
+        text-align: center;
+        color: white;
+        font-size: 11px;
+        font-family: monospace;
+        pointer-events: none;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+      }
+      .tbtn {
+        width: 48px; height: 48px;
+        border-radius: 50%;
+        background: rgba(0,0,0,0.4);
+        color: #fff;
+        border: 2px solid rgba(255,255,255,0.5);
+        font-size: 13px;
+        font-weight: bold;
+        font-family: monospace;
+        touch-action: none;
+        cursor: pointer;
+        outline: none;
+        padding: 0;
+      }
+      .tbtn:active, .tbtn.down { background: rgba(255,200,80,0.55); color: #000; }
+      #yaw-buttons {
+        position: absolute;
+        bottom: 185px; left: 30px;
+        display: flex; gap: 8px;
+      }
+      #action-buttons {
+        position: absolute;
+        bottom: 250px; right: 18px;
+        display: flex; flex-direction: column; gap: 8px;
+      }
+      body.touch #hint { display: none; }
+      body.touch #horizon { width: 140px; height: 140px; }
       #crash-banner {
         position: absolute;
         top: 40%;
@@ -79,6 +172,26 @@
     </div>
     <div id="crash-banner">CRASHED — press R to respawn</div>
     <canvas id="horizon" width="260" height="260" style="position:absolute; top:12px; right:12px; pointer-events:none;"></canvas>
+    <div id="touch-ui" class="hidden">
+      <div class="joy" id="joy">
+        <div class="joy-base"></div>
+        <div class="joy-knob" id="joy-knob"></div>
+      </div>
+      <div class="throttle" id="throttle">
+        <div class="throttle-track"></div>
+        <div class="throttle-fill" id="throttle-fill"></div>
+        <div class="throttle-label">THR</div>
+        <div class="throttle-value" id="throttle-value">0%</div>
+      </div>
+      <div id="yaw-buttons">
+        <button class="tbtn" id="btn-yaw-l">&larr;</button>
+        <button class="tbtn" id="btn-yaw-r">&rarr;</button>
+      </div>
+      <div id="action-buttons">
+        <button class="tbtn" id="btn-reset">R</button>
+        <button class="tbtn" id="btn-brake">BRK</button>
+      </div>
+    </div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

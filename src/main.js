@@ -13,6 +13,7 @@ import { Explosion } from './effects/Explosion.js';
 import { CRASH_ENABLED_DEFAULT } from './config.js';
 import { MultiplayerClient } from './net/Client.js';
 import { RemotePlaneManager } from './net/RemotePlaneManager.js';
+import { TouchControls } from './ui/Touch.js';
 import { Plane } from './plane/Plane.js';
 import { ChaseCamera } from './camera/ChaseCamera.js';
 import { Hud } from './ui/Hud.js';
@@ -64,6 +65,7 @@ mp.onStatusChange(({ connected, count, id }) => {
   else mpStatusEl.textContent = `mp: P${id ?? '?'} · ${count} other${count === 1 ? '' : 's'}`;
 });
 const remotes = new RemotePlaneManager(renderer.scene, mp);
+const touch = new TouchControls();
 
 const chaseCamera = new ChaseCamera(renderer.camera);
 
@@ -80,8 +82,10 @@ let lastRenderTime = performance.now();
 let resetHeld = false;
 
 function physicsStep(dt) {
-  if (input.isPressed('KeyR')) {
-    if (!resetHeld) {
+  const resetKey = input.isPressed('KeyR');
+  const resetBtn = touch.consumeReset();
+  if (resetKey || resetBtn) {
+    if (!resetHeld || resetBtn) {
       plane.reset();
       explosion.clear();
       if (crashBannerEl) crashBannerEl.style.display = 'none';
@@ -91,7 +95,7 @@ function physicsStep(dt) {
     resetHeld = false;
   }
   const wasCrashed = plane.crashed;
-  plane.update(dt, input, getPhysicsFloor, isOnFlatGround, crashesEnabled());
+  plane.update(dt, input, getPhysicsFloor, isOnFlatGround, crashesEnabled(), touch);
   if (!wasCrashed && plane.crashed && plane.crashImpact) {
     explosion.trigger(plane.crashImpact.position, plane.crashImpact.velocity);
     plane.mesh.visible = false;
