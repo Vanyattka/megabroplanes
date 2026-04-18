@@ -35,12 +35,24 @@ const geom = (() => {
   const roof2 = new BoxGeometry(6.4, 2.0, 7.4);
   roof2.translate(0, 7.0, 0);
 
+  // 4-floor apartment block (khrushchevka).
+  const walls3 = new BoxGeometry(20, 13.5, 9);
+  walls3.translate(0, 6.75, 0);
+  const roof3 = new BoxGeometry(20.4, 0.8, 9.4);
+  roof3.translate(0, 13.9, 0);
+
   const chimney = new BoxGeometry(0.5, 1.4, 0.5);
   chimney.translate(0, 0.7, 0);
   const door = new BoxGeometry(0.8, 1.6, 0.1);
   door.translate(0, 0.8, 0);
   const window_ = new BoxGeometry(0.65, 0.9, 0.08);
-  return { walls0, roof0, walls1, roof1, walls2, roof2, chimney, door, window: window_ };
+  return {
+    walls0, roof0,
+    walls1, roof1,
+    walls2, roof2,
+    walls3, roof3,
+    chimney, door, window: window_,
+  };
 })();
 
 // Set of shared geometries we must never dispose per chunk.
@@ -51,6 +63,8 @@ const SHARED_GEOMS = new Set([
   geom.roof1,
   geom.walls2,
   geom.roof2,
+  geom.walls3,
+  geom.roof3,
   geom.chimney,
   geom.door,
   geom.window,
@@ -83,6 +97,13 @@ const ROOF_COLORS = [
   0x7a5a30, // mustard-brown
 ];
 
+// Apartment blocks use a restrained concrete-and-beige palette so they read
+// as urban even when dropped into a green field.
+const APARTMENT_WALL_COLORS = [
+  0xb0b0a8, 0xc5c5b5, 0xa0a0a0, 0xb8b0a0, 0xc0b098, 0xa8a8b0, 0xd4cdbc,
+];
+const APARTMENT_ROOF_COLORS = [0x3a3a3a, 0x2a2a2a, 0x4a4a40, 0x5a4830];
+
 const DOOR_COLOR = 0x3a2a1a;
 const CHIMNEY_COLOR = 0x333333;
 const ROAD_COLOR = 0x666058;
@@ -93,6 +114,12 @@ const wallMaterials = WALL_COLORS.map(
   (c) => new MeshStandardMaterial({ color: c, flatShading: true, roughness: 1 })
 );
 const roofMaterials = ROOF_COLORS.map(
+  (c) => new MeshStandardMaterial({ color: c, flatShading: true, roughness: 1 })
+);
+const apartmentWallMaterials = APARTMENT_WALL_COLORS.map(
+  (c) => new MeshStandardMaterial({ color: c, flatShading: true, roughness: 1 })
+);
+const apartmentRoofMaterials = APARTMENT_ROOF_COLORS.map(
   (c) => new MeshStandardMaterial({ color: c, flatShading: true, roughness: 1 })
 );
 const chimneyMat = new MeshStandardMaterial({ color: CHIMNEY_COLOR, flatShading: true });
@@ -112,19 +139,36 @@ const windowMat = new MeshStandardMaterial({
 // ---------------------------------------------------------------------------
 // Per-variant dimensions for positioning details (door, windows, chimney).
 
+// Window positions default to two fronts flanking the door and one per side.
+// Apartments override with more windows across the wide front and two per side.
 const VARIANTS = {
   0: { halfX: 2.5, halfZ: 3.0, floors: [1.5], frontZ: -3.05, chimney: null },
   1: { halfX: 3.5, halfZ: 4.0, floors: [2.2], frontZ: -4.05, chimney: { x: 1.4, y: 5.4, z: -1.2 } },
   2: { halfX: 3.0, halfZ: 3.5, floors: [1.7, 4.4], frontZ: -3.55, chimney: { x: 1.3, y: 7.5, z: -1.2 } },
+  3: {
+    halfX: 10, halfZ: 4.5,
+    floors: [1.4, 4.7, 8.0, 11.3],
+    frontZ: -4.55,
+    chimney: null,
+    fbXPositions: [-7.8, -3.3, 3.3, 7.8],
+    sideZPositions: [-2.8, 2.8],
+    isApartment: true,
+  },
 };
 
 function variantFor(v) { return VARIANTS[v] || VARIANTS[0]; }
 
 function wallsGeomFor(v) {
-  return v === 2 ? geom.walls2 : v === 1 ? geom.walls1 : geom.walls0;
+  if (v === 3) return geom.walls3;
+  if (v === 2) return geom.walls2;
+  if (v === 1) return geom.walls1;
+  return geom.walls0;
 }
 function roofGeomFor(v) {
-  return v === 2 ? geom.roof2 : v === 1 ? geom.roof1 : geom.roof0;
+  if (v === 3) return geom.roof3;
+  if (v === 2) return geom.roof2;
+  if (v === 1) return geom.roof1;
+  return geom.roof0;
 }
 
 // ---------------------------------------------------------------------------
@@ -134,8 +178,10 @@ function buildHouse(house, prng) {
   const g = new Group();
   const v = house.variant;
   const dims = variantFor(v);
-  const wallMat = wallMaterials[Math.floor(prng() * wallMaterials.length)];
-  const roofMat = roofMaterials[Math.floor(prng() * roofMaterials.length)];
+  const wallPool = dims.isApartment ? apartmentWallMaterials : wallMaterials;
+  const roofPool = dims.isApartment ? apartmentRoofMaterials : roofMaterials;
+  const wallMat = wallPool[Math.floor(prng() * wallPool.length)];
+  const roofMat = roofPool[Math.floor(prng() * roofPool.length)];
 
   g.add(new Mesh(wallsGeomFor(v), wallMat));
   g.add(new Mesh(roofGeomFor(v), roofMat));
@@ -157,18 +203,22 @@ function buildHouse(house, prng) {
 // village-wide InstancedMesh.
 function windowLocalPlacements(variant) {
   const dims = variantFor(variant);
+  const fbXs = dims.fbXPositions || [-1.35, 1.35];
+  const sideZs = dims.sideZPositions || [0];
   const out = [];
   for (const y of dims.floors) {
-    // Front (-Z): 2 windows flanking the door
-    out.push({ x: -1.35, y, z: -(dims.halfZ + 0.05), side: false });
-    out.push({ x: +1.35, y, z: -(dims.halfZ + 0.05), side: false });
-    // Back (+Z): 2 windows
-    out.push({ x: -1.35, y, z: dims.halfZ + 0.05, side: false });
-    out.push({ x: +1.35, y, z: dims.halfZ + 0.05, side: false });
-    // Left (-X): 1 window
-    out.push({ x: -(dims.halfX + 0.05), y, z: 0, side: true });
-    // Right (+X): 1 window
-    out.push({ x: dims.halfX + 0.05, y, z: 0, side: true });
+    for (const x of fbXs) {
+      // Front (-Z)
+      out.push({ x, y, z: -(dims.halfZ + 0.05), side: false });
+      // Back (+Z)
+      out.push({ x, y, z: dims.halfZ + 0.05, side: false });
+    }
+    for (const z of sideZs) {
+      // Left (-X)
+      out.push({ x: -(dims.halfX + 0.05), y, z, side: true });
+      // Right (+X)
+      out.push({ x: dims.halfX + 0.05, y, z, side: true });
+    }
   }
   return out;
 }

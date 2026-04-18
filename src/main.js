@@ -5,6 +5,7 @@ import { Sky } from './world/Sky.js';
 import { ChunkManager } from './world/ChunkManager.js';
 import { VillageManager } from './world/VillageManager.js';
 import { isOnFlatGround } from './world/Villages.js';
+import { RuinsManager } from './world/RuinsManager.js';
 import { Water } from './world/Water.js';
 import { groundHeight, physicsFloor } from './world/Ground.js';
 import { Clouds } from './world/Clouds.js';
@@ -26,6 +27,7 @@ const sky = new Sky(renderer.scene);
 
 const chunks = new ChunkManager(renderer.scene);
 const villages = new VillageManager(renderer.scene);
+const ruins = new RuinsManager(renderer.scene);
 const water = new Water(renderer.scene);
 
 const plane = new Plane();
@@ -77,6 +79,7 @@ const getPhysicsFloor = physicsFloor;
 // Prime chunks and villages before first frame
 chunks.update(plane.position);
 villages.update(plane.position);
+ruins.update(plane.position);
 
 let lastRenderTime = performance.now();
 let resetHeld = false;
@@ -103,6 +106,7 @@ function physicsStep(dt) {
   }
   chunks.update(plane.position);
   villages.update(plane.position);
+  ruins.update(plane.position);
 }
 
 function renderStep() {

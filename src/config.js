@@ -34,13 +34,21 @@ export const VILLAGE_STREET_SEPARATION = 48;    // distance between the two para
 export const VILLAGE_VIEW_CELLS = 1;            // cells around plane kept in scene
 // Size tiers. `streets` = number of parallel main streets (1 or 2).
 // `tallChance` = probability a house is a 2-story variant 2.
+// `apartmentChance` = probability a slot is a 4-floor khrushchevka (variant 3).
+// `spacing` = distance between adjacent houses along the same street.
 export const VILLAGE_SIZES = {
-  small:  { housesMin: 4,  housesMax: 6,  halfL: 55,  halfW: 32, streets: 1, tallChance: 0.00 },
-  medium: { housesMin: 7,  housesMax: 12, halfL: 100, halfW: 45, streets: 1, tallChance: 0.20 },
-  large:  { housesMin: 14, housesMax: 22, halfL: 130, halfW: 60, streets: 2, tallChance: 0.40 },
+  small:  { housesMin: 4,  housesMax: 6,  halfL: 55,  halfW: 32,  streets: 1, tallChance: 0.00, apartmentChance: 0.00, spacing: 14 },
+  medium: { housesMin: 7,  housesMax: 12, halfL: 100, halfW: 45,  streets: 1, tallChance: 0.20, apartmentChance: 0.00, spacing: 14 },
+  large:  { housesMin: 14, housesMax: 22, halfL: 130, halfW: 60,  streets: 2, tallChance: 0.40, apartmentChance: 0.00, spacing: 14 },
+  city:   { housesMin: 28, housesMax: 48, halfL: 230, halfW: 140, streets: 4, tallChance: 0.25, apartmentChance: 0.35, spacing: 24 },
 };
-// Per-cell size distribution. Must sum to 1.
-export const VILLAGE_SIZE_WEIGHTS = { small: 0.30, medium: 0.50, large: 0.20 };
+// Per-cell size distribution. Must sum to 1. Cities are rare landmarks.
+export const VILLAGE_SIZE_WEIGHTS = { small: 0.28, medium: 0.47, large: 0.20, city: 0.05 };
+
+// Ruins — old stone structures on mountain peaks.
+export const RUIN_CELL_SIZE = 2400;
+export const RUIN_CHANCE = 0.55;     // of a cell containing an eligible mountain peak
+export const RUIN_MIN_HEIGHT = 32;   // groundHeight must exceed this for a ruin to spawn
 
 // Physics
 export const GRAVITY = 9.81;
