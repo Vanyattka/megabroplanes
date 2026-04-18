@@ -66,6 +66,8 @@ setInterval(() => {
       q: c.state.q,
       t: c.state.t ?? 0,
       c: c.state.c ? 1 : 0,
+      pt: c.state.pt,
+      pc: c.state.pc,
     });
   }
   broadcast({ type: 'snapshot', states });

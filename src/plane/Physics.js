@@ -18,6 +18,7 @@ import {
   PLANE_BOTTOM_OFFSET,
   BRAKE_STRENGTH,
   CRASH_MIN_SPEED,
+  DEFAULT_TYPE_CONFIG,
 } from '../config.js';
 
 const _forward = new Vector3();
@@ -35,19 +36,20 @@ const _worldUp = new Vector3(0, 1, 0);
 
 export function step(plane, dt, getHeight, isOnRunway, braking, crashesEnabled) {
   if (plane.crashed) return;
+  const tc = plane.typeConfig || DEFAULT_TYPE_CONFIG;
+
   _forward.set(0, 0, -1).applyQuaternion(plane.quaternion);
   _up.set(0, 1, 0).applyQuaternion(plane.quaternion);
   _right.set(1, 0, 0).applyQuaternion(plane.quaternion);
 
-  // Forces
-  _thrust.copy(_forward).multiplyScalar(MAX_THRUST * plane.throttle);
+  // Forces — scaled per-aircraft so a Cessna crawls and a jet sprints off
+  // the same global MAX_THRUST constant.
+  _thrust.copy(_forward).multiplyScalar(MAX_THRUST * tc.thrustMult * plane.throttle);
 
   const forwardSpeed = plane.velocity.dot(_forward);
-  // Clamp the speed used for lift so it saturates — a real wing stalls past
-  // its max coefficient of lift. Arcade version: lift grows with speed up to
-  // LIFT_REFERENCE_SPEED, then stays flat. Prevents runaway climbing.
-  const liftSpeed = Math.min(Math.abs(forwardSpeed), LIFT_REFERENCE_SPEED);
-  const liftMag = LIFT_COEFFICIENT * liftSpeed * liftSpeed;
+  const liftRef = LIFT_REFERENCE_SPEED * tc.liftRefMult;
+  const liftSpeed = Math.min(Math.abs(forwardSpeed), liftRef);
+  const liftMag = LIFT_COEFFICIENT * tc.liftMult * liftSpeed * liftSpeed;
   _lift.copy(_up).multiplyScalar(liftMag);
 
   const speed = plane.velocity.length();
@@ -55,7 +57,7 @@ export function step(plane, dt, getHeight, isOnRunway, braking, crashesEnabled) 
     _drag
       .copy(plane.velocity)
       .normalize()
-      .multiplyScalar(-DRAG_COEFFICIENT * speed * speed);
+      .multiplyScalar(-DRAG_COEFFICIENT * tc.dragMult * speed * speed);
   } else {
     _drag.set(0, 0, 0);
   }
@@ -91,7 +93,7 @@ export function step(plane, dt, getHeight, isOnRunway, braking, crashesEnabled) 
 
   // Roll-to-yaw coupling
   const rollAngle = Math.asin(Math.max(-1, Math.min(1, _right.y)));
-  plane.angularVelocity.y += Math.sin(rollAngle) * COUPLING_COEFF * dt;
+  plane.angularVelocity.y += Math.sin(rollAngle) * COUPLING_COEFF * tc.couplingMult * dt;
 
   // Stall pitch-down: below STALL_PITCH_SPEED a bias torque pulls the nose
   // down. Strength ramps linearly from 0 at the threshold up to full at zero

@@ -23,6 +23,7 @@ import { MultiplayerClient } from './net/Client.js';
 import { RemotePlaneManager } from './net/RemotePlaneManager.js';
 import { TouchControls } from './ui/Touch.js';
 import { Minimap } from './ui/Minimap.js';
+import { Menu } from './ui/Menu.js';
 import { Plane } from './plane/Plane.js';
 import { ChaseCamera } from './camera/ChaseCamera.js';
 import { Hud } from './ui/Hud.js';
@@ -38,8 +39,9 @@ const villages = new VillageManager(renderer.scene);
 const ruins = new RuinsManager(renderer.scene);
 const water = new Water(renderer.scene);
 
-const plane = new Plane();
-renderer.scene.add(plane.mesh);
+const plane = new Plane(renderer.scene);
+// Hidden initially — menu state will animate an orbit camera over the world.
+plane.mesh.visible = false;
 
 const sharedShadowTex = makeShadowTexture();
 const planeShadow = new PlaneShadow(renderer.scene, sharedShadowTex);
@@ -78,6 +80,29 @@ const remotes = new RemotePlaneManager(renderer.scene, mp);
 const touch = new TouchControls();
 const minimap = new Minimap(mp);
 
+// Game state — 'menu' shows the main menu with an orbiting camera; 'playing'
+// runs the normal chase-cam + physics loop.
+let gameState = 'menu';
+const menu = new Menu();
+menu.onChange = ({ type, color }) => {
+  // Live-preview selected plane on the runway while picking (mesh shows briefly
+  // mid-orbit so you can see its silhouette).
+  plane.setLoadout(type, color);
+  plane.mesh.visible = true;
+};
+menu.onStart = ({ type, color }) => {
+  plane.setLoadout(type, color);
+  plane.reset();
+  plane.mesh.visible = true;
+  gameState = 'playing';
+};
+// Apply saved loadout so remote players get the right pt/pc from the first
+// state message even before the player clicks Start.
+{
+  const sel = menu.getSelection();
+  plane.setLoadout(sel.type, sel.color);
+}
+
 const chaseCamera = new ChaseCamera(renderer.camera);
 
 const hud = new Hud();
@@ -108,6 +133,15 @@ let lastRenderTime = performance.now();
 let resetHeld = false;
 
 function physicsStep(dt) {
+  if (gameState === 'menu') {
+    // No plane physics until the player hits Start. World still streams so
+    // the menu background keeps its scenery live.
+    chunks.update(plane.position, viewDistanceFor(plane));
+    villages.update(plane.position);
+    ruins.update(plane.position);
+    return;
+  }
+
   const resetKey = input.isPressed('KeyR');
   const resetBtn = touch.consumeReset();
   if (resetKey || resetBtn) {
@@ -136,6 +170,27 @@ function renderStep() {
   const now = performance.now();
   const renderDt = Math.min(0.1, (now - lastRenderTime) / 1000);
   lastRenderTime = now;
+
+  if (gameState === 'menu') {
+    // Slow orbit around the home airport so the menu has a live backdrop.
+    const t = now / 6000;
+    const radius = 180;
+    const height = 55;
+    renderer.camera.position.set(
+      Math.cos(t) * radius,
+      height,
+      Math.sin(t) * radius
+    );
+    renderer.camera.lookAt(0, 12, 0);
+    const fogFar = fogFarFor({ position: { y: 50 } });
+    if (renderer.scene.fog) renderer.scene.fog.far = fogFar;
+    sky.update(renderer.camera);
+    water.update(renderer.camera.position);
+    clouds.update(renderDt, renderer.camera.position, getPhysicsFloor);
+    renderer.render();
+    return;
+  }
+
   chaseCamera.update(plane, input, renderDt);
   const fogFar = fogFarFor(plane);
   if (renderer.scene.fog) renderer.scene.fog.far = fogFar;

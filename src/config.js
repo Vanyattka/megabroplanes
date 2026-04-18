@@ -107,6 +107,72 @@ export const THROTTLE_RATE = 0.5;
 export const PLANE_BOTTOM_OFFSET = 0.5;
 export const BRAKE_STRENGTH = 1.5;
 
+// Aircraft types. Each multiplier scales the global constant above for
+// physics / control, and selects a mesh silhouette.
+export const DEFAULT_TYPE_CONFIG = {
+  thrustMult: 1,
+  dragMult: 1,
+  liftMult: 1,
+  liftRefMult: 1,
+  pitchRateMult: 1,
+  rollRateMult: 1,
+  yawRateMult: 1,
+  couplingMult: 1,
+};
+export const PLANE_TYPES = {
+  cessna: {
+    name: 'Cessna',
+    description: 'Slow and forgiving. Perfect for relaxing flights.',
+    thrustMult: 0.55,
+    dragMult: 1.4,
+    liftMult: 1.1,
+    liftRefMult: 0.95,
+    pitchRateMult: 0.80,
+    rollRateMult: 0.70,
+    yawRateMult: 0.80,
+    couplingMult: 1.00,
+  },
+  piper: {
+    name: 'Piper',
+    description: 'Balanced all-rounder. The classic sim plane.',
+    thrustMult: 1.0,
+    dragMult: 1.0,
+    liftMult: 1.0,
+    liftRefMult: 1.0,
+    pitchRateMult: 1.0,
+    rollRateMult: 1.0,
+    yawRateMult: 1.0,
+    couplingMult: 1.0,
+  },
+  jet: {
+    name: 'Jet',
+    description: 'Hot fighter. Huge thrust, sharp controls.',
+    thrustMult: 2.5,
+    dragMult: 0.7,
+    liftMult: 0.85,
+    liftRefMult: 1.2,
+    pitchRateMult: 1.40,
+    rollRateMult: 1.70,
+    yawRateMult: 1.20,
+    couplingMult: 0.80,
+  },
+};
+export const DEFAULT_PLANE_TYPE = 'piper';
+
+// Body colors offered in the menu. First entry is the default.
+export const BODY_COLORS = [
+  { name: 'white',   hex: 0xeeeeee },
+  { name: 'red',     hex: 0xcc3333 },
+  { name: 'blue',    hex: 0x3377cc },
+  { name: 'yellow',  hex: 0xffcc33 },
+  { name: 'pink',    hex: 0xff88bb },
+  { name: 'green',   hex: 0x55aa55 },
+  { name: 'orange',  hex: 0xff8833 },
+  { name: 'purple',  hex: 0x9966cc },
+  { name: 'black',   hex: 0x444444 },
+];
+export const DEFAULT_BODY_COLOR = 0xeeeeee;
+
 // Sky / fog / lighting
 export const HORIZON_COLOR = 0xcfe2f3; // warm pale blue, matches fog
 export const ZENITH_COLOR = 0x3b72c4;  // deeper overhead blue

@@ -1,28 +1,36 @@
 import { Color, Quaternion, Vector3 } from 'three';
-import { buildPlaneMesh } from '../plane/PlaneMesh.js';
+import { buildPlaneMesh, disposePlaneMesh } from '../plane/PlaneMesh.js';
+import { DEFAULT_PLANE_TYPE, DEFAULT_BODY_COLOR } from '../config.js';
 
-const LERP = 0.22;    // position lerp per render frame
-const SLERP = 0.22;   // rotation slerp per render frame
+const LERP = 0.22;
+const SLERP = 0.22;
 
-// Materials we tint — any material currently white-ish (fuselage, wing, stab)
-// picks up the player's hue; cockpit/prop/fin keep their fixed colors.
-function tintMesh(group, hue) {
-  const col = new Color().setHSL(hue, 0.7, 0.6);
-  group.traverse((obj) => {
-    if (!obj.isMesh || !obj.material || !obj.material.color) return;
-    if (obj.material.color.getHex() === 0xeeeeee) {
-      const clone = obj.material.clone();
-      clone.color = col.clone();
-      obj.material = clone;
-    }
-  });
+// Used only when the remote hasn't broadcast pt/pc yet — fall back to the
+// hue the server assigned so the plane still has a distinct color.
+function hueToHex(hue) {
+  return new Color().setHSL(hue, 0.7, 0.6).getHex();
 }
 
 export class RemotePlaneManager {
   constructor(scene, client) {
     this.scene = scene;
     this.client = client;
-    this.visuals = new Map(); // id -> { mesh, targetPos, targetQuat, throttle, crashed }
+    this.visuals = new Map();
+  }
+
+  _buildMesh(type, color) {
+    return buildPlaneMesh(type || DEFAULT_PLANE_TYPE, color ?? DEFAULT_BODY_COLOR);
+  }
+
+  _rebuild(v, type, color) {
+    this.scene.remove(v.mesh);
+    disposePlaneMesh(v.mesh);
+    v.mesh = this._buildMesh(type, color);
+    v.mesh.position.copy(v.targetPos);
+    v.mesh.quaternion.copy(v.targetQuat);
+    this.scene.add(v.mesh);
+    v.type = type;
+    v.color = color;
   }
 
   update(dt) {
@@ -30,10 +38,15 @@ export class RemotePlaneManager {
     for (const [id, r] of this.client.remotes) {
       if (!r.pos || !r.quat) continue;
       seen.add(id);
+
+      // Prefer broadcast type/color; fall back to hue-derived color.
+      const wantedType = r.type || DEFAULT_PLANE_TYPE;
+      const wantedColor =
+        r.color != null ? r.color : hueToHex(r.hue);
+
       let v = this.visuals.get(id);
       if (!v) {
-        const mesh = buildPlaneMesh();
-        tintMesh(mesh, r.hue);
+        const mesh = this._buildMesh(wantedType, wantedColor);
         mesh.position.fromArray(r.pos);
         mesh.quaternion.fromArray(r.quat);
         this.scene.add(mesh);
@@ -43,9 +56,14 @@ export class RemotePlaneManager {
           targetQuat: new Quaternion().fromArray(r.quat),
           throttle: r.throttle || 0,
           crashed: !!r.crashed,
+          type: wantedType,
+          color: wantedColor,
         };
         this.visuals.set(id, v);
+      } else if (v.type !== wantedType || v.color !== wantedColor) {
+        this._rebuild(v, wantedType, wantedColor);
       }
+
       v.targetPos.fromArray(r.pos);
       v.targetQuat.fromArray(r.quat);
       v.throttle = r.throttle || 0;
@@ -61,12 +79,7 @@ export class RemotePlaneManager {
     for (const [id, v] of this.visuals) {
       if (!seen.has(id)) {
         this.scene.remove(v.mesh);
-        v.mesh.traverse((obj) => {
-          if (obj.isMesh) {
-            // Materials were cloned per-player — safe to dispose.
-            if (obj.material) obj.material.dispose();
-          }
-        });
+        disposePlaneMesh(v.mesh);
         this.visuals.delete(id);
       }
     }

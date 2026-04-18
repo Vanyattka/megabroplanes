@@ -4,6 +4,7 @@ import {
   YAW_RATE,
   CONTROL_RESPONSIVENESS,
   THROTTLE_RATE,
+  DEFAULT_TYPE_CONFIG,
 } from '../config.js';
 
 function clamp(v) {
@@ -31,9 +32,10 @@ export function applyControls(plane, input, dt, touch) {
   const rollInput = clamp(keyRoll + joyRoll);
   const yawInput = clamp(keyYaw + joyYaw);
 
-  const targetPitch = pitchInput * PITCH_RATE;
-  const targetRoll = rollInput * ROLL_RATE;
-  const targetYaw = yawInput * YAW_RATE;
+  const tc = plane.typeConfig || DEFAULT_TYPE_CONFIG;
+  const targetPitch = pitchInput * PITCH_RATE * tc.pitchRateMult;
+  const targetRoll = rollInput * ROLL_RATE * tc.rollRateMult;
+  const targetYaw = yawInput * YAW_RATE * tc.yawRateMult;
 
   plane.angularVelocity.x +=
     (targetPitch - plane.angularVelocity.x) * CONTROL_RESPONSIVENESS;

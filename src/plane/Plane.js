@@ -1,11 +1,17 @@
 import { Vector3, Quaternion } from 'three';
-import { buildPlaneMesh } from './PlaneMesh.js';
+import { buildPlaneMesh, disposePlaneMesh } from './PlaneMesh.js';
 import { step as physicsStep } from './Physics.js';
 import { applyControls } from './Controls.js';
 import { getSpawnPose } from '../world/Runway.js';
+import {
+  PLANE_TYPES,
+  DEFAULT_PLANE_TYPE,
+  DEFAULT_BODY_COLOR,
+} from '../config.js';
 
 export class Plane {
-  constructor() {
+  constructor(scene) {
+    this.scene = scene;
     this.position = new Vector3();
     this.velocity = new Vector3();
     this.quaternion = new Quaternion();
@@ -15,8 +21,29 @@ export class Plane {
     this.crashed = false;
     this.crashImpact = null;
 
-    this.mesh = buildPlaneMesh();
+    this.type = DEFAULT_PLANE_TYPE;
+    this.color = DEFAULT_BODY_COLOR;
+    this.typeConfig = PLANE_TYPES[this.type];
+
+    this.mesh = buildPlaneMesh(this.type, this.color);
+    if (this.scene) this.scene.add(this.mesh);
     this.reset();
+  }
+
+  // Swap the visible mesh when the player picks a different plane / color.
+  // Physics state (position, velocity, throttle) is preserved.
+  setLoadout(type, color) {
+    const nextType = PLANE_TYPES[type] ? type : DEFAULT_PLANE_TYPE;
+    const nextColor = typeof color === 'number' ? color : DEFAULT_BODY_COLOR;
+    if (nextType === this.type && nextColor === this.color) return;
+    if (this.scene) this.scene.remove(this.mesh);
+    disposePlaneMesh(this.mesh);
+    this.type = nextType;
+    this.color = nextColor;
+    this.typeConfig = PLANE_TYPES[nextType];
+    this.mesh = buildPlaneMesh(nextType, nextColor);
+    if (this.scene) this.scene.add(this.mesh);
+    this.syncMesh();
   }
 
   reset() {

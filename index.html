@@ -142,6 +142,114 @@
       body.touch #hint { display: none; }
       body.touch #horizon { width: 140px; height: 140px; }
       body.touch #minimap { top: 100px; width: 130px !important; height: 130px !important; }
+      /* Main menu */
+      #menu {
+        position: absolute;
+        inset: 0;
+        z-index: 50;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 24px;
+        color: #fff;
+        background: linear-gradient(rgba(8, 16, 30, 0.25), rgba(8, 16, 30, 0.55));
+        font-family: monospace;
+        pointer-events: auto;
+      }
+      #menu.hidden { display: none; }
+      body.menu-open #hud,
+      body.menu-open #hint,
+      body.menu-open #settings,
+      body.menu-open #horizon,
+      body.menu-open #minimap,
+      body.menu-open #touch-ui { display: none; }
+      #menu-title {
+        font-size: 72px;
+        letter-spacing: 6px;
+        margin: 0;
+        text-shadow: 0 6px 20px rgba(0, 0, 0, 0.7);
+        font-weight: 900;
+      }
+      #menu-subtitle {
+        font-size: 14px;
+        letter-spacing: 4px;
+        opacity: 0.8;
+        margin: 0;
+      }
+      #menu-main, #menu-chooser {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+      }
+      .menu-btn {
+        background: rgba(255, 255, 255, 0.1);
+        border: 2px solid rgba(255, 255, 255, 0.6);
+        color: #fff;
+        padding: 12px 32px;
+        font-size: 18px;
+        min-width: 260px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-family: monospace;
+        font-weight: bold;
+        letter-spacing: 2px;
+        transition: background 0.15s, border-color 0.15s, transform 0.1s;
+      }
+      .menu-btn:hover { background: rgba(255, 204, 64, 0.18); border-color: #ffcc40; }
+      .menu-btn:active { transform: scale(0.97); }
+      .menu-btn.primary { background: rgba(255, 204, 64, 0.25); border-color: #ffcc40; }
+      #menu-chooser.hidden { display: none; }
+      #menu-chooser h2 { margin: 0; font-size: 20px; letter-spacing: 3px; }
+      #menu-chooser h3 { margin: 0; font-size: 14px; letter-spacing: 2px; opacity: 0.85; }
+      #plane-list {
+        display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;
+      }
+      .plane-card {
+        background: rgba(0, 0, 0, 0.38);
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-radius: 6px;
+        padding: 14px 18px;
+        min-width: 170px;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s;
+        color: #fff;
+      }
+      .plane-card:hover { border-color: rgba(255, 204, 64, 0.6); }
+      .plane-card.selected {
+        border-color: #ffcc40;
+        background: rgba(255, 204, 64, 0.16);
+      }
+      .plane-card .pc-name {
+        font-size: 18px;
+        font-weight: bold;
+        letter-spacing: 2px;
+        margin-bottom: 4px;
+      }
+      .plane-card .pc-desc {
+        font-size: 12px;
+        opacity: 0.85;
+        line-height: 1.4;
+      }
+      #color-list {
+        display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+      }
+      .color-swatch {
+        width: 30px; height: 30px;
+        border-radius: 50%;
+        border: 3px solid transparent;
+        cursor: pointer;
+        box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.35);
+        transition: transform 0.1s;
+      }
+      .color-swatch:hover { transform: scale(1.08); }
+      .color-swatch.selected { border-color: #fff; }
+      #menu-footer-hint {
+        font-size: 11px;
+        opacity: 0.65;
+        letter-spacing: 2px;
+      }
       #crash-banner {
         position: absolute;
         top: 40%;
@@ -172,6 +280,22 @@
       <div id="mp-status" style="margin-top: 4px; opacity: 0.85;">mp: offline</div>
     </div>
     <div id="crash-banner">CRASHED — press R to respawn</div>
+    <div id="menu">
+      <h1 id="menu-title">MBPlanes</h1>
+      <p id="menu-subtitle">fly · drift · explode · vibes</p>
+      <div id="menu-main">
+        <button class="menu-btn primary" id="btn-start">START GAME</button>
+        <button class="menu-btn" id="btn-choose">CHOOSE PLANE</button>
+      </div>
+      <div id="menu-chooser" class="hidden">
+        <h2>AIRCRAFT</h2>
+        <div id="plane-list"></div>
+        <h3>BODY COLOR</h3>
+        <div id="color-list"></div>
+        <button class="menu-btn" id="btn-back">BACK</button>
+      </div>
+      <div id="menu-footer-hint">WASD · QE · shift/ctrl · space · R · drag mouse to look</div>
+    </div>
     <canvas id="horizon" width="260" height="260" style="position:absolute; top:12px; right:12px; pointer-events:none;"></canvas>
     <canvas id="minimap" width="160" height="160"
       style="position:absolute; top:110px; left:12px; width:160px; height:160px;
