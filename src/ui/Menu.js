@@ -4,6 +4,7 @@ import {
   BODY_COLORS,
   DEFAULT_BODY_COLOR,
 } from '../config.js';
+import { PlanePreview } from './PlanePreview.js';
 
 const STORAGE_KEY = 'mbp:loadout';
 
@@ -34,6 +35,11 @@ export class Menu {
     this.selectedType = saved?.type || DEFAULT_PLANE_TYPE;
     this.selectedColor = saved?.color ?? DEFAULT_BODY_COLOR;
 
+    this.previews = [];           // [{ type, preview }]
+    this._previewsInitialized = false;
+    this._rafId = null;
+    this._lastRaf = 0;
+
     this._renderPlaneCards();
     this._renderColors();
     this._wireButtons();
@@ -60,15 +66,19 @@ export class Menu {
   hide() {
     this.root.classList.add('hidden');
     document.body.classList.remove('menu-open');
+    this._stopRaf();
   }
 
   _showMain() {
     this.main.classList.remove('hidden');
     this.chooser.classList.add('hidden');
+    this._stopRaf();
   }
   _showChooser() {
     this.main.classList.add('hidden');
     this.chooser.classList.remove('hidden');
+    this._ensurePreviews();
+    this._startRaf();
   }
 
   _renderPlaneCards() {
@@ -78,10 +88,30 @@ export class Menu {
       const card = document.createElement('div');
       card.className = 'plane-card' + (key === this.selectedType ? ' selected' : '');
       card.dataset.type = key;
-      card.innerHTML = `
-        <div class="pc-name">${t.name.toUpperCase()}</div>
-        <div class="pc-desc">${t.description}</div>
-      `;
+
+      const canvas = document.createElement('canvas');
+      canvas.className = 'pc-canvas';
+      canvas.width = 220;
+      canvas.height = 130;
+      card.appendChild(canvas);
+
+      const name = document.createElement('div');
+      name.className = 'pc-name';
+      name.textContent = t.name.toUpperCase();
+      card.appendChild(name);
+
+      const desc = document.createElement('div');
+      desc.className = 'pc-desc';
+      desc.textContent = t.description;
+      card.appendChild(desc);
+
+      if (t.tagline) {
+        const tag = document.createElement('div');
+        tag.className = 'pc-tagline';
+        tag.textContent = `"${t.tagline}"`;
+        card.appendChild(tag);
+      }
+
       card.addEventListener('click', () => {
         this.selectedType = key;
         this._updatePlaneCards();
@@ -90,10 +120,45 @@ export class Menu {
       this.planeList.appendChild(card);
     }
   }
+
   _updatePlaneCards() {
     for (const card of this.planeList.querySelectorAll('.plane-card')) {
       card.classList.toggle('selected', card.dataset.type === this.selectedType);
     }
+  }
+
+  _ensurePreviews() {
+    if (this._previewsInitialized) return;
+    const cards = this.planeList.querySelectorAll('.plane-card');
+    cards.forEach((card) => {
+      const canvas = card.querySelector('.pc-canvas');
+      const type = card.dataset.type;
+      const preview = new PlanePreview(canvas, type, this.selectedColor);
+      this.previews.push({ type, preview });
+    });
+    this._previewsInitialized = true;
+  }
+
+  _startRaf() {
+    if (this._rafId != null) return;
+    this._lastRaf = performance.now();
+    const loop = () => {
+      if (!this.isOpen() || this.chooser.classList.contains('hidden')) {
+        this._rafId = null;
+        return;
+      }
+      const now = performance.now();
+      const dt = Math.min(0.1, (now - this._lastRaf) / 1000);
+      this._lastRaf = now;
+      for (const { preview } of this.previews) preview.animate(dt);
+      this._rafId = requestAnimationFrame(loop);
+    };
+    this._rafId = requestAnimationFrame(loop);
+  }
+
+  _stopRaf() {
+    if (this._rafId != null) cancelAnimationFrame(this._rafId);
+    this._rafId = null;
   }
 
   _renderColors() {
@@ -120,6 +185,8 @@ export class Menu {
 
   _emitChange() {
     save({ type: this.selectedType, color: this.selectedColor });
+    // Push the new color into every preview mesh so the picker reflects it live.
+    for (const { preview } of this.previews) preview.setColor(this.selectedColor);
     if (this.onChange) this.onChange(this.getSelection());
   }
 

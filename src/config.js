@@ -124,6 +124,7 @@ export const PLANE_TYPES = {
   cessna: {
     name: 'Cessna',
     description: 'Slow and forgiving. Perfect for relaxing flights.',
+    tagline: 'Grandma-approved. Warning: may induce naps.',
     thrustMult: 0.55,
     dragMult: 1.4,
     liftMult: 1.1,
@@ -136,6 +137,7 @@ export const PLANE_TYPES = {
   piper: {
     name: 'Piper',
     description: 'Balanced all-rounder. The classic sim plane.',
+    tagline: 'Works on my machine. Should work on yours too.',
     thrustMult: 1.0,
     dragMult: 1.0,
     liftMult: 1.0,
@@ -148,6 +150,7 @@ export const PLANE_TYPES = {
   jet: {
     name: 'Jet',
     description: 'Hot fighter. Huge thrust, sharp controls.',
+    tagline: 'No brakes. Only regrets and afterburner.',
     thrustMult: 2.5,
     dragMult: 0.7,
     liftMult: 0.85,
