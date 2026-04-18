@@ -1,7 +1,22 @@
 import alea from 'alea';
-import { RUIN_CELL_SIZE, RUIN_CHANCE, RUIN_MIN_HEIGHT } from '../config.js';
+import {
+  CHUNK_SIZE,
+  CHUNK_RESOLUTION,
+  RUIN_CELL_SIZE,
+  RUIN_CHANCE,
+  RUIN_MIN_HEIGHT,
+} from '../config.js';
 import { biomeAt } from './Biome.js';
 import { groundHeight } from './Ground.js';
+
+// Terrain mesh vertices sit on this grid. Snapping ruin spawn points to the
+// grid guarantees the ruin's base y matches the rendered surface exactly —
+// otherwise on a steep mountain the true noise value can be well above the
+// linearly-interpolated mesh surface, making the ruin visibly hover.
+const VERTEX_GRID = CHUNK_SIZE / (CHUNK_RESOLUTION - 1);
+function snapToGrid(v) {
+  return Math.round(v / VERTEX_GRID) * VERTEX_GRID;
+}
 
 // Deterministic ruin lookup per (rcx, rcz) cell. A ruin only appears if the
 // cell contains a mountain-biome spot above RUIN_MIN_HEIGHT; otherwise it's
@@ -19,8 +34,12 @@ export function getRuin(rcx, rcz) {
     // spot. Skip cells that have no eligible peak.
     let best = null;
     for (let i = 0; i < 10; i++) {
-      const x = rcx * RUIN_CELL_SIZE + 300 + prng() * (RUIN_CELL_SIZE - 600);
-      const z = rcz * RUIN_CELL_SIZE + 300 + prng() * (RUIN_CELL_SIZE - 600);
+      const x = snapToGrid(
+        rcx * RUIN_CELL_SIZE + 300 + prng() * (RUIN_CELL_SIZE - 600)
+      );
+      const z = snapToGrid(
+        rcz * RUIN_CELL_SIZE + 300 + prng() * (RUIN_CELL_SIZE - 600)
+      );
       const b = biomeAt(x, z);
       if (b.type !== 'mountain') continue;
       const h = groundHeight(x, z);

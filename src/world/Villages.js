@@ -3,7 +3,6 @@ import { Quaternion, Vector3 } from 'three';
 import {
   VILLAGE_CELL_SIZE,
   VILLAGE_CHANCE,
-  VILLAGE_PERP_OFFSET,
   VILLAGE_STREET_SIDE_OFFSET,
   VILLAGE_STREET_SEPARATION,
   VILLAGE_SIZES,
@@ -14,6 +13,13 @@ import {
   RUNWAY_BLEND,
   PLANE_BOTTOM_OFFSET,
 } from '../config.js';
+
+// Village center sits far enough from the runway that the village rect never
+// overlaps the runway's flat zone. Without this, cities (halfW=140) place
+// houses on the runway strip itself.
+function perpOffsetFor(size) {
+  return size.halfW + RUNWAY_WIDTH / 2 + RUNWAY_MARGIN + 5;
+}
 
 const villageCache = new Map();
 
@@ -82,9 +88,10 @@ function buildVillage(gcx, gcz, isHome) {
   const px = -Math.sin(angle);
   const pz = Math.cos(angle);
   const sideSign = prng() < 0.5 ? 1 : -1;
+  const perpOffset = perpOffsetFor(size);
 
-  const villageCx = airportX + px * sideSign * VILLAGE_PERP_OFFSET;
-  const villageCz = airportZ + pz * sideSign * VILLAGE_PERP_OFFSET;
+  const villageCx = airportX + px * sideSign * perpOffset;
+  const villageCz = airportZ + pz * sideSign * perpOffset;
 
   const houseCount =
     size.housesMin +
@@ -193,6 +200,8 @@ function buildVillage(gcx, gcz, isHome) {
     airportZ,
     angle,
     sizeName,
+    sideSign,
+    perpOffset,
     houses,
     roads,
     villageRect: {

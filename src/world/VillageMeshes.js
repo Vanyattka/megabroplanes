@@ -10,9 +10,15 @@ import {
   Vector3,
 } from 'three';
 import alea from 'alea';
-import { RUNWAY_LENGTH, RUNWAY_WIDTH, RUNWAY_Y } from '../config.js';
+import {
+  PLANE_BOTTOM_OFFSET,
+  RUNWAY_LENGTH,
+  RUNWAY_WIDTH,
+  RUNWAY_Y,
+} from '../config.js';
 import { getRunwayMaterial } from './Runway.js';
 import { groundHeight } from './Ground.js';
+import { buildPlaneMesh } from '../plane/PlaneMesh.js';
 
 // ---------------------------------------------------------------------------
 // Shared geometries (module-level, never disposed per chunk). Each variant's
@@ -55,6 +61,20 @@ const geom = (() => {
   };
 })();
 
+// Airport structures (terminal + control tower + hangar) only appear in city
+// tier villages. Geometries translated so the base sits at local y=0.
+const airportGeom = (() => {
+  const terminal = new BoxGeometry(14, 5, 8);
+  terminal.translate(0, 2.5, 0);
+  const tower = new BoxGeometry(4, 5, 4);
+  tower.translate(0, 2.5, 0);
+  const towerTop = new BoxGeometry(5, 1.4, 5);
+  towerTop.translate(0, 0.7, 0);
+  const hangar = new BoxGeometry(22, 8, 14);
+  hangar.translate(0, 4, 0);
+  return { terminal, tower, towerTop, hangar };
+})();
+
 // Set of shared geometries we must never dispose per chunk.
 const SHARED_GEOMS = new Set([
   geom.walls0,
@@ -68,6 +88,10 @@ const SHARED_GEOMS = new Set([
   geom.chimney,
   geom.door,
   geom.window,
+  airportGeom.terminal,
+  airportGeom.tower,
+  airportGeom.towerTop,
+  airportGeom.hangar,
 ]);
 
 // ---------------------------------------------------------------------------
@@ -134,6 +158,23 @@ const windowMat = new MeshStandardMaterial({
   emissive: WINDOW_EMISSIVE,
   emissiveIntensity: 0.35,
   flatShading: true,
+});
+
+const terminalMat = new MeshStandardMaterial({
+  color: 0xd8d0c0,
+  flatShading: true,
+  roughness: 0.85,
+});
+const hangarMat = new MeshStandardMaterial({
+  color: 0x70787e,
+  flatShading: true,
+  roughness: 0.6,
+  metalness: 0.3,
+});
+const towerAccentMat = new MeshStandardMaterial({
+  color: 0xb84040,
+  flatShading: true,
+  roughness: 0.8,
 });
 
 // ---------------------------------------------------------------------------
@@ -240,6 +281,67 @@ function buildRoadStrip(road) {
   return mesh;
 }
 
+// City-tier airports get a little terminal + hangar + a couple parked planes
+// on the apron strip between the runway and the village. Returned as a list
+// of meshes/groups so the caller adds them to the village group.
+function buildAirportStructures(village) {
+  if (village.sizeName !== 'city') return [];
+  const out = [];
+
+  const fx = Math.cos(village.angle);
+  const fz = Math.sin(village.angle);
+  const px = -Math.sin(village.angle);
+  const pz = Math.cos(village.angle);
+  const s = village.sideSign;
+
+  // Position helper in runway-local coords (along runway, perpendicular to it).
+  function worldPos(along, perp) {
+    return {
+      x: village.airportX + fx * along + px * s * perp,
+      z: village.airportZ + fz * along + pz * s * perp,
+    };
+  }
+
+  // Terminal with a control tower on top.
+  {
+    const p = worldPos(-210, 42);
+    const terminal = new Mesh(airportGeom.terminal, terminalMat);
+    terminal.position.set(p.x, 0, p.z);
+    terminal.rotation.y = village.angle;
+    out.push(terminal);
+
+    const tower = new Mesh(airportGeom.tower, terminalMat);
+    tower.position.set(p.x, 5, p.z);
+    tower.rotation.y = village.angle;
+    out.push(tower);
+
+    const towerTop = new Mesh(airportGeom.towerTop, towerAccentMat);
+    towerTop.position.set(p.x, 10, p.z);
+    towerTop.rotation.y = village.angle;
+    out.push(towerTop);
+  }
+
+  // Hangar alongside the terminal.
+  {
+    const p = worldPos(-160, 50);
+    const hangar = new Mesh(airportGeom.hangar, hangarMat);
+    hangar.position.set(p.x, 0, p.z);
+    hangar.rotation.y = village.angle;
+    out.push(hangar);
+  }
+
+  // A couple of static planes parked near the hangar, noses down the runway.
+  for (let i = 0; i < 2; i++) {
+    const p = worldPos(-120 + i * 18, 42);
+    const plane = buildPlaneMesh();
+    plane.position.set(p.x, PLANE_BOTTOM_OFFSET, p.z);
+    plane.rotation.y = -Math.PI / 2 - village.angle;
+    out.push(plane);
+  }
+
+  return out;
+}
+
 function buildRunwayMeshFor(village) {
   const geo = new PlaneGeometry(RUNWAY_LENGTH, RUNWAY_WIDTH);
   geo.rotateX(-Math.PI / 2);
@@ -265,6 +367,8 @@ export function buildVillageGroup(village) {
   const prng = alea(`village-mesh:${village.gcx}:${village.gcz}`);
 
   group.add(buildRunwayMeshFor(village));
+
+  for (const m of buildAirportStructures(village)) group.add(m);
 
   const windowMatrices = [];
 
