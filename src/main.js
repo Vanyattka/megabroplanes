@@ -11,6 +11,7 @@ import { groundHeight, physicsFloor } from './world/Ground.js';
 import { Clouds } from './world/Clouds.js';
 import { PlaneShadow, makeShadowTexture } from './world/Shadow.js';
 import { Explosion } from './effects/Explosion.js';
+import { JetExhaust } from './effects/JetExhaust.js';
 import {
   CRASH_ENABLED_DEFAULT,
   VIEW_DISTANCE_MIN,
@@ -47,6 +48,7 @@ const sharedShadowTex = makeShadowTexture();
 const planeShadow = new PlaneShadow(renderer.scene, sharedShadowTex);
 const clouds = new Clouds(renderer.scene, sharedShadowTex);
 const explosion = new Explosion(renderer.scene);
+const jetExhaust = new JetExhaust(renderer.scene);
 
 const crashToggleEl = document.getElementById('crashes-enabled');
 if (crashToggleEl) crashToggleEl.checked = CRASH_ENABLED_DEFAULT;
@@ -94,8 +96,26 @@ menu.onStart = ({ type, color }) => {
   plane.setLoadout(type, color);
   plane.reset();
   plane.mesh.visible = true;
+  jetExhaust.clear();
+  explosion.clear();
+  if (crashBannerEl) crashBannerEl.style.display = 'none';
   gameState = 'playing';
 };
+
+// "← MENU" button at the top of the settings panel returns to the main menu
+// without reloading — so players can change plane or color mid-session.
+const backToMenuBtn = document.getElementById('btn-menu');
+if (backToMenuBtn) {
+  backToMenuBtn.addEventListener('click', () => {
+    if (gameState !== 'playing') return;
+    explosion.clear();
+    jetExhaust.clear();
+    if (crashBannerEl) crashBannerEl.style.display = 'none';
+    plane.mesh.visible = false;
+    gameState = 'menu';
+    menu.open();
+  });
+}
 // Apply saved loadout so remote players get the right pt/pc from the first
 // state message even before the player clicks Start.
 {
@@ -200,6 +220,7 @@ function renderStep() {
   if (!plane.crashed) planeShadow.update(plane, getPhysicsFloor);
   else planeShadow.mesh.visible = false;
   explosion.update(renderDt);
+  jetExhaust.update(renderDt, plane);
   remotes.update(renderDt);
   mp.sendState(plane);
   renderer.render();

@@ -228,6 +228,14 @@ export const EXPLOSION_DRAG = 0.9;
 export const EXPLOSION_LIFE_MIN = 0.9;
 export const EXPLOSION_LIFE_MAX = 2.0;
 
+// Jet exhaust
+export const JET_EXHAUST_MAX = 160;    // particle pool size
+export const JET_EXHAUST_RATE = 110;   // particles/sec at full throttle
+export const JET_EXHAUST_LIFE = 0.55;  // seconds per particle
+export const JET_EXHAUST_SPEED = 22;   // backward speed relative to plane
+export const JET_EXHAUST_SPREAD = 2.0; // velocity jitter
+export const JET_EXHAUST_OFFSET_Z = 5.5; // local +Z distance behind plane
+
 // Scatter density per chunk — these are candidate counts. Biome acceptance
 // filters them down; a pure forest keeps nearly all candidates, mountains
 // reject most trees but keep most rocks.
