@@ -9,6 +9,9 @@ import {
   VELOCITY_ALIGN_RATE,
   VELOCITY_ALIGN_LOW_SPEED,
   VELOCITY_ALIGN_HIGH_SPEED,
+  STALL_PITCH_SPEED,
+  STALL_PITCH_RATE,
+  STALL_PITCH_NOSE_UP_BIAS,
   ROLLING_FRICTION,
   COUPLING_COEFF,
   ANGULAR_DAMPING,
@@ -91,6 +94,20 @@ export function step(plane, dt, getHeight, isOnRunway, braking, crashesEnabled) 
   // Roll-to-yaw coupling
   const rollAngle = Math.asin(Math.max(-1, Math.min(1, _right.y)));
   plane.angularVelocity.y += Math.sin(rollAngle) * COUPLING_COEFF * dt;
+
+  // Stall pitch-down: below STALL_PITCH_SPEED a bias torque pulls the nose
+  // down. Strength ramps linearly from 0 at the threshold up to full at zero
+  // airspeed, and is amplified when the nose is already pitched up — so
+  // hanging the plane by its nose quickly tips it forward into a recovery
+  // dive instead of hovering unrealistically.
+  if (!plane.onGround) {
+    const stallT = Math.max(0, 1 - forwardSpeed / STALL_PITCH_SPEED);
+    if (stallT > 0) {
+      const noseUp = Math.max(0, _forward.y);
+      const strength = 0.3 + noseUp * STALL_PITCH_NOSE_UP_BIAS;
+      plane.angularVelocity.x += STALL_PITCH_RATE * stallT * strength * dt;
+    }
+  }
 
   // Angular damping
   plane.angularVelocity.multiplyScalar(Math.max(0, 1 - ANGULAR_DAMPING * dt));
