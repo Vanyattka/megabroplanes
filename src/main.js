@@ -11,10 +11,18 @@ import { groundHeight, physicsFloor } from './world/Ground.js';
 import { Clouds } from './world/Clouds.js';
 import { PlaneShadow, makeShadowTexture } from './world/Shadow.js';
 import { Explosion } from './effects/Explosion.js';
-import { CRASH_ENABLED_DEFAULT } from './config.js';
+import {
+  CRASH_ENABLED_DEFAULT,
+  VIEW_DISTANCE_MIN,
+  VIEW_DISTANCE_MAX,
+  VIEW_ALT_SCALE,
+  FOG_FAR_MIN,
+  FOG_FAR_MAX,
+} from './config.js';
 import { MultiplayerClient } from './net/Client.js';
 import { RemotePlaneManager } from './net/RemotePlaneManager.js';
 import { TouchControls } from './ui/Touch.js';
+import { Minimap } from './ui/Minimap.js';
 import { Plane } from './plane/Plane.js';
 import { ChaseCamera } from './camera/ChaseCamera.js';
 import { Hud } from './ui/Hud.js';
@@ -68,6 +76,7 @@ mp.onStatusChange(({ connected, count, id }) => {
 });
 const remotes = new RemotePlaneManager(renderer.scene, mp);
 const touch = new TouchControls();
+const minimap = new Minimap(mp);
 
 const chaseCamera = new ChaseCamera(renderer.camera);
 
@@ -76,8 +85,22 @@ const hud = new Hud();
 const getGroundHeight = groundHeight;
 const getPhysicsFloor = physicsFloor;
 
+// Altitude scales both view distance and fog far, so flying higher reveals a
+// bigger world — like climbing unlocks a wider horizon.
+function altitudeT(y) {
+  return Math.max(0, Math.min(1, y / VIEW_ALT_SCALE));
+}
+function viewDistanceFor(plane) {
+  const t = altitudeT(plane.position.y);
+  return Math.round(VIEW_DISTANCE_MIN + t * (VIEW_DISTANCE_MAX - VIEW_DISTANCE_MIN));
+}
+function fogFarFor(plane) {
+  const t = altitudeT(plane.position.y);
+  return FOG_FAR_MIN + t * (FOG_FAR_MAX - FOG_FAR_MIN);
+}
+
 // Prime chunks and villages before first frame
-chunks.update(plane.position);
+chunks.update(plane.position, viewDistanceFor(plane));
 villages.update(plane.position);
 ruins.update(plane.position);
 
@@ -104,7 +127,7 @@ function physicsStep(dt) {
     plane.mesh.visible = false;
     if (crashBannerEl) crashBannerEl.style.display = 'block';
   }
-  chunks.update(plane.position);
+  chunks.update(plane.position, viewDistanceFor(plane));
   villages.update(plane.position);
   ruins.update(plane.position);
 }
@@ -114,6 +137,8 @@ function renderStep() {
   const renderDt = Math.min(0.1, (now - lastRenderTime) / 1000);
   lastRenderTime = now;
   chaseCamera.update(plane, input, renderDt);
+  const fogFar = fogFarFor(plane);
+  if (renderer.scene.fog) renderer.scene.fog.far = fogFar;
   sky.update(renderer.camera);
   water.update(renderer.camera.position);
   clouds.update(renderDt, plane.position, getPhysicsFloor);
@@ -124,6 +149,7 @@ function renderStep() {
   mp.sendState(plane);
   renderer.render();
   hud.update(plane);
+  minimap.update(plane);
 }
 
 function loop() {

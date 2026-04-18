@@ -8,6 +8,10 @@ export const MAX_FRAME_DT = 0.1;
 export const CHUNK_SIZE = 128;
 export const CHUNK_RESOLUTION = 33;
 export const VIEW_DISTANCE_CHUNKS = 4;
+// Dynamic view scales with altitude — higher flights unlock bigger view.
+export const VIEW_DISTANCE_MIN = 4;
+export const VIEW_DISTANCE_MAX = 7;
+export const VIEW_ALT_SCALE = 600; // altitude (m) at which view reaches MAX
 export const NOISE_SCALE = 0.005;
 export const HEIGHT_AMPLITUDE = 30;
 export const NOISE_SEED = 'plane-mvp-seed';
@@ -111,6 +115,9 @@ export const SUN_COLOR = 0xfff1c8;
 export const FOG_COLOR = HORIZON_COLOR;
 export const FOG_NEAR = 150;
 export const FOG_FAR = 420;
+// Dynamic fog bounds — scaled by altitude. FOG_FAR above is the base (ground).
+export const FOG_FAR_MIN = 420;
+export const FOG_FAR_MAX = 950;
 
 // Terrain coloring — slope threshold (vertex normal.y below this = rock).
 export const SLOPE_ROCK_THRESHOLD = 0.72;
@@ -167,7 +174,7 @@ export const TREE_MAX_SLOPE = 0.35;   // tan of slope: reject steep spots
 // Camera
 export const CAMERA_FOV = 70;
 export const CAMERA_NEAR = 0.1;
-export const CAMERA_FAR = FOG_FAR * 1.5;
+export const CAMERA_FAR = FOG_FAR_MAX * 1.5; // matches the widest fog we'll use
 export const CAMERA_OFFSET = [0, 3, 12]; // behind and above in plane's local frame
 export const CAMERA_LERP = 0.1;
 

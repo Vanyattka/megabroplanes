@@ -141,6 +141,7 @@
       }
       body.touch #hint { display: none; }
       body.touch #horizon { width: 140px; height: 140px; }
+      body.touch #minimap { top: 100px; width: 130px !important; height: 130px !important; }
       #crash-banner {
         position: absolute;
         top: 40%;
@@ -172,6 +173,10 @@
     </div>
     <div id="crash-banner">CRASHED — press R to respawn</div>
     <canvas id="horizon" width="260" height="260" style="position:absolute; top:12px; right:12px; pointer-events:none;"></canvas>
+    <canvas id="minimap" width="160" height="160"
+      style="position:absolute; top:110px; left:12px; width:160px; height:160px;
+      image-rendering: pixelated; image-rendering: crisp-edges;
+      background: rgba(0,0,0,0.4); border-radius: 4px; pointer-events:none;"></canvas>
     <div id="touch-ui" class="hidden">
       <div class="joy" id="joy">
         <div class="joy-base"></div>

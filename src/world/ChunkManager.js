@@ -9,13 +9,14 @@ export class ChunkManager {
     this.chunks = new Map(); // "cx,cz" → { group, terrain, scatter }
   }
 
-  update(planePos) {
+  update(planePos, viewDistance) {
     const pcx = Math.floor(planePos.x / CHUNK_SIZE);
     const pcz = Math.floor(planePos.z / CHUNK_SIZE);
     const needed = new Set();
+    const vd = viewDistance ?? VIEW_DISTANCE_CHUNKS;
 
-    for (let dx = -VIEW_DISTANCE_CHUNKS; dx <= VIEW_DISTANCE_CHUNKS; dx++) {
-      for (let dz = -VIEW_DISTANCE_CHUNKS; dz <= VIEW_DISTANCE_CHUNKS; dz++) {
+    for (let dx = -vd; dx <= vd; dx++) {
+      for (let dz = -vd; dz <= vd; dz++) {
         const cx = pcx + dx;
         const cz = pcz + dz;
         const key = `${cx},${cz}`;
