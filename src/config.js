@@ -77,15 +77,16 @@ export const VELOCITY_ALIGN_RATE = 2.0;
 // Alignment authority ramps up between these forward-speed thresholds. Below
 // LOW, the plane is effectively stalled and gravity dominates — the nose-up
 // attitude no longer pulls velocity upward, so the plane actually falls.
-export const VELOCITY_ALIGN_LOW_SPEED = 15;
-export const VELOCITY_ALIGN_HIGH_SPEED = 35;
+export const VELOCITY_ALIGN_LOW_SPEED = 22;
+export const VELOCITY_ALIGN_HIGH_SPEED = 42;
 // Stall pitch-down: when lift falls below weight, the nose naturally drops so
-// the plane dives back to flying speed. This isn't modeled as a real pitching
-// moment (no center-of-pressure calc) — it's just a bias that kicks in below
-// STALL_PITCH_SPEED and ramps up the slower you go.
-export const STALL_PITCH_SPEED = 32;   // m/s — below this airspeed the nose starts dropping
-export const STALL_PITCH_RATE = 1.4;   // rad/s² base torque at zero airspeed
-export const STALL_PITCH_NOSE_UP_BIAS = 1.5; // extra torque scaling with how nose-up the plane is
+// the plane dives back to flying speed. Bias that ramps up the slower you go.
+export const STALL_PITCH_SPEED = 38;   // m/s (~74 kt) — stall zone starts here
+export const STALL_PITCH_RATE = 2.2;   // rad/s² base torque at zero airspeed
+export const STALL_PITCH_NOSE_UP_BIAS = 2.5; // extra torque scaling with how nose-up the plane is
+// Below this airspeed lift collapses toward zero (smoothstep). Without this
+// the v² curve still generates enough lift at 40–60 kt to glide forever.
+export const STALL_LIFT_CUTOFF = 28;   // m/s (~54 kt)
 // Starting value from docs was 0.5, but that caps rolling speed at ~30 m/s —
 // below takeoff speed (~40 m/s), so the plane can never lift off the runway.
 // 0.05 is closer to real aircraft tire friction and still slows the plane on

@@ -12,6 +12,7 @@ import {
   STALL_PITCH_SPEED,
   STALL_PITCH_RATE,
   STALL_PITCH_NOSE_UP_BIAS,
+  STALL_LIFT_CUTOFF,
   ROLLING_FRICTION,
   COUPLING_COEFF,
   ANGULAR_DAMPING,
@@ -49,7 +50,17 @@ export function step(plane, dt, getHeight, isOnRunway, braking, crashesEnabled) 
   const forwardSpeed = plane.velocity.dot(_forward);
   const liftRef = LIFT_REFERENCE_SPEED * tc.liftRefMult;
   const liftSpeed = Math.min(Math.abs(forwardSpeed), liftRef);
-  const liftMag = LIFT_COEFFICIENT * tc.liftMult * liftSpeed * liftSpeed;
+  // Stall curve: below STALL_LIFT_CUTOFF lift collapses with a smoothstep,
+  // so a near-stalled plane genuinely loses support and falls instead of
+  // gliding on the v² remainder.
+  const fsAbs = Math.max(0, forwardSpeed);
+  let stallFactor = 1;
+  if (fsAbs < STALL_LIFT_CUTOFF) {
+    const t = fsAbs / STALL_LIFT_CUTOFF;
+    stallFactor = t * t * (3 - 2 * t);
+  }
+  const liftMag =
+    LIFT_COEFFICIENT * tc.liftMult * liftSpeed * liftSpeed * stallFactor;
   _lift.copy(_up).multiplyScalar(liftMag);
 
   const speed = plane.velocity.length();
