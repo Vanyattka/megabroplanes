@@ -21,19 +21,26 @@ export const RUNWAY_MARGIN = 20;
 export const RUNWAY_BLEND = 150;
 export const RUNWAY_Y = 0.02;
 
-// Villages — one village per grid cell, each with an airport + houses + roads.
+// Villages — one village per grid cell. Size tiers vary house count, streets,
+// and rect size so settlements range from hamlets to small towns.
 export const VILLAGE_CELL_SIZE = 1800;          // meters per cell
 export const VILLAGE_CHANCE = 0.75;             // probability of non-home cell having a village
-export const VILLAGE_HOUSES_MIN = 6;
-export const VILLAGE_HOUSES_MAX = 12;
 // Village sits alongside the runway, not around it. Its flat zone touches the
 // airport's so the connector road never leaves flat ground.
-export const VILLAGE_PERP_OFFSET = 80;          // distance (m) from runway centerline to village main street
-export const VILLAGE_HALF_L = 100;              // village rect half-length (along runway)
-export const VILLAGE_HALF_W = 45;               // village rect half-width (perpendicular)
+export const VILLAGE_PERP_OFFSET = 80;          // distance (m) from runway centerline to village center
 export const VILLAGE_STREET_SIDE_OFFSET = 12;   // house row distance from street centerline
 export const VILLAGE_HOUSE_SPACING = 14;        // distance between adjacent houses in the same row
+export const VILLAGE_STREET_SEPARATION = 48;    // distance between the two parallel streets in a large village
 export const VILLAGE_VIEW_CELLS = 1;            // cells around plane kept in scene
+// Size tiers. `streets` = number of parallel main streets (1 or 2).
+// `tallChance` = probability a house is a 2-story variant 2.
+export const VILLAGE_SIZES = {
+  small:  { housesMin: 4,  housesMax: 6,  halfL: 55,  halfW: 32, streets: 1, tallChance: 0.00 },
+  medium: { housesMin: 7,  housesMax: 12, halfL: 100, halfW: 45, streets: 1, tallChance: 0.20 },
+  large:  { housesMin: 14, housesMax: 22, halfL: 130, halfW: 60, streets: 2, tallChance: 0.40 },
+};
+// Per-cell size distribution. Must sum to 1.
+export const VILLAGE_SIZE_WEIGHTS = { small: 0.30, medium: 0.50, large: 0.20 };
 
 // Physics
 export const GRAVITY = 9.81;
