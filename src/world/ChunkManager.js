@@ -4,8 +4,9 @@ import { buildChunk } from './Terrain.js';
 import { buildScatter, disposeScatter } from './Scatter.js';
 
 export class ChunkManager {
-  constructor(scene) {
+  constructor(scene, { roads } = {}) {
     this.scene = scene;
+    this.roads = roads || null;
     this.chunks = new Map(); // "cx,cz" → { group, terrain, scatter }
   }
 
@@ -29,6 +30,10 @@ export class ChunkManager {
           group.add(scatter);
           this.scene.add(group);
           this.chunks.set(key, { group, terrain, scatter });
+          // Roads owned by this chunk are added as sibling meshes — not as
+          // children of the chunk group — so their BufferGeometries can be
+          // disposed independently when the chunk unloads.
+          if (this.roads) this.roads.buildForChunk(cx, cz);
         }
       }
     }
@@ -40,6 +45,8 @@ export class ChunkManager {
         entry.terrain.material.dispose();
         disposeScatter(entry.scatter);
         this.chunks.delete(key);
+        const [cx, cz] = key.split(',').map(Number);
+        if (this.roads) this.roads.disposeForChunk(cx, cz);
       }
     }
   }

@@ -1,115 +1,199 @@
 import {
   CanvasTexture,
-  Mesh,
+  Color,
+  InstancedMesh,
+  Matrix4,
   MeshBasicMaterial,
   PlaneGeometry,
-  Sprite,
-  SpriteMaterial,
+  Quaternion,
+  Vector3,
 } from 'three';
 import alea from 'alea';
 import {
-  CLOUD_COUNT,
-  CLOUD_ALTITUDE,
-  CLOUD_ALTITUDE_JITTER,
-  CLOUD_AREA,
+  CLOUD_CELL_SIZE,
+  CLOUD_MIN_PER_CELL,
+  CLOUD_MAX_PER_CELL,
+  CLOUD_MIN_ALT,
+  CLOUD_MAX_ALT,
+  CLOUD_VIEW_RADIUS,
   CLOUD_SIZE_MIN,
   CLOUD_SIZE_MAX,
-  CLOUD_WIND,
+  CLOUD_DRIFT_SPEED,
+  CLOUD_DRIFT_DIR,
   CLOUD_OPACITY,
-  CLOUD_SHADOW_OPACITY,
+  CLOUD_MAX_INSTANCES,
 } from '../config.js';
 
-function makeCloudTexture(variant) {
+// Generate a soft cumulus texture in a canvas — a few radial-gradient blobs
+// plus a subtle noise dither. Done once at module scope; the material reuses
+// the resulting CanvasTexture across every cloud instance.
+function makeCloudTexture() {
   const c = document.createElement('canvas');
   c.width = 256;
   c.height = 128;
   const ctx = c.getContext('2d');
-  // A few overlapping soft blobs give a puffy cumulus silhouette. Each
-  // variant uses different blob positions so repeated clouds look different.
-  const prng = alea(`cloud-${variant}`);
-  const blobCount = 5 + Math.floor(prng() * 3);
+  // Soft blobs give the puffy silhouette; we randomise positions with a
+  // fixed seed so the single global texture is still deterministic.
+  const prng = alea('cloud-tex');
+  const blobCount = 6 + Math.floor(prng() * 4);
   for (let i = 0; i < blobCount; i++) {
-    const x = 50 + prng() * 156;
-    const y = 40 + prng() * 48;
-    const r = 36 + prng() * 28;
+    const x = 40 + prng() * 176;
+    const y = 30 + prng() * 68;
+    const r = 38 + prng() * 34;
     const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
     grad.addColorStop(0, 'rgba(255,255,255,0.95)');
-    grad.addColorStop(0.55, 'rgba(255,255,255,0.45)');
+    grad.addColorStop(0.45, 'rgba(255,255,255,0.55)');
     grad.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 256, 128);
   }
-  return new CanvasTexture(c);
+  // Noise dither on the alpha to break up the gradient bands.
+  const img = ctx.getImageData(0, 0, 256, 128);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const n = (prng() - 0.5) * 24;
+    img.data[i + 3] = Math.max(0, Math.min(255, img.data[i + 3] + n));
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new CanvasTexture(c);
+  tex.anisotropy = 4;
+  return tex;
+}
+
+const _driftDir = new Vector3();
+const _tmpMat = new Matrix4();
+const _tmpPos = new Vector3();
+const _tmpQuat = new Quaternion();
+const _tmpScale = new Vector3();
+const _camQuat = new Quaternion();
+
+// Deterministic pseudo-random sampling for cell (cx, cz).
+// Exposed so other modules could preview cloud positions if needed.
+function cloudsInCell(cx, cz) {
+  const prng = alea(`cloud-cell:${cx}:${cz}`);
+  const n =
+    CLOUD_MIN_PER_CELL +
+    Math.floor(prng() * (CLOUD_MAX_PER_CELL - CLOUD_MIN_PER_CELL + 1));
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const localX = prng() * CLOUD_CELL_SIZE;
+    const localZ = prng() * CLOUD_CELL_SIZE;
+    const y = CLOUD_MIN_ALT + prng() * (CLOUD_MAX_ALT - CLOUD_MIN_ALT);
+    const scaleBase =
+      CLOUD_SIZE_MIN + prng() * (CLOUD_SIZE_MAX - CLOUD_SIZE_MIN);
+    const aspect = 1.4 + prng() * 0.9; // wider than tall
+    out.push({
+      baseX: cx * CLOUD_CELL_SIZE + localX,
+      baseZ: cz * CLOUD_CELL_SIZE + localZ,
+      y,
+      sx: scaleBase * aspect,
+      sy: scaleBase,
+    });
+  }
+  return out;
 }
 
 export class Clouds {
-  constructor(scene, sharedShadowTexture) {
+  constructor(scene) {
     this.scene = scene;
 
-    // A handful of texture variants shared across all clouds so the sky
-    // doesn't look tiled.
-    const variants = [0, 1, 2, 3].map((v) => makeCloudTexture(v));
-    const cloudMats = variants.map(
-      (tex) =>
-        new SpriteMaterial({
-          map: tex,
-          transparent: true,
-          depthWrite: false,
-          opacity: CLOUD_OPACITY,
-        })
-    );
-
-    const shadowGeo = new PlaneGeometry(1, 1);
-    shadowGeo.rotateX(-Math.PI / 2);
-    this.shadowMat = new MeshBasicMaterial({
-      map: sharedShadowTexture,
+    this._texture = makeCloudTexture();
+    this._geometry = new PlaneGeometry(1, 1);
+    this._material = new MeshBasicMaterial({
+      map: this._texture,
       transparent: true,
+      opacity: CLOUD_OPACITY,
       depthWrite: false,
-      opacity: CLOUD_SHADOW_OPACITY,
+      color: 0xffffff,
     });
 
-    this.clouds = [];
-    const prng = alea('cloud-field');
-    for (let i = 0; i < CLOUD_COUNT; i++) {
-      const mat = cloudMats[i % cloudMats.length];
-      const size =
-        CLOUD_SIZE_MIN + prng() * (CLOUD_SIZE_MAX - CLOUD_SIZE_MIN);
-      const sprite = new Sprite(mat);
-      sprite.scale.set(size * 1.8, size, 1);
-      const x = (prng() * 2 - 1) * CLOUD_AREA;
-      const z = (prng() * 2 - 1) * CLOUD_AREA;
-      const y =
-        CLOUD_ALTITUDE + (prng() * 2 - 1) * CLOUD_ALTITUDE_JITTER;
-      sprite.position.set(x, y, z);
-      sprite.renderOrder = 2;
-      scene.add(sprite);
+    this.mesh = new InstancedMesh(
+      this._geometry,
+      this._material,
+      CLOUD_MAX_INSTANCES
+    );
+    this.mesh.frustumCulled = false;
+    this.mesh.count = 0;
+    scene.add(this.mesh);
 
-      const shadow = new Mesh(shadowGeo, this.shadowMat);
-      shadow.scale.set(size * 1.4, 1, size * 0.9);
-      shadow.renderOrder = 1;
-      scene.add(shadow);
+    this._elapsed = 0;
+    // Normalise drift direction once.
+    const d = new Vector3(...CLOUD_DRIFT_DIR);
+    if (d.lengthSq() > 0) d.normalize();
+    this._driftDirN = d;
 
-      this.clouds.push({ sprite, shadow });
-    }
+    // Cached cell listing re-used each frame. We only rebuild when the player
+    // crosses a cell boundary OR view radius changes, so per-frame cost is a
+    // matrix compose per visible cloud.
+    this._activeClouds = [];  // flat list of {baseX, baseZ, y, sx, sy}
+    this._lastCx = Infinity;
+    this._lastCz = Infinity;
   }
 
-  update(dt, planePos, getHeight) {
-    const windX = CLOUD_WIND[0];
-    const windZ = CLOUD_WIND[2];
-    for (const c of this.clouds) {
-      c.sprite.position.x += windX * dt;
-      c.sprite.position.z += windZ * dt;
+  // Rebuild the list of clouds in the radius around the player's cell. Called
+  // whenever the player crosses into a new cell (cheap: a single integer
+  // compare each frame).
+  _refreshCells(planePos) {
+    const pcx = Math.floor(planePos.x / CLOUD_CELL_SIZE);
+    const pcz = Math.floor(planePos.z / CLOUD_CELL_SIZE);
+    if (pcx === this._lastCx && pcz === this._lastCz) return;
+    this._lastCx = pcx;
+    this._lastCz = pcz;
 
-      // Wrap around the plane so the cloud field always surrounds it.
-      const dx = c.sprite.position.x - planePos.x;
-      const dz = c.sprite.position.z - planePos.z;
-      if (dx > CLOUD_AREA) c.sprite.position.x -= 2 * CLOUD_AREA;
-      else if (dx < -CLOUD_AREA) c.sprite.position.x += 2 * CLOUD_AREA;
-      if (dz > CLOUD_AREA) c.sprite.position.z -= 2 * CLOUD_AREA;
-      else if (dz < -CLOUD_AREA) c.sprite.position.z += 2 * CLOUD_AREA;
-
-      const gh = getHeight(c.sprite.position.x, c.sprite.position.z);
-      c.shadow.position.set(c.sprite.position.x, gh + 0.2, c.sprite.position.z);
+    const r = Math.ceil(CLOUD_VIEW_RADIUS / CLOUD_CELL_SIZE);
+    this._activeClouds.length = 0;
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dz = -r; dz <= r; dz++) {
+        const clouds = cloudsInCell(pcx + dx, pcz + dz);
+        for (const c of clouds) this._activeClouds.push(c);
+      }
     }
+    // Sort by Y so when we hit the instance cap, we keep the higher ones
+    // (they show up at altitude where they're most visible).
+    this._activeClouds.sort((a, b) => b.y - a.y);
+  }
+
+  // Update billboard orientation + per-frame drift. Clouds share a single
+  // camera-aligned orientation per frame so every quad faces the screen.
+  update(dt, planePos, cameraPos, camera, worldTint) {
+    this._elapsed += dt;
+    this._refreshCells(planePos);
+
+    if (worldTint) this._material.color.copy(worldTint);
+
+    // Camera rotation for view-aligned billboards.
+    if (camera) {
+      _camQuat.setFromRotationMatrix(camera.matrixWorld);
+    } else {
+      _camQuat.identity();
+    }
+
+    const driftX = this._driftDirN.x * CLOUD_DRIFT_SPEED * this._elapsed;
+    const driftZ = this._driftDirN.z * CLOUD_DRIFT_SPEED * this._elapsed;
+    const viewR2 = CLOUD_VIEW_RADIUS * CLOUD_VIEW_RADIUS;
+
+    let written = 0;
+    for (let i = 0; i < this._activeClouds.length && written < CLOUD_MAX_INSTANCES; i++) {
+      const c = this._activeClouds[i];
+      const wx = c.baseX + driftX;
+      const wz = c.baseZ + driftZ;
+      const ddx = wx - planePos.x;
+      const ddz = wz - planePos.z;
+      if (ddx * ddx + ddz * ddz > viewR2) continue;
+
+      _tmpPos.set(wx, c.y, wz);
+      _tmpScale.set(c.sx, c.sy, 1);
+      _tmpMat.compose(_tmpPos, _camQuat, _tmpScale);
+      this.mesh.setMatrixAt(written, _tmpMat);
+      written++;
+    }
+    this.mesh.count = written;
+    this.mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  dispose() {
+    this.scene.remove(this.mesh);
+    this._geometry.dispose();
+    this._material.dispose();
+    this._texture.dispose();
   }
 }

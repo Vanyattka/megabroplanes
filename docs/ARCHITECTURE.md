@@ -200,6 +200,66 @@ camera.lookAt(plane.position)
 
 Offset: roughly `(0, 3, 12)` in plane's local frame (behind and above).
 
+### `world/Water.js` (added)
+
+A `Water` class: one huge `PlaneGeometry` at `WATER_LEVEL` that follows the
+player horizontally. `ShaderMaterial` does analytic wave normals + Fresnel
+blend (shallow→deep) + sky reflection tinted by `worldTime.horizonColor`.
+`update(dt, planePos, worldTint)` advances the ripple clock, re-centers the
+mesh, and copies the current tint into the shader uniform. `dispose()` tears
+down geometry/material.
+
+### `world/Clouds.js` (refactored)
+
+Now uses one `InstancedMesh(PlaneGeometry, MeshBasicMaterial, CLOUD_MAX_INSTANCES)`
+instead of individual `Sprite`s. Positions are sampled deterministically per
+`CLOUD_CELL_SIZE` cell via `alea('cloud-cell:cx:cz')`, drift is applied as a
+uniform global offset (`CLOUD_DRIFT_DIR × CLOUD_DRIFT_SPEED × elapsed`).
+Billboarding is view-aligned — a single camera-quaternion is applied to every
+instance each frame. `update(dt, planePos, cameraPos, camera, tint)` tints
+the material with `worldTime.horizonColor` so clouds darken at dusk.
+
+### `world/DayNight.js` (added) + `world/WorldTime.js` + `world/Stars.js`
+
+`DayNight` owns `timeOfDay` and advances it at `1 / DAY_LENGTH_SECONDS`.
+Each frame it linearly interpolates the `DAY_NIGHT_KEYFRAMES` array to
+produce: sky / horizon / fog / sun / ambient colors + intensities, a sun
+direction, and `starsOpacity`. Outputs are published into the shared
+`worldTime` singleton (read by Water / Clouds / Stars), into the `Sky` shader
+uniforms, into the `AmbientLight` and `DirectionalLight` it was given at
+construction, and into `scene.fog.color`. `Stars` is a tiny `Points`-based
+starfield that fades in at night via `worldTime.starsOpacity`.
+
+`Sky.js` was refactored to expose `sun` (DirectionalLight) and `ambient`
+(AmbientLight) publicly so `DayNight` can drive them without creating its
+own lights (avoids double-lighting and keeps the scene graph tidy).
+
+### `world/Roads.js` (added)
+
+Builds inter-village road ribbons. Owns per-chunk mesh lifetimes via
+`buildForChunk(cx, cz)` / `disposeForChunk(cx, cz)` — called by
+`ChunkManager`. A road is owned by the chunk containing the from-village's
+airport; canonical cell-key ordering dedupes A↔B pairs. Path viability is
+checked by sampling the center line every `ROAD_SAMPLE_STEP` m and rejecting
+on underwater or over-slope. The resulting ribbon is a `BufferGeometry`
+with shared `MeshStandardMaterial`.
+
+### `audio/Audio.js` (added)
+
+Web Audio API wrapper. `start()` (called lazily from first user gesture)
+creates an `AudioContext` + two voices:
+- **Engine** — sawtooth oscillator → lowpass biquad → per-voice gain, with
+  frequency/gain/cutoff tracked to plane throttle.
+- **Wind** — 2-second pink-ish noise `AudioBuffer` on a looping
+  `AudioBufferSourceNode` → bandpass biquad → per-voice gain, with
+  frequency/gain tracked to airspeed.
+
+Both voices feed a master gain → destination. `update(dt, { throttle,
+airspeed })` uses `setTargetAtTime` with `AUDIO_SMOOTHING_TIME` for
+zipper-free ramps. `toggleMute()` flips the master to 0/target. `M` key is
+wired in `main.js`. `dispose()` stops the oscillators / source nodes and
+closes the context.
+
 ### `ui/Hud.js`
 
 Plain DOM `<div id="hud">` with inline styles, overlaid on canvas via `position: absolute`. Updated every render frame with speed (knots), altitude (feet), throttle percent.

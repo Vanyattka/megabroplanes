@@ -294,6 +294,66 @@ const prop = this.mesh.getObjectByName('propeller');
 prop.rotation.z += this.throttle * 30 * dt;   // visual only
 ```
 
+## Water (added)
+
+A single large `PlaneGeometry` at `y = WATER_LEVEL` follows the camera/player
+horizontally each frame — no chunking. Material is a `ShaderMaterial` with
+analytic sine-wave ripples (fragment-only, no displacement), a Fresnel term
+that blends `WATER_COLOR_SHALLOW` → `WATER_COLOR_DEEP`, and a sky-color
+reflection term driven by the current horizon color from `worldTime`. The
+plane is `WATER_SIZE` square (defaults to `2 × VIEW_DISTANCE_CHUNKS × CHUNK_SIZE × 1.8`)
+so its edges stay inside fog. Tunables: `WATER_LEVEL`, `WATER_SIZE`,
+`WATER_COLOR_SHALLOW`, `WATER_COLOR_DEEP`, `WATER_NORMAL_SCROLL_SPEED`,
+`WATER_OPACITY`. See `src/world/Water.js`.
+
+## Clouds (added)
+
+`src/world/Clouds.js` exports a `Clouds` class backed by a single
+`InstancedMesh` of camera-facing quads. The cloud texture is generated at
+module load (canvas 2D: overlapping radial gradients + noise dither). Cloud
+positions are seeded per `CLOUD_CELL_SIZE` cell via `alea('cloud-cell:cx:cz')`
+with `CLOUD_MIN_PER_CELL`..`CLOUD_MAX_PER_CELL` clouds per cell, so flying
+back shows the same scatter pattern. A global wind vector
+(`CLOUD_DRIFT_DIR × CLOUD_DRIFT_SPEED × elapsed`) offsets all clouds uniformly
+each frame — the spawn is still deterministic, only the drift is temporal.
+Clouds outside `CLOUD_VIEW_RADIUS` are excluded. Billboarding is done on the
+CPU each frame by composing matrices with the camera's rotation quaternion
+(shared by every instance). Pool size `CLOUD_MAX_INSTANCES`.
+
+## Day / night cycle (added)
+
+`src/world/DayNight.js` drives a `timeOfDay ∈ [0, 1]` advancing at
+`1 / DAY_LENGTH_SECONDS × DAY_TIME_MULT`. Each frame it locates the surrounding
+pair in `DAY_NIGHT_KEYFRAMES` and linearly interpolates sky / horizon / fog
+colors, sun/ambient color + intensity, and `starsOpacity`. The sun orbits
+around world +X so it rises in +Z, crests at +Y (noon), sets in -Z, and
+re-appears after midnight. Outputs are written to three places:
+
+1. The shared `worldTime` singleton (`src/world/WorldTime.js`) — read by
+   Water / Clouds / Stars for tint.
+2. `sky.material.uniforms.*` — the sky shader's horizon/zenith/sun uniforms.
+3. The `Sky`-owned `DirectionalLight` (sun) and `AmbientLight` + `scene.fog`.
+
+`Sky.js` now exposes `sun` and `ambient` as public fields and no longer owns
+a `HemisphereLight` — `DayNight` replaces that with an `AmbientLight` whose
+color it can drive directly. A simple `PointsMaterial`-based starfield in
+`src/world/Stars.js` fades in at night via `starsOpacity`.
+
+## Roads (added)
+
+`src/world/Roads.js` builds thin ribbon meshes connecting neighboring village
+airports. Ownership is per chunk: a road is emitted by the chunk containing
+its from-village airport, and only if `fromCellKey ≤ toCellKey` to avoid
+double-building. `ChunkManager` calls `roads.buildForChunk(cx, cz)` on chunk
+load and `roads.disposeForChunk(cx, cz)` on unload. Pathing is simple: sample
+the center line at `ROAD_SAMPLE_STEP`-meter intervals, reject the candidate if
+any point is underwater (`y < WATER_LEVEL`) or if the slope between adjacent
+samples exceeds `ROAD_MAX_SLOPE`. Surviving candidates are extruded into a
+triangle-strip ribbon of width `ROAD_WIDTH`, offset `+ROAD_Y_OFFSET` above
+the terrain to avoid z-fight. Villages within `ROAD_RUNWAY_DISTANCE` of (0,0)
+also get a spur to the nearest home-runway endpoint. All roads share a
+single `MeshStandardMaterial`.
+
 ## Pitfalls
 
 - **Chunk seam on borders** means `heightAt` is not identical at shared vertices → check that noise depends purely on world coords.

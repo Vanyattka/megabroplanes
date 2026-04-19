@@ -198,19 +198,32 @@ export const BIOME_SCALE = 0.0006;              // biome feature size (~1700m ac
 export const MAX_TREE_FACTOR = 2.8;             // forest peak tree-density multiplier
 export const MAX_ROCK_FACTOR = 2.5;             // mountain peak rock-density multiplier
 
-// Water
+// Water — shader-based reflective surface. Follows the camera horizontally,
+// sized to outlast fog on all sides.
 export const WATER_LEVEL = -4;
-export const WATER_COLOR = 0x3a6fa0;
+export const WATER_SIZE = 2 * VIEW_DISTANCE_CHUNKS * CHUNK_SIZE * 1.8; // roomier than the minimum so fog hides the edge
+export const WATER_COLOR_SHALLOW = 0x77c5e5;
+export const WATER_COLOR_DEEP = 0x123a5a;
+export const WATER_NORMAL_SCROLL_SPEED = 0.25; // animated ripple time scale
+export const WATER_OPACITY = 0.86;
+// Legacy alias kept for any old imports we might have missed.
+export const WATER_COLOR = WATER_COLOR_SHALLOW;
 
-// Clouds
-export const CLOUD_COUNT = 55;
-export const CLOUD_ALTITUDE = 180;
-export const CLOUD_ALTITUDE_JITTER = 50;
-export const CLOUD_AREA = 1200;         // half-extent of the cloud field around the plane
+// Clouds — instanced camera-facing quads, deterministic per-cell so flying
+// back shows the same clouds. Drift is a global wind offset, so the same
+// cells still appear identically scattered — just translated in world space.
+export const CLOUD_CELL_SIZE = 500;
+export const CLOUD_MIN_PER_CELL = 1;
+export const CLOUD_MAX_PER_CELL = 3;
+export const CLOUD_MIN_ALT = 200;
+export const CLOUD_MAX_ALT = 600;
+export const CLOUD_VIEW_RADIUS = 1500;   // cells outside this radius aren't spawned
 export const CLOUD_SIZE_MIN = 80;
 export const CLOUD_SIZE_MAX = 180;
-export const CLOUD_WIND = [3.0, 0.0, 2.0]; // m/s drift
+export const CLOUD_DRIFT_SPEED = 2.0;    // m/s along CLOUD_DRIFT_DIR
+export const CLOUD_DRIFT_DIR = [1.0, 0.0, 0.35]; // normalized in Clouds.js
 export const CLOUD_OPACITY = 0.9;
+export const CLOUD_MAX_INSTANCES = 96;   // InstancedMesh pool upper bound
 
 // Shadows
 export const PLANE_SHADOW_SIZE = 14;
@@ -260,3 +273,59 @@ export const CAMERA_LERP = 0.1;
 export const MOUSE_LOOK_SENSITIVITY = 0.003; // radians per pixel of drag
 export const MOUSE_LOOK_RECENTER = 3.0; // 1/s decay toward zero when not dragging
 export const MOUSE_LOOK_PITCH_LIMIT = Math.PI / 2 - 0.1;
+
+// ---------------------------------------------------------------------------
+// Day / night cycle
+// ---------------------------------------------------------------------------
+// Full dawn→noon→dusk→midnight cycle duration in real seconds. 600 = 10 min.
+export const DAY_LENGTH_SECONDS = 600;
+// Starting phase in [0,1]. 0.5 = noon.
+export const DAY_TIME_START = 0.5;
+// Run-time multiplier — allows speed-of-day tweaking without code edits.
+export const DAY_TIME_MULT = 1.0;
+// Keyframes interpolated (in t order) to colour the sky, fog, and lights.
+// Values at t=0 and t=1 must match (seamless loop).
+export const DAY_NIGHT_KEYFRAMES = [
+  // midnight
+  { t: 0.00, skyColor: 0x05091a, horizonColor: 0x0b1226, fogColor: 0x0b1226, sunColor: 0x3a4e78, sunIntensity: 0.05, ambientColor: 0x222c44, ambientIntensity: 0.18, starsOpacity: 1.0 },
+  // pre-dawn
+  { t: 0.18, skyColor: 0x1c2340, horizonColor: 0x48394e, fogColor: 0x3e3448, sunColor: 0x8866aa, sunIntensity: 0.15, ambientColor: 0x3a3846, ambientIntensity: 0.25, starsOpacity: 0.6 },
+  // dawn
+  { t: 0.25, skyColor: 0x4a6ea8, horizonColor: 0xe6a378, fogColor: 0xe0a683, sunColor: 0xffb070, sunIntensity: 0.55, ambientColor: 0x9a7a70, ambientIntensity: 0.45, starsOpacity: 0.15 },
+  // noon
+  { t: 0.5,  skyColor: 0x3b72c4, horizonColor: 0xcfe2f3, fogColor: 0xcfe2f3, sunColor: 0xfff4d0, sunIntensity: 1.20, ambientColor: 0xffffff, ambientIntensity: 0.85, starsOpacity: 0.0 },
+  // dusk
+  { t: 0.75, skyColor: 0x2a3f7a, horizonColor: 0xf08a55, fogColor: 0xe28060, sunColor: 0xff6a2a, sunIntensity: 0.55, ambientColor: 0x8a5030, ambientIntensity: 0.45, starsOpacity: 0.15 },
+  // post-dusk
+  { t: 0.82, skyColor: 0x1c2340, horizonColor: 0x48394e, fogColor: 0x3e3448, sunColor: 0x8866aa, sunIntensity: 0.15, ambientColor: 0x3a3846, ambientIntensity: 0.25, starsOpacity: 0.6 },
+  // midnight (loop close)
+  { t: 1.00, skyColor: 0x05091a, horizonColor: 0x0b1226, fogColor: 0x0b1226, sunColor: 0x3a4e78, sunIntensity: 0.05, ambientColor: 0x222c44, ambientIntensity: 0.18, starsOpacity: 1.0 },
+];
+export const STARS_COUNT = 600;
+export const STARS_RADIUS = 800; // dome radius around the camera
+
+// ---------------------------------------------------------------------------
+// Roads between villages — procedural ribbons on top of terrain.
+// ---------------------------------------------------------------------------
+export const ROAD_WIDTH = 6;
+export const ROAD_COLOR = 0x4a453f;
+export const ROAD_SAMPLE_STEP = 20;                     // meters between centerline samples
+export const ROAD_MAX_VILLAGE_LINK_DISTANCE = 3600;     // don't attempt roads longer than this
+export const ROAD_MAX_SLOPE = 0.55;                     // |dy| / step; higher = too steep
+export const ROAD_RUNWAY_DISTANCE = 3000;               // spur-to-home-runway threshold
+export const ROAD_Y_OFFSET = 0.18;                      // lift above ground to avoid z-fight
+
+// ---------------------------------------------------------------------------
+// Audio — procedural engine + wind through the Web Audio API.
+// ---------------------------------------------------------------------------
+export const AUDIO_MASTER_VOLUME = 0.55;
+export const ENGINE_MIN_PITCH = 75;
+export const ENGINE_MAX_PITCH = 340;
+export const ENGINE_MIN_GAIN = 0.05;
+export const ENGINE_MAX_GAIN = 0.32;
+export const WIND_MIN_GAIN = 0.00;
+export const WIND_MAX_GAIN = 0.26;
+export const WIND_MIN_FILTER_HZ = 320;
+export const WIND_MAX_FILTER_HZ = 2400;
+export const WIND_REF_SPEED = 90;        // airspeed (m/s) that maps to WIND_MAX
+export const AUDIO_SMOOTHING_TIME = 0.15; // seconds for setTargetAtTime
