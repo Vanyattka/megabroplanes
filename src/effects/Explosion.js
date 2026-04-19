@@ -4,7 +4,7 @@ import {
   Euler,
   InstancedMesh,
   Matrix4,
-  MeshStandardMaterial,
+  MeshBasicMaterial,
   Quaternion,
   Vector3,
 } from 'three';
@@ -27,10 +27,11 @@ const _zero = new Vector3(0, 0, 0);
 export class Explosion {
   constructor(scene) {
     const geo = new BoxGeometry(0.9, 0.9, 0.9);
-    const mat = new MeshStandardMaterial({
-      vertexColors: false,
-      flatShading: true,
-      emissiveIntensity: 0.6,
+    // MeshBasicMaterial ignores scene lighting, so fire colors stay vibrant
+    // at night (when ambient is dim). The per-instance colors set via
+    // setColorAt() drive the look directly — no need for emissive tricks.
+    const mat = new MeshBasicMaterial({
+      toneMapped: false,
     });
     this.mesh = new InstancedMesh(geo, mat, EXPLOSION_PARTICLE_COUNT);
     this.mesh.frustumCulled = false;
