@@ -15,4 +15,7 @@ export const worldTime = {
   ambientIntensity: 0.85,
   starsOpacity: 0.0,
   sunDir: new Vector3(0.35, 0.45, -0.5).normalize(),
+  // 0 = full daylight, 1 = darkest night. Computed by DayNight each frame
+  // from sunIntensity; drives runway lamp opacity and plane nav brightness.
+  nightFactor: 0.0,
 };

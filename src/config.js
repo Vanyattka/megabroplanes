@@ -285,24 +285,46 @@ export const DAY_TIME_START = 0.5;
 export const DAY_TIME_MULT = 1.0;
 // Keyframes interpolated (in t order) to colour the sky, fog, and lights.
 // Values at t=0 and t=1 must match (seamless loop).
+// Brighter than a truly "dark" sim at midnight — a moon-lit sky so you can
+// still see terrain and find your way home. Dawn/dusk are warmer.
 export const DAY_NIGHT_KEYFRAMES = [
   // midnight
-  { t: 0.00, skyColor: 0x05091a, horizonColor: 0x0b1226, fogColor: 0x0b1226, sunColor: 0x3a4e78, sunIntensity: 0.05, ambientColor: 0x222c44, ambientIntensity: 0.18, starsOpacity: 1.0 },
+  { t: 0.00, skyColor: 0x0a1530, horizonColor: 0x182940, fogColor: 0x182940, sunColor: 0x6e80a0, sunIntensity: 0.22, ambientColor: 0x4a5878, ambientIntensity: 0.40, starsOpacity: 1.0 },
   // pre-dawn
-  { t: 0.18, skyColor: 0x1c2340, horizonColor: 0x48394e, fogColor: 0x3e3448, sunColor: 0x8866aa, sunIntensity: 0.15, ambientColor: 0x3a3846, ambientIntensity: 0.25, starsOpacity: 0.6 },
+  { t: 0.18, skyColor: 0x232a48, horizonColor: 0x5a4456, fogColor: 0x4e3f52, sunColor: 0x9c78b8, sunIntensity: 0.30, ambientColor: 0x5a5866, ambientIntensity: 0.45, starsOpacity: 0.55 },
   // dawn
-  { t: 0.25, skyColor: 0x4a6ea8, horizonColor: 0xe6a378, fogColor: 0xe0a683, sunColor: 0xffb070, sunIntensity: 0.55, ambientColor: 0x9a7a70, ambientIntensity: 0.45, starsOpacity: 0.15 },
+  { t: 0.25, skyColor: 0x4a6ea8, horizonColor: 0xe6a378, fogColor: 0xe0a683, sunColor: 0xffb070, sunIntensity: 0.65, ambientColor: 0x9a7a70, ambientIntensity: 0.60, starsOpacity: 0.15 },
   // noon
   { t: 0.5,  skyColor: 0x3b72c4, horizonColor: 0xcfe2f3, fogColor: 0xcfe2f3, sunColor: 0xfff4d0, sunIntensity: 1.20, ambientColor: 0xffffff, ambientIntensity: 0.85, starsOpacity: 0.0 },
   // dusk
-  { t: 0.75, skyColor: 0x2a3f7a, horizonColor: 0xf08a55, fogColor: 0xe28060, sunColor: 0xff6a2a, sunIntensity: 0.55, ambientColor: 0x8a5030, ambientIntensity: 0.45, starsOpacity: 0.15 },
+  { t: 0.75, skyColor: 0x2a3f7a, horizonColor: 0xf08a55, fogColor: 0xe28060, sunColor: 0xff6a2a, sunIntensity: 0.65, ambientColor: 0x8a5030, ambientIntensity: 0.60, starsOpacity: 0.15 },
   // post-dusk
-  { t: 0.82, skyColor: 0x1c2340, horizonColor: 0x48394e, fogColor: 0x3e3448, sunColor: 0x8866aa, sunIntensity: 0.15, ambientColor: 0x3a3846, ambientIntensity: 0.25, starsOpacity: 0.6 },
+  { t: 0.82, skyColor: 0x232a48, horizonColor: 0x5a4456, fogColor: 0x4e3f52, sunColor: 0x9c78b8, sunIntensity: 0.30, ambientColor: 0x5a5866, ambientIntensity: 0.45, starsOpacity: 0.55 },
   // midnight (loop close)
-  { t: 1.00, skyColor: 0x05091a, horizonColor: 0x0b1226, fogColor: 0x0b1226, sunColor: 0x3a4e78, sunIntensity: 0.05, ambientColor: 0x222c44, ambientIntensity: 0.18, starsOpacity: 1.0 },
+  { t: 1.00, skyColor: 0x0a1530, horizonColor: 0x182940, fogColor: 0x182940, sunColor: 0x6e80a0, sunIntensity: 0.22, ambientColor: 0x4a5878, ambientIntensity: 0.40, starsOpacity: 1.0 },
 ];
 export const STARS_COUNT = 600;
 export const STARS_RADIUS = 800; // dome radius around the camera
+
+// Night lights — runway edge lamps + plane nav lights + landing light.
+// `nightFactor` in worldTime is computed from sun intensity and drives both
+// the shared light materials (via NightLights.js) and the plane lights.
+export const NIGHT_SUN_FULL_DAY = 0.95;   // sunIntensity ≥ this: fully daytime
+export const NIGHT_SUN_FULL_NIGHT = 0.32; // sunIntensity ≤ this: fully night
+export const RUNWAY_LIGHT_SPACING = 24;   // meters between runway edge lights
+export const RUNWAY_LIGHT_COLOR = 0xffe080;
+export const RUNWAY_LIGHT_RADIUS = 0.36;
+export const NAV_LIGHT_RADIUS = 0.28;
+export const NAV_LIGHT_COLOR_LEFT = 0xff2222;
+export const NAV_LIGHT_COLOR_RIGHT = 0x22ff22;
+export const NAV_LIGHT_COLOR_TAIL = 0xffffff;
+export const NAV_TAIL_BLINK_HZ = 1.2;
+// Landing light — a SpotLight attached to the player's plane nose, toggled by L.
+export const LANDING_LIGHT_INTENSITY = 4.0;
+export const LANDING_LIGHT_RANGE = 180;
+export const LANDING_LIGHT_ANGLE = Math.PI / 6;  // half-cone
+export const LANDING_LIGHT_PENUMBRA = 0.35;
+export const LANDING_LIGHT_COLOR = 0xfff8cc;
 
 // ---------------------------------------------------------------------------
 // Roads between villages — procedural ribbons on top of terrain.
@@ -319,10 +341,16 @@ export const ROAD_Y_OFFSET = 0.18;                      // lift above ground to 
 // Audio — procedural engine + wind through the Web Audio API.
 // ---------------------------------------------------------------------------
 export const AUDIO_MASTER_VOLUME = 0.55;
-export const ENGINE_MIN_PITCH = 75;
-export const ENGINE_MAX_PITCH = 340;
-export const ENGINE_MIN_GAIN = 0.05;
-export const ENGINE_MAX_GAIN = 0.32;
+// Much lower than the old saw-at-340Hz, which sounded like an angry dentist
+// drill. A real light-aircraft idle is ~30 Hz, full throttle ~100 Hz; we
+// push that up slightly so cheap laptop speakers actually reproduce it.
+export const ENGINE_MIN_PITCH = 50;
+export const ENGINE_MAX_PITCH = 150;
+export const ENGINE_MIN_GAIN = 0.04;
+export const ENGINE_MAX_GAIN = 0.22;
+// Low-pass cutoff range — kept very low so harmonics above ~450 Hz die off.
+export const ENGINE_FILTER_MIN_HZ = 180;
+export const ENGINE_FILTER_MAX_HZ = 500;
 export const WIND_MIN_GAIN = 0.00;
 export const WIND_MAX_GAIN = 0.26;
 export const WIND_MIN_FILTER_HZ = 320;

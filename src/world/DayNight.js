@@ -4,8 +4,11 @@ import {
   DAY_TIME_START,
   DAY_TIME_MULT,
   DAY_NIGHT_KEYFRAMES,
+  NIGHT_SUN_FULL_DAY,
+  NIGHT_SUN_FULL_NIGHT,
 } from '../config.js';
 import { worldTime } from './WorldTime.js';
+import { updateLights } from './NightLights.js';
 
 // Linear interpolate two hex colors by an amount t∈[0,1], writing into `out`.
 function lerpColor(a, b, t, out) {
@@ -110,6 +113,13 @@ export class DayNight {
     worldTime.ambientIntensity = ambI;
     worldTime.starsOpacity = stars;
     worldTime.sunDir.copy(this._sunDir);
+
+    // Night factor — smooth 0..1 based on sun intensity. Drives runway lamp
+    // opacity and nav light brightness via NightLights.updateLights().
+    const range = Math.max(1e-4, NIGHT_SUN_FULL_DAY - NIGHT_SUN_FULL_NIGHT);
+    const nf = 1 - (sunI - NIGHT_SUN_FULL_NIGHT) / range;
+    worldTime.nightFactor = Math.max(0, Math.min(1, nf));
+    updateLights();
 
     // Apply to scene / lights / sky shader.
     if (this.fog) this.fog.color.copy(this._c3);

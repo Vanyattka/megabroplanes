@@ -15,10 +15,12 @@ import {
   RUNWAY_LENGTH,
   RUNWAY_WIDTH,
   RUNWAY_Y,
+  RUNWAY_LIGHT_SPACING,
 } from '../config.js';
 import { getRunwayMaterial } from './Runway.js';
 import { groundHeight } from './Ground.js';
 import { buildPlaneMesh } from '../plane/PlaneMesh.js';
+import { RUNWAY_LIGHT_GEOM, runwayLightMat } from './NightLights.js';
 
 // ---------------------------------------------------------------------------
 // Shared geometries (module-level, never disposed per chunk). Each variant's
@@ -342,12 +344,37 @@ function buildAirportStructures(village) {
   return out;
 }
 
+// Sidelights along the runway edges — an InstancedMesh child of the runway
+// so the row rotates with the runway angle without any extra bookkeeping.
+// The shared material's opacity (driven by NightLights.updateLights) is what
+// makes the lamps visible at night and invisible during the day.
+function buildRunwayLights(parent) {
+  const perSide = Math.floor(RUNWAY_LENGTH / RUNWAY_LIGHT_SPACING) + 1;
+  const total = perSide * 2;
+  const mesh = new InstancedMesh(RUNWAY_LIGHT_GEOM, runwayLightMat, total);
+  mesh.frustumCulled = false;
+  const m = new Matrix4();
+  let i = 0;
+  for (const side of [-1, 1]) {
+    for (let j = 0; j < perSide; j++) {
+      const x = -RUNWAY_LENGTH / 2 + j * RUNWAY_LIGHT_SPACING;
+      const z = side * (RUNWAY_WIDTH / 2 + 1.2);
+      m.makeTranslation(x, 0.35, z);
+      mesh.setMatrixAt(i++, m);
+    }
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+  parent.add(mesh);
+  return mesh;
+}
+
 function buildRunwayMeshFor(village) {
   const geo = new PlaneGeometry(RUNWAY_LENGTH, RUNWAY_WIDTH);
   geo.rotateX(-Math.PI / 2);
   const mesh = new Mesh(geo, getRunwayMaterial());
   mesh.position.set(village.airportX, RUNWAY_Y, village.airportZ);
   mesh.rotation.y = village.angle;
+  buildRunwayLights(mesh);
   return mesh;
 }
 

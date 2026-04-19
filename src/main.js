@@ -148,11 +148,14 @@ if (backToMenuBtn) {
   });
 }
 
-// M key toggles audio mute.
+// M key toggles audio mute. L key toggles the landing light.
 window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyM' && audio.isStarted()) {
     audio.toggleMute();
     updateAudioIndicator();
+  }
+  if (e.code === 'KeyL' && gameState === 'playing') {
+    plane.toggleLandingLight();
   }
 });
 

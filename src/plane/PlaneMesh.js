@@ -6,6 +6,12 @@ import {
   MeshStandardMaterial,
 } from 'three';
 import { DEFAULT_BODY_COLOR, DEFAULT_PLANE_TYPE } from '../config.js';
+import {
+  NAV_LIGHT_GEOM,
+  navLeftMat,
+  navRightMat,
+  navTailMat,
+} from '../world/NightLights.js';
 
 // Helper: make a box whose front edge (originally at -depth/2) sits at z=0
 // so rotating the mesh hinges about that edge instead of the box center.
@@ -35,6 +41,11 @@ const TYPE_GEOMS = {
     cockpitY: 0.6,
     cockpitZ: -0.5,
     propZ: -4.2,
+    navWingX: 6.3,
+    navWingY: 0.95,
+    navTailY: 1.85,
+    navTailZ: 4.0,
+    landingLightZ: -4.2,
   },
   piper: {
     fuselage: new BoxGeometry(1, 1, 8),
@@ -52,6 +63,11 @@ const TYPE_GEOMS = {
     cockpitY: 0.6,
     cockpitZ: -0.5,
     propZ: -4.1,
+    navWingX: 5.85,
+    navWingY: 0.25,
+    navTailY: 1.75,
+    navTailZ: 3.95,
+    landingLightZ: -4.1,
   },
   jet: {
     fuselage: new BoxGeometry(0.9, 0.9, 10),
@@ -69,6 +85,11 @@ const TYPE_GEOMS = {
     cockpitY: 0.5,
     cockpitZ: -2.0,
     engineZ: 5.0,
+    navWingX: 4.4,
+    navWingY: 0.22,
+    navTailY: 2.7,
+    navTailZ: 4.75,
+    landingLightZ: -4.8,
   },
 };
 
@@ -124,6 +145,32 @@ export function buildPlaneMesh(type = DEFAULT_PLANE_TYPE, colorHex = DEFAULT_BOD
     prop.name = 'propeller';
     group.add(prop);
   }
+
+  // Navigation lights — red on port wingtip, green on starboard, white at
+  // the tail (strobed from Plane.update). Shared materials are driven by
+  // NightLights.updateLights() so they dim to daytime levels and glow at
+  // night automatically.
+  const navLeft = new Mesh(NAV_LIGHT_GEOM, navLeftMat);
+  navLeft.position.set(-g.navWingX, g.navWingY, 0);
+  navLeft.name = 'nav-left';
+  group.add(navLeft);
+
+  const navRight = new Mesh(NAV_LIGHT_GEOM, navRightMat);
+  navRight.position.set(g.navWingX, g.navWingY, 0);
+  navRight.name = 'nav-right';
+  group.add(navRight);
+
+  const navTail = new Mesh(NAV_LIGHT_GEOM, navTailMat);
+  navTail.position.set(0, g.navTailY, g.navTailZ);
+  navTail.name = 'nav-tail';
+  group.add(navTail);
+
+  // Landing-light anchor — an empty Object3D so Plane.js can attach a
+  // SpotLight here without hard-coding offsets per plane type.
+  const landingAnchor = new Group();
+  landingAnchor.position.set(0, 0, g.landingLightZ);
+  landingAnchor.name = 'landing-anchor';
+  group.add(landingAnchor);
 
   return group;
 }

@@ -4,6 +4,8 @@ import {
   ENGINE_MAX_PITCH,
   ENGINE_MIN_GAIN,
   ENGINE_MAX_GAIN,
+  ENGINE_FILTER_MIN_HZ,
+  ENGINE_FILTER_MAX_HZ,
   WIND_MIN_GAIN,
   WIND_MAX_GAIN,
   WIND_MIN_FILTER_HZ,
@@ -74,15 +76,18 @@ export class Audio {
     this._master.gain.value = this._muted ? 0 : AUDIO_MASTER_VOLUME;
     this._master.connect(this.ctx.destination);
 
-    // --- Engine: sawtooth → lowpass → per-layer gain → master
+    // --- Engine: triangle → steep lowpass → per-layer gain → master.
+    // Triangle has far fewer high harmonics than sawtooth, and the low
+    // cutoff (set in update()) keeps the sound a soft rumble rather than a
+    // drill bit through the ear canal.
     this._engineOsc = this.ctx.createOscillator();
-    this._engineOsc.type = 'sawtooth';
+    this._engineOsc.type = 'triangle';
     this._engineOsc.frequency.value = ENGINE_MIN_PITCH;
 
     this._engineFilter = this.ctx.createBiquadFilter();
     this._engineFilter.type = 'lowpass';
-    this._engineFilter.frequency.value = 600;
-    this._engineFilter.Q.value = 0.6;
+    this._engineFilter.frequency.value = ENGINE_FILTER_MIN_HZ;
+    this._engineFilter.Q.value = 0.4;
 
     this._engineGain = this.ctx.createGain();
     this._engineGain.gain.value = 0;
@@ -126,7 +131,7 @@ export class Audio {
 
     const enginePitch = ENGINE_MIN_PITCH + (ENGINE_MAX_PITCH - ENGINE_MIN_PITCH) * throttle;
     const engineGain = ENGINE_MIN_GAIN + (ENGINE_MAX_GAIN - ENGINE_MIN_GAIN) * throttle;
-    const engineCutoff = 400 + 1400 * throttle;
+    const engineCutoff = ENGINE_FILTER_MIN_HZ + (ENGINE_FILTER_MAX_HZ - ENGINE_FILTER_MIN_HZ) * throttle;
     this._engineOsc.frequency.setTargetAtTime(enginePitch, now, k);
     this._engineGain.gain.setTargetAtTime(engineGain, now, k);
     this._engineFilter.frequency.setTargetAtTime(engineCutoff, now, k);
