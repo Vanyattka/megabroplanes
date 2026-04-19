@@ -10,14 +10,18 @@ export class RuinsManager {
     this.active = new Map();
   }
 
-  update(planePos) {
+  update(planePos, maxDistance = Infinity) {
     const pcx = Math.floor(planePos.x / RUIN_CELL_SIZE);
     const pcz = Math.floor(planePos.z / RUIN_CELL_SIZE);
+    const maxSq = maxDistance * maxDistance;
     const needed = new Set();
     for (let dx = -1; dx <= 1; dx++) {
       for (let dz = -1; dz <= 1; dz++) {
         const r = getRuin(pcx + dx, pcz + dz);
         if (!r) continue;
+        const ddx = r.x - planePos.x;
+        const ddz = r.z - planePos.z;
+        if (ddx * ddx + ddz * ddz > maxSq) continue;
         const key = `${r.rcx},${r.rcz}`;
         needed.add(key);
         if (!this.active.has(key)) {

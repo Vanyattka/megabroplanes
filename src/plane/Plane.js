@@ -75,5 +75,15 @@ export class Plane {
 
     const prop = this.mesh.getObjectByName('propeller');
     if (prop) prop.rotation.z += this.throttle * 30 * dt;
+
+    // Animate control surfaces from the latest pilot input. Elevator pivots
+    // about its leading edge (pitch), rudder about its leading edge (yaw).
+    const ci = this.controlInputs;
+    if (ci) {
+      const elev = this.mesh.getObjectByName('elevator');
+      if (elev) elev.rotation.x = ci.pitch * 0.4;
+      const rudd = this.mesh.getObjectByName('rudder');
+      if (rudd) rudd.rotation.y = ci.yaw * 0.4;
+    }
   }
 }

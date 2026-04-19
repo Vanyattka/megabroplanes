@@ -34,6 +34,8 @@ const _accel = new Vector3();
 const _deltaQ = new Quaternion();
 const _axis = new Vector3();
 const _worldUp = new Vector3(0, 1, 0);
+const _levelQ = new Quaternion();
+const _yAxis = new Vector3(0, 1, 0);
 
 export function step(plane, dt, getHeight, isOnRunway, braking, crashesEnabled) {
   if (plane.crashed) return;
@@ -148,8 +150,15 @@ export function step(plane, dt, getHeight, isOnRunway, braking, crashesEnabled) 
       plane.velocity.y = Math.max(plane.velocity.y, 0);
       const frictionRate = ROLLING_FRICTION + (braking ? BRAKE_STRENGTH : 0);
       plane.velocity.multiplyScalar(Math.max(0, 1 - frictionRate * dt));
-      plane.angularVelocity.x *= 0.1;
-      plane.angularVelocity.z *= 0.1;
+      // On ground the wheels hold the attitude level — zero pitch/roll angular
+      // velocity and slerp the orientation toward a pure-yaw quaternion so
+      // any leftover tilt from a botched landing gently corrects itself.
+      plane.angularVelocity.x = 0;
+      plane.angularVelocity.z = 0;
+      const yaw = Math.atan2(-_forward.x, -_forward.z);
+      _levelQ.setFromAxisAngle(_yAxis, yaw);
+      plane.quaternion.slerp(_levelQ, 0.15);
+      plane.quaternion.normalize();
       plane.onGround = true;
     } else {
       // Any high-speed impact outside a safe landing zone = crash. This

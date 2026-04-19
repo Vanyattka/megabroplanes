@@ -14,6 +14,7 @@ import { Explosion } from './effects/Explosion.js';
 import { JetExhaust } from './effects/JetExhaust.js';
 import {
   CRASH_ENABLED_DEFAULT,
+  CHUNK_SIZE,
   VIEW_DISTANCE_MIN,
   VIEW_DISTANCE_MAX,
   VIEW_ALT_SCALE,
@@ -139,6 +140,11 @@ function viewDistanceFor(plane) {
   const t = altitudeT(plane.position.y);
   return Math.round(VIEW_DISTANCE_MIN + t * (VIEW_DISTANCE_MAX - VIEW_DISTANCE_MIN));
 }
+// Half-chunk buffer so a village that straddles the edge of the last loaded
+// chunk still shows up with its terrain, not hovering in void.
+function terrainViewRadiusFor(plane) {
+  return (viewDistanceFor(plane) + 0.5) * CHUNK_SIZE;
+}
 function fogFarFor(plane) {
   const t = altitudeT(plane.position.y);
   return FOG_FAR_MIN + t * (FOG_FAR_MAX - FOG_FAR_MIN);
@@ -146,8 +152,8 @@ function fogFarFor(plane) {
 
 // Prime chunks and villages before first frame
 chunks.update(plane.position, viewDistanceFor(plane));
-villages.update(plane.position);
-ruins.update(plane.position);
+villages.update(plane.position, terrainViewRadiusFor(plane));
+ruins.update(plane.position, terrainViewRadiusFor(plane));
 
 let lastRenderTime = performance.now();
 let resetHeld = false;
@@ -157,8 +163,8 @@ function physicsStep(dt) {
     // No plane physics until the player hits Start. World still streams so
     // the menu background keeps its scenery live.
     chunks.update(plane.position, viewDistanceFor(plane));
-    villages.update(plane.position);
-    ruins.update(plane.position);
+    villages.update(plane.position, terrainViewRadiusFor(plane));
+    ruins.update(plane.position, terrainViewRadiusFor(plane));
     return;
   }
 
@@ -182,8 +188,8 @@ function physicsStep(dt) {
     if (crashBannerEl) crashBannerEl.style.display = 'block';
   }
   chunks.update(plane.position, viewDistanceFor(plane));
-  villages.update(plane.position);
-  ruins.update(plane.position);
+  villages.update(plane.position, terrainViewRadiusFor(plane));
+  ruins.update(plane.position, terrainViewRadiusFor(plane));
 }
 
 function renderStep() {
