@@ -51,6 +51,9 @@ export class DayNight {
     this.frames = bakeKeyframes(DAY_NIGHT_KEYFRAMES);
     this.t = DAY_TIME_START;
     this.speed = 1 / DAY_LENGTH_SECONDS;
+    // When paused, update() still re-applies the current `t` to keyframes but
+    // doesn't advance. Used by the main menu time-of-day picker.
+    this.paused = false;
 
     // Scratch colors to avoid per-frame allocations.
     this._c1 = new Color();
@@ -68,6 +71,15 @@ export class DayNight {
   setTime(t) { this.t = ((t % 1) + 1) % 1; }
   getTime() { return this.t; }
 
+  // Freeze the sun at a specific time of day. `setAuto()` resumes the cycle.
+  setFrozenTime(t) {
+    this.setTime(t);
+    this.paused = true;
+  }
+  setAuto() {
+    this.paused = false;
+  }
+
   _findSegment(t) {
     const f = this.frames;
     for (let i = 0; i < f.length - 1; i++) {
@@ -82,7 +94,9 @@ export class DayNight {
   }
 
   update(dt) {
-    this.t = (this.t + dt * this.speed * DAY_TIME_MULT) % 1;
+    if (!this.paused) {
+      this.t = (this.t + dt * this.speed * DAY_TIME_MULT) % 1;
+    }
     const { a, b, u } = this._findSegment(this.t);
 
     lerpColor(a.sky, b.sky, u, this._c1);

@@ -43,8 +43,10 @@ const TYPE_GEOMS = {
     propZ: -4.2,
     navWingX: 6.3,
     navWingY: 0.95,
-    navTailY: 1.85,
-    navTailZ: 4.0,
+    // Tail light sits on the fuselage tail itself (the very back of the
+    // body), not on top of the vertical fin.
+    navTailY: 0.3,
+    navTailZ: 4.05,
     landingLightZ: -4.2,
   },
   piper: {
@@ -65,8 +67,8 @@ const TYPE_GEOMS = {
     propZ: -4.1,
     navWingX: 5.85,
     navWingY: 0.25,
-    navTailY: 1.75,
-    navTailZ: 3.95,
+    navTailY: 0.25,
+    navTailZ: 4.05,
     landingLightZ: -4.1,
   },
   jet: {
@@ -87,8 +89,9 @@ const TYPE_GEOMS = {
     engineZ: 5.0,
     navWingX: 4.4,
     navWingY: 0.22,
-    navTailY: 2.7,
-    navTailZ: 4.75,
+    // Jet tail light sits just behind the engine block on the fuselage tail.
+    navTailY: 0.55,
+    navTailZ: 5.8,
     landingLightZ: -4.8,
   },
 };

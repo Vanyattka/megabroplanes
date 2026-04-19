@@ -25,6 +25,7 @@ import {
   VIEW_ALT_SCALE,
   FOG_FAR_MIN,
   FOG_FAR_MAX,
+  TIME_PRESETS,
 } from './config.js';
 import { MultiplayerClient } from './net/Client.js';
 import { RemotePlaneManager } from './net/RemotePlaneManager.js';
@@ -121,12 +122,21 @@ const minimap = new Minimap(mp);
 // Game state
 let gameState = 'menu';
 const menu = new Menu();
+
+// Apply a time-of-day preset to the DayNight cycle (or resume auto mode).
+function applyTimePreset(key) {
+  const p = TIME_PRESETS[key];
+  if (!p || p.t == null) dayNight.setAuto();
+  else dayNight.setFrozenTime(p.t);
+}
+
 menu.onChange = ({ type, color }) => {
   plane.setLoadout(type, color);
   plane.mesh.visible = true;
 };
-menu.onStart = ({ type, color }) => {
+menu.onStart = ({ type, color, timePreset }) => {
   plane.setLoadout(type, color);
+  applyTimePreset(timePreset);
   plane.reset();
   plane.mesh.visible = true;
   jetExhaust.clear();
@@ -134,6 +144,7 @@ menu.onStart = ({ type, color }) => {
   if (crashBannerEl) crashBannerEl.style.display = 'none';
   gameState = 'playing';
 };
+menu.onTimeChange = (preset) => applyTimePreset(preset);
 
 const backToMenuBtn = document.getElementById('btn-menu');
 if (backToMenuBtn) {
@@ -162,6 +173,7 @@ window.addEventListener('keydown', (e) => {
 {
   const sel = menu.getSelection();
   plane.setLoadout(sel.type, sel.color);
+  applyTimePreset(sel.timePreset);
 }
 
 const chaseCamera = new ChaseCamera(renderer.camera);

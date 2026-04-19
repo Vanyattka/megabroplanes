@@ -281,6 +281,17 @@ export const MOUSE_LOOK_PITCH_LIMIT = Math.PI / 2 - 0.1;
 export const DAY_LENGTH_SECONDS = 600;
 // Starting phase in [0,1]. 0.5 = noon.
 export const DAY_TIME_START = 0.5;
+// Menu-selectable fixed times of day. `auto` advances normally; everything
+// else freezes `timeOfDay` at the listed phase.
+export const TIME_PRESETS = {
+  auto:    { label: 'Auto',    t: null },
+  sunrise: { label: 'Sunrise', t: 0.24 },
+  morning: { label: 'Morning', t: 0.36 },
+  day:     { label: 'Day',     t: 0.5  },
+  sunset:  { label: 'Sunset',  t: 0.76 },
+  night:   { label: 'Night',   t: 0.0  },
+};
+export const DEFAULT_TIME_PRESET = 'auto';
 // Run-time multiplier — allows speed-of-day tweaking without code edits.
 export const DAY_TIME_MULT = 1.0;
 // Keyframes interpolated (in t order) to colour the sky, fog, and lights.
@@ -314,7 +325,7 @@ export const NIGHT_SUN_FULL_NIGHT = 0.32; // sunIntensity ≤ this: fully night
 export const RUNWAY_LIGHT_SPACING = 24;   // meters between runway edge lights
 export const RUNWAY_LIGHT_COLOR = 0xffe080;
 export const RUNWAY_LIGHT_RADIUS = 0.36;
-export const NAV_LIGHT_RADIUS = 0.28;
+export const NAV_LIGHT_RADIUS = 0.15;
 export const NAV_LIGHT_COLOR_LEFT = 0xff2222;
 export const NAV_LIGHT_COLOR_RIGHT = 0x22ff22;
 export const NAV_LIGHT_COLOR_TAIL = 0xffffff;

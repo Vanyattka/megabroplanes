@@ -3,6 +3,8 @@ import {
   DEFAULT_PLANE_TYPE,
   BODY_COLORS,
   DEFAULT_BODY_COLOR,
+  TIME_PRESETS,
+  DEFAULT_TIME_PRESET,
 } from '../config.js';
 import { PlanePreview } from './PlanePreview.js';
 
@@ -14,7 +16,8 @@ function loadSaved() {
     if (!raw) return null;
     const j = JSON.parse(raw);
     if (!PLANE_TYPES[j.type]) return null;
-    return { type: j.type, color: j.color };
+    const timePreset = TIME_PRESETS[j.timePreset] ? j.timePreset : DEFAULT_TIME_PRESET;
+    return { type: j.type, color: j.color, timePreset };
   } catch {
     return null;
   }
@@ -30,10 +33,12 @@ export class Menu {
     this.chooser = document.getElementById('menu-chooser');
     this.planeList = document.getElementById('plane-list');
     this.colorList = document.getElementById('color-list');
+    this.timeList = document.getElementById('time-list');
 
     const saved = loadSaved();
     this.selectedType = saved?.type || DEFAULT_PLANE_TYPE;
     this.selectedColor = saved?.color ?? DEFAULT_BODY_COLOR;
+    this.selectedTimePreset = saved?.timePreset || DEFAULT_TIME_PRESET;
 
     this.previews = [];           // [{ type, preview }]
     this._previewsInitialized = false;
@@ -42,15 +47,21 @@ export class Menu {
 
     this._renderPlaneCards();
     this._renderColors();
+    this._renderTimePresets();
     this._wireButtons();
     this.onStart = null;
     this.onChange = null;
+    this.onTimeChange = null;
 
     document.body.classList.add('menu-open');
   }
 
   getSelection() {
-    return { type: this.selectedType, color: this.selectedColor };
+    return {
+      type: this.selectedType,
+      color: this.selectedColor,
+      timePreset: this.selectedTimePreset,
+    };
   }
 
   isOpen() {
@@ -183,16 +194,52 @@ export class Menu {
     }
   }
 
+  _renderTimePresets() {
+    if (!this.timeList) return;
+    this.timeList.innerHTML = '';
+    for (const key of Object.keys(TIME_PRESETS)) {
+      const p = TIME_PRESETS[key];
+      const btn = document.createElement('button');
+      btn.className = 'time-btn' + (key === this.selectedTimePreset ? ' selected' : '');
+      btn.dataset.preset = key;
+      btn.textContent = p.label.toUpperCase();
+      btn.addEventListener('click', () => {
+        this.selectedTimePreset = key;
+        this._updateTimePresets();
+        save({
+          type: this.selectedType,
+          color: this.selectedColor,
+          timePreset: this.selectedTimePreset,
+        });
+        if (this.onTimeChange) this.onTimeChange(key);
+      });
+      this.timeList.appendChild(btn);
+    }
+  }
+  _updateTimePresets() {
+    if (!this.timeList) return;
+    for (const b of this.timeList.querySelectorAll('.time-btn')) {
+      b.classList.toggle('selected', b.dataset.preset === this.selectedTimePreset);
+    }
+  }
+
   _emitChange() {
-    save({ type: this.selectedType, color: this.selectedColor });
-    // Push the new color into every preview mesh so the picker reflects it live.
+    save({
+      type: this.selectedType,
+      color: this.selectedColor,
+      timePreset: this.selectedTimePreset,
+    });
     for (const { preview } of this.previews) preview.setColor(this.selectedColor);
     if (this.onChange) this.onChange(this.getSelection());
   }
 
   _wireButtons() {
     document.getElementById('btn-start').addEventListener('click', () => {
-      save({ type: this.selectedType, color: this.selectedColor });
+      save({
+        type: this.selectedType,
+        color: this.selectedColor,
+        timePreset: this.selectedTimePreset,
+      });
       this.hide();
       if (this.onStart) this.onStart(this.getSelection());
     });
