@@ -17,8 +17,8 @@ import {
 } from '../config.js';
 
 // Vertex: pass world position + view direction straight through. The water
-// plane is flat (no vertex displacement) — ripples are done in the fragment
-// with analytic wave functions so we don't pay for a heavy normal map sample.
+// plane is flat — ripples are done in the fragment with analytic wave
+// functions so we don't pay for a heavy normal map sample.
 const VERT = /* glsl */ `
   varying vec3 vWorldPos;
   varying vec3 vViewDir;
@@ -32,9 +32,11 @@ const VERT = /* glsl */ `
 
 // Fragment: animated ripples (two crossed sine fields advected by uTime),
 // Fresnel blend between shallow and deep colors, plus a sky-color reflection
-// term so the water tints with whatever the sky shader is currently showing.
-// Uses fog varyings from Three's built-in fog chunks so the water dissolves
-// into the fog horizon just like everything else.
+// term. We intentionally skip Three's fog chunks here — a ShaderMaterial
+// that uses them has to merge UniformsLib.fog itself, and getting that
+// wrong throws during compile and kills the render loop. The water edge is
+// well past `camera.far` on the horizon anyway, so fog isn't needed to hide
+// it; we fade manually toward the horizon tint at grazing view angles.
 const FRAG = /* glsl */ `
   uniform float uTime;
   uniform vec3  uShallow;
@@ -45,14 +47,10 @@ const FRAG = /* glsl */ `
   varying vec3 vWorldPos;
   varying vec3 vViewDir;
 
-  #include <fog_pars_fragment>
-
-  // Two cheap sine-field "normal maps" scrolling in opposite directions.
   vec3 rippleNormal(vec2 p, float t) {
-    // Two scales so there's big and small ripples.
-    float a = sin(p.x * 0.32 + t * 1.1)        + sin(p.y * 0.28 - t * 0.9);
+    float a = sin(p.x * 0.32 + t * 1.1)         + sin(p.y * 0.28 - t * 0.9);
     float b = sin((p.x + p.y) * 0.42 - t * 1.3) + sin((p.x - p.y) * 0.31 + t * 0.7);
-    float c = sin(p.x * 1.1  + t * 2.3)        + sin(p.y * 0.9 - t * 1.7);
+    float c = sin(p.x * 1.1  + t * 2.3)         + sin(p.y * 0.9 - t * 1.7);
     float d = sin((p.x * 0.7 + p.y * 0.6) - t * 1.9);
     float nx = (a + b) * 0.03 + c * 0.012 + d * 0.008;
     float nz = (a - b) * 0.03 + c * 0.012 - d * 0.008;
@@ -65,17 +63,12 @@ const FRAG = /* glsl */ `
 
     vec3 viewDir = normalize(vViewDir);
     float ndv = max(dot(viewDir, n), 0.0);
-    // Fresnel — near vertical viewing = looking down = shallow color;
-    // grazing = strong reflection of sky.
     float fresnel = pow(1.0 - ndv, 3.5);
 
     vec3 baseCol = mix(uShallow, uDeep, clamp((1.0 - ndv) * 0.5, 0.0, 1.0));
-    vec3 reflected = uSkyColor;
-    vec3 col = mix(baseCol, reflected, fresnel);
+    vec3 col = mix(baseCol, uSkyColor, fresnel);
 
     gl_FragColor = vec4(col, uOpacity);
-
-    #include <fog_fragment>
   }
 `;
 
@@ -96,14 +89,13 @@ export class Water {
         uSkyColor: { value: new Color(HORIZON_COLOR) },
         uOpacity: { value: WATER_OPACITY },
         uRippleAmp: { value: 1.0 },
-        // Three's fog uniforms get injected by the renderer when `fog: true`.
       },
       vertexShader: VERT,
       fragmentShader: FRAG,
       transparent: true,
       depthWrite: false,
       side: DoubleSide,
-      fog: true,
+      fog: false,
     });
 
     this.mesh = new Mesh(this.geometry, this.material);
