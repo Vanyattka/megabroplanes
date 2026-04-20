@@ -1,10 +1,14 @@
-import { VILLAGE_CELL_SIZE, VILLAGE_VIEW_CELLS } from '../config.js';
+import {
+  VILLAGE_CELL_SIZE,
+  VILLAGE_VIEW_CELLS,
+  VILLAGE_BUILD_BUDGET_MS,
+} from '../config.js';
 import { getVillage } from './Villages.js';
 import { buildVillageGroup, disposeVillageGroup } from './VillageMeshes.js';
 
-// Streams village meshes based on the plane's cell position. A village is
-// only instantiated if it also lies within the currently-visible terrain
-// radius — otherwise you'd see a village hovering over unloaded chunks.
+// Same time-budgeted streaming approach as ChunkManager — a fresh city
+// group (all houses + windows InstancedMesh + airport structures) can be
+// the single priciest build in a frame.
 export class VillageManager {
   constructor(scene) {
     this.scene = scene;
@@ -16,6 +20,7 @@ export class VillageManager {
     const pcz = Math.floor(planePos.z / VILLAGE_CELL_SIZE);
     const maxSq = maxDistance * maxDistance;
     const needed = new Set();
+    const pending = [];
 
     for (let dx = -VILLAGE_VIEW_CELLS; dx <= VILLAGE_VIEW_CELLS; dx++) {
       for (let dz = -VILLAGE_VIEW_CELLS; dz <= VILLAGE_VIEW_CELLS; dz++) {
@@ -23,18 +28,29 @@ export class VillageManager {
         const gcz = pcz + dz;
         const v = getVillage(gcx, gcz);
         if (!v) continue;
-        // Skip villages outside the visible terrain radius so they don't pop
-        // into view over empty chunks.
         const ddx = v.airportX - planePos.x;
         const ddz = v.airportZ - planePos.z;
-        if (ddx * ddx + ddz * ddz > maxSq) continue;
+        const d2 = ddx * ddx + ddz * ddz;
+        if (d2 > maxSq) continue;
         const key = `${gcx},${gcz}`;
         needed.add(key);
         if (!this.active.has(key)) {
-          const group = buildVillageGroup(v);
-          this.scene.add(group);
-          this.active.set(key, group);
+          pending.push({ village: v, key, d2 });
         }
+      }
+    }
+
+    if (pending.length > 0) {
+      pending.sort((a, b) => a.d2 - b.d2);
+      const tStart = performance.now();
+      const deadline = tStart + VILLAGE_BUILD_BUDGET_MS;
+      let built = 0;
+      for (const p of pending) {
+        const group = buildVillageGroup(p.village);
+        this.scene.add(group);
+        this.active.set(p.key, group);
+        built++;
+        if (built >= 1 && performance.now() > deadline) break;
       }
     }
 

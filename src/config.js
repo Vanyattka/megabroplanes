@@ -278,6 +278,14 @@ export const JET_EXHAUST_OFFSET_Z = 5.5; // local +Z distance behind plane
 // reject most trees but keep most rocks.
 export const TREES_PER_CHUNK = 140;
 export const ROCKS_PER_CHUNK = 40;
+
+// Streaming budget — maximum milliseconds per frame spent building new
+// chunks/villages/ruins. At least one gets built per frame regardless (so
+// progress is guaranteed), but subsequent work stops once the deadline hits
+// and resumes next frame. Faster CPUs naturally fit more per frame.
+export const CHUNK_BUILD_BUDGET_MS = 5;
+export const VILLAGE_BUILD_BUDGET_MS = 3;
+export const RUIN_BUILD_BUDGET_MS = 2;
 export const TREE_MIN_HEIGHT = 1.5;
 export const TREE_MAX_HEIGHT = 24;
 export const TREE_MAX_SLOPE = 0.35;   // tan of slope: reject steep spots
