@@ -337,11 +337,8 @@ export const GRAPHICS_PRESETS = {
     shadowTrees: false,
     shadowFrustumHalf: 420,
     bloom: true,
-    bloomStrength: 0.3,
+    bloomStrength: 0.35,
     vignette: true,
-    // Simple gradient sky on Medium — Preetham's HDR output has been the
-    // source of the daytime whiteout complaints, and the gradient renders
-    // sunrise/sunset just fine using the keyframe colors.
     atmoSky: false,
     contactShadows: true,
     terrainDetail: true,
@@ -354,7 +351,7 @@ export const GRAPHICS_PRESETS = {
     shadowTrees: true,
     shadowFrustumHalf: 720,
     bloom: true,
-    bloomStrength: 0.6,
+    bloomStrength: 0.5,
     vignette: true,
     atmoSky: true,
     contactShadows: true,
@@ -373,13 +370,13 @@ export const SHADOW_CAMERA_DISTANCE = 900;
 export const SHADOW_BIAS = -0.0006;
 export const SHADOW_NORMAL_BIAS = 0.04;
 // Bloom operates purely in HDR — threshold 2.0 is above the max luminance a
-// plain lit MeshStandardMaterial can reach (~1.8 for a white object under
-// strong sun + ambient), so accidental self-blooming of the plane/terrain
-// can't happen. Everything we DO want to bloom — sun disc, runway lamps,
-// nav lights, explosion fire, jet exhaust — is boosted to HDR colors well
-// above this threshold.
-export const BLOOM_STRENGTH = 0.55;
-export const BLOOM_RADIUS = 0.75;
+// plain lit MeshStandardMaterial can reach, so accidental self-blooming of
+// the plane/terrain can't happen. Everything we DO want to bloom (sun disc,
+// runway lamps, nav lights, explosion fire, jet exhaust) is boosted to HDR
+// colors above this threshold. Radius kept tight so the sun disc doesn't
+// spread its halo across the whole upper screen.
+export const BLOOM_STRENGTH = 0.45;
+export const BLOOM_RADIUS = 0.35;
 export const BLOOM_THRESHOLD = 2.0;
 // Vignette strength (0 = off, ~0.35 is subtle).
 export const VIGNETTE_STRENGTH = 0.32;

@@ -21,12 +21,13 @@ import {
 // engine nozzle. Uses a single InstancedMesh with additive blending so the
 // trail reads as "fire" against any background.
 
-// HDR exhaust colors (channel values >1) push the particles above the bloom
-// threshold so they glow — critical for the "jet afterburner" feel at night
-// and for the plume staying visible against a bright daytime sky.
-const HOT = new Color().setRGB(3.5, 2.8, 1.0);
-const MID = new Color().setRGB(3.2, 1.6, 0.5);
-const COOL = new Color().setRGB(2.6, 0.7, 0.3);
+// HDR exhaust — only the HOT core crosses the bloom threshold (2.0). MID
+// and COOL stay below, so they read as orange/red color without glowing
+// halos. Keeps the plume from turning into a giant bright blob at full
+// throttle.
+const HOT = new Color().setRGB(2.4, 1.9, 0.8);
+const MID = new Color().setRGB(1.8, 0.9, 0.3);
+const COOL = new Color().setRGB(1.3, 0.4, 0.2);
 
 const _m = new Matrix4();
 const _q = new Quaternion();
@@ -37,7 +38,9 @@ const _tmpColor = new Color();
 
 export class JetExhaust {
   constructor(scene) {
-    const geom = new BoxGeometry(0.55, 0.55, 0.55);
+    // Smaller base cube — the old 0.55m particle was reading as a giant
+    // flame at full throttle once we gave it HDR color.
+    const geom = new BoxGeometry(0.38, 0.38, 0.38);
     const mat = new MeshBasicMaterial({
       transparent: true,
       depthWrite: false,
