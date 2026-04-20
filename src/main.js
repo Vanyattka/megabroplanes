@@ -36,7 +36,7 @@ import { Plane } from './plane/Plane.js';
 import { ChaseCamera } from './camera/ChaseCamera.js';
 import { Hud } from './ui/Hud.js';
 import { PostFx } from './effects/PostFx.js';
-import { gfx } from './ui/GraphicsSettings.js';
+import { gfx, view } from './ui/GraphicsSettings.js';
 
 const renderer = new Renderer();
 const clock = new Clock();
@@ -224,8 +224,11 @@ function altitudeT(y) {
   return Math.max(0, Math.min(1, y / VIEW_ALT_SCALE));
 }
 function viewDistanceFor(plane) {
+  // Bounds come from the active view-distance preset; altitude still smoothly
+  // expands the view inside those bounds so takeoff feels snappy.
+  const vs = view.settings;
   const t = altitudeT(plane.position.y);
-  return Math.round(VIEW_DISTANCE_MIN + t * (VIEW_DISTANCE_MAX - VIEW_DISTANCE_MIN));
+  return Math.round(vs.min + t * (vs.max - vs.min));
 }
 function terrainViewRadiusFor(plane) {
   return (viewDistanceFor(plane) + 0.5) * CHUNK_SIZE;

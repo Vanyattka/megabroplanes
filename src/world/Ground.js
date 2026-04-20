@@ -35,6 +35,19 @@ export function groundHeight(x, z) {
   // Sea layer — smoothstep shoreline, full depth out in open water.
   const seaStrength = smoothstep(SEA_THRESHOLD_LOW, SEA_THRESHOLD_HIGH, seaMaskAt(x, z));
   h -= seaStrength * SEA_DEPTH;
+
+  // In non-lake, non-sea biomes prevent the raw noise from dipping below
+  // water. Hills/mountain amplitudes alone can produce dips that look like
+  // lakes on the minimap but are really just "the forest floor sunk below
+  // water level". We softly compress below-floor values so the result
+  // asymptotes just under the land floor — no flat plateau, no fake ponds.
+  if (b.type !== 'lake' && seaStrength < 0.3) {
+    const LAND_FLOOR = WATER_LEVEL + 2;
+    if (h < LAND_FLOOR) {
+      h = LAND_FLOOR - 3 * (1 - Math.exp((h - LAND_FLOOR) / 20));
+    }
+  }
+
   return h * f;
 }
 

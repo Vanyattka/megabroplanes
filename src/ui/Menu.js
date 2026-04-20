@@ -6,9 +6,10 @@ import {
   TIME_PRESETS,
   DEFAULT_TIME_PRESET,
   GRAPHICS_PRESETS,
+  VIEW_DISTANCE_PRESETS,
 } from '../config.js';
 import { PlanePreview } from './PlanePreview.js';
-import { gfx } from './GraphicsSettings.js';
+import { gfx, view } from './GraphicsSettings.js';
 
 const STORAGE_KEY = 'mbp:loadout';
 
@@ -44,6 +45,7 @@ export class Menu {
     this.colorList = document.getElementById('color-list');
     this.timeList = document.getElementById('time-list');
     this.gfxList = document.getElementById('gfx-list');
+    this.viewList = document.getElementById('view-list');
 
     const saved = loadSaved();
     this.selectedType = saved?.type || DEFAULT_PLANE_TYPE;
@@ -60,6 +62,7 @@ export class Menu {
     this._renderColors();
     this._renderTimePresets();
     this._renderGfxPresets();
+    this._renderViewPresets();
     this._wireButtons();
     this.onStart = null;
     this.onContinue = null;
@@ -276,6 +279,30 @@ export class Menu {
     if (!this.gfxList) return;
     for (const b of this.gfxList.querySelectorAll('.time-btn')) {
       b.classList.toggle('selected', b.dataset.gfx === gfx.preset);
+    }
+  }
+
+  _renderViewPresets() {
+    if (!this.viewList) return;
+    this.viewList.innerHTML = '';
+    const current = view.preset;
+    for (const key of Object.keys(VIEW_DISTANCE_PRESETS)) {
+      const p = VIEW_DISTANCE_PRESETS[key];
+      const btn = document.createElement('button');
+      btn.className = 'time-btn' + (key === current ? ' selected' : '');
+      btn.dataset.view = key;
+      btn.textContent = p.label.toUpperCase();
+      btn.addEventListener('click', () => {
+        view.set(key);
+        this._updateViewPresets();
+      });
+      this.viewList.appendChild(btn);
+    }
+  }
+  _updateViewPresets() {
+    if (!this.viewList) return;
+    for (const b of this.viewList.querySelectorAll('.time-btn')) {
+      b.classList.toggle('selected', b.dataset.view === view.preset);
     }
   }
 

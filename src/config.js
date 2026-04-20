@@ -9,9 +9,20 @@ export const CHUNK_SIZE = 128;
 export const CHUNK_RESOLUTION = 33;
 export const VIEW_DISTANCE_CHUNKS = 4;
 // Dynamic view scales with altitude — higher flights unlock bigger view.
+// Actual values come from the current VIEW_DISTANCE_PRESET; these two
+// constants stay as fallbacks for modules that import them directly.
 export const VIEW_DISTANCE_MIN = 4;
 export const VIEW_DISTANCE_MAX = 7;
-export const VIEW_ALT_SCALE = 600; // altitude (m) at which view reaches MAX
+export const VIEW_ALT_SCALE = 600;
+// Menu-selectable chunk streaming distance, independent of graphics preset
+// so weaker GPUs can still draw sharp shadows but see less of the world.
+export const VIEW_DISTANCE_PRESETS = {
+  short:  { label: 'Short',      min: 3, max: 5  },
+  medium: { label: 'Medium',     min: 4, max: 7  },
+  high:   { label: 'High',       min: 5, max: 9  },
+  xhigh:  { label: 'Extra High', min: 6, max: 11 },
+};
+export const DEFAULT_VIEW_PRESET = 'medium';
 export const NOISE_SCALE = 0.005;
 export const HEIGHT_AMPLITUDE = 30;
 export const NOISE_SEED = 'plane-mvp-seed';
@@ -327,21 +338,21 @@ export const GRAPHICS_PRESETS = {
     shadowTrees: false,
     shadowFrustumHalf: 420,
     bloom: true,
-    bloomStrength: 0.35,
+    bloomStrength: 0.4,
     vignette: true,
     atmoSky: true,
     contactShadows: true,
     terrainDetail: true,
     pixelRatio: 1.0,
-    toneMappingExposure: 1.0,
+    toneMappingExposure: 0.85,
   },
   high: {
     label: 'High',
-    shadows: 4096,        // 4x bigger shadow map → visibly crisper
-    shadowTrees: true,    // forests cast shadows too
-    shadowFrustumHalf: 720, // covers further-out objects
+    shadows: 4096,
+    shadowTrees: true,
+    shadowFrustumHalf: 720,
     bloom: true,
-    bloomStrength: 0.6,   // brighter glow around lights + sun
+    bloomStrength: 0.6,
     vignette: true,
     atmoSky: true,
     contactShadows: true,
@@ -350,7 +361,7 @@ export const GRAPHICS_PRESETS = {
       typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1,
       1.75
     ),
-    toneMappingExposure: 1.08, // slightly richer colors
+    toneMappingExposure: 0.92,
   },
 };
 export const DEFAULT_GFX_PRESET = 'medium';
@@ -359,10 +370,12 @@ export const SHADOW_FRUSTUM_HALF = 560;
 export const SHADOW_CAMERA_DISTANCE = 900;
 export const SHADOW_BIAS = -0.0006;
 export const SHADOW_NORMAL_BIAS = 0.04;
-// Bloom knobs.
+// Bloom knobs. Threshold pushed toward HDR range so only genuinely emissive
+// pixels (sun disc, runway lamps at night, explosion fire, jet exhaust) bloom
+// — the plane's lit white body should NOT halo itself under a bright sky.
 export const BLOOM_STRENGTH = 0.55;
 export const BLOOM_RADIUS = 0.75;
-export const BLOOM_THRESHOLD = 0.82;
+export const BLOOM_THRESHOLD = 1.0;
 // Vignette strength (0 = off, ~0.35 is subtle).
 export const VIGNETTE_STRENGTH = 0.32;
 // Run-time multiplier — allows speed-of-day tweaking without code edits.
