@@ -1,7 +1,7 @@
 import { Vector3, Quaternion } from 'three';
 import {
   CAMERA_OFFSET,
-  CAMERA_LERP,
+  CAMERA_FOLLOW_RATE,
   MOUSE_LOOK_SENSITIVITY,
   MOUSE_LOOK_RECENTER,
   MOUSE_LOOK_PITCH_LIMIT,
@@ -52,7 +52,15 @@ export class ChaseCamera {
       this.camera.position.copy(_desired);
       this.initialized = true;
     } else {
-      this.camera.position.lerp(_desired, CAMERA_LERP);
+      // Frame-rate independent exponential smoothing. With a fixed `dt`
+      // coefficient the camera would drift back visibly on slow frames
+      // (the plane catches up via multiple physics substeps but the
+      // camera only lerps by 10% once) — producing the "zooms out then
+      // back in" pattern every second or two. This converges at a
+      // consistent wall-clock rate regardless of frame time.
+      const clampedDt = Math.min(0.1, dt || 0);
+      const alpha = 1 - Math.exp(-clampedDt * CAMERA_FOLLOW_RATE);
+      this.camera.position.lerp(_desired, alpha);
     }
     this.camera.lookAt(plane.position);
   }

@@ -2,7 +2,11 @@
 
 // Timing
 export const FIXED_STEP = 1 / 60;
-export const MAX_FRAME_DT = 0.1;
+// Cap on how much sim time a single frame can absorb. Previously 0.1s meant
+// a 100 ms stall (GC, chunk build) let physics run 6 substeps and teleport
+// the plane ~9 m — the camera couldn't keep up and visibly snapped. 50 ms
+// is 3 substeps, barely perceptible.
+export const MAX_FRAME_DT = 0.05;
 
 // World
 export const CHUNK_SIZE = 128;
@@ -295,7 +299,11 @@ export const CAMERA_FOV = 70;
 export const CAMERA_NEAR = 0.1;
 export const CAMERA_FAR = FOG_FAR_MAX * 1.5; // matches the widest fog we'll use
 export const CAMERA_OFFSET = [0, 3, 12]; // behind and above in plane's local frame
+// Raw per-frame lerp kept for reference; the actual follow uses a dt-based
+// exponential so the camera tracks at the same rate regardless of whether a
+// frame took 8 ms or 40 ms.
 export const CAMERA_LERP = 0.1;
+export const CAMERA_FOLLOW_RATE = 6.2; // exponential smoothing rate in 1/s
 
 // Mouse look
 export const MOUSE_LOOK_SENSITIVITY = 0.003; // radians per pixel of drag
