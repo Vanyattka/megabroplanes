@@ -183,11 +183,13 @@ export const ZENITH_COLOR = 0x3b72c4;  // deeper overhead blue
 export const SUN_DIRECTION = [0.35, 0.45, -0.5]; // normalized in Sky.js
 export const SUN_COLOR = 0xfff1c8;
 export const FOG_COLOR = HORIZON_COLOR;
-export const FOG_NEAR = 150;
-export const FOG_FAR = 420;
+// Fog near pushed out to 350m so the plane and close terrain never pick up
+// haze. Far bounds roughly doubled so the world is visibly richer.
+export const FOG_NEAR = 350;
+export const FOG_FAR = 900;
 // Dynamic fog bounds — scaled by altitude. FOG_FAR above is the base (ground).
-export const FOG_FAR_MIN = 420;
-export const FOG_FAR_MAX = 950;
+export const FOG_FAR_MIN = 900;
+export const FOG_FAR_MAX = 1750;
 
 // Terrain coloring — slope threshold (vertex normal.y below this = rock).
 export const SLOPE_ROCK_THRESHOLD = 0.72;
@@ -307,9 +309,11 @@ export const DEFAULT_TIME_PRESET = 'auto';
 export const GRAPHICS_PRESETS = {
   low: {
     label: 'Low',
-    shadows: 0,           // shadow map size; 0 = disabled
-    shadowTrees: false,   // instanced tree/rock cast shadows
+    shadows: 0,
+    shadowTrees: false,
+    shadowFrustumHalf: 360,
     bloom: false,
+    bloomStrength: 0,
     vignette: false,
     atmoSky: false,
     contactShadows: false,
@@ -321,7 +325,9 @@ export const GRAPHICS_PRESETS = {
     label: 'Medium',
     shadows: 1024,
     shadowTrees: false,
+    shadowFrustumHalf: 420,
     bloom: true,
+    bloomStrength: 0.35,
     vignette: true,
     atmoSky: true,
     contactShadows: true,
@@ -331,18 +337,20 @@ export const GRAPHICS_PRESETS = {
   },
   high: {
     label: 'High',
-    shadows: 2048,
-    shadowTrees: true,
+    shadows: 4096,        // 4x bigger shadow map → visibly crisper
+    shadowTrees: true,    // forests cast shadows too
+    shadowFrustumHalf: 720, // covers further-out objects
     bloom: true,
+    bloomStrength: 0.6,   // brighter glow around lights + sun
     vignette: true,
     atmoSky: true,
     contactShadows: true,
     terrainDetail: true,
     pixelRatio: Math.min(
       typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1,
-      1.5
+      1.75
     ),
-    toneMappingExposure: 1.0,
+    toneMappingExposure: 1.08, // slightly richer colors
   },
 };
 export const DEFAULT_GFX_PRESET = 'medium';

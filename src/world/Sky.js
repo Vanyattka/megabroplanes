@@ -140,6 +140,18 @@ export class Sky {
     }
   }
 
+  // Shadow camera frustum half-size in world units. Wider = shadows on
+  // farther objects but softer edges per texel.
+  setShadowFrustumHalf(h) {
+    if (!this.sun) return;
+    const c = this.sun.shadow.camera;
+    c.left = -h;
+    c.right = h;
+    c.top = h;
+    c.bottom = -h;
+    c.updateProjectionMatrix();
+  }
+
   // Keep the sky centered on the camera so the horizon stays at infinity.
   // Also slide the sun's shadow frustum to follow the plane so shadows stay
   // crisp near the player without needing CSMs.

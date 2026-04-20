@@ -78,8 +78,10 @@ function applyGfx(settings) {
   renderer.renderer.setPixelRatio(settings.pixelRatio);
   renderer.renderer.toneMappingExposure = settings.toneMappingExposure;
   sky.setShadowMapSize(settings.shadows);
+  sky.setShadowFrustumHalf(settings.shadowFrustumHalf);
   sky.setAtmospheric(settings.atmoSky);
   postfx.setBloomEnabled(settings.bloom);
+  postfx.setBloomStrength(settings.bloomStrength);
   postfx.setVignetteEnabled(settings.vignette);
 }
 applyGfx(gfx.settings);
@@ -109,6 +111,9 @@ function updateAudioIndicator() {
 }
 function firstInput() {
   audio.start();
+  // Menu is open on first user gesture — keep audio silenced until the
+  // player actually starts/continues a flight.
+  audio.setSuspended(gameState === 'menu');
   updateAudioIndicator();
   window.removeEventListener('keydown', firstInput);
   window.removeEventListener('mousedown', firstInput);
@@ -165,6 +170,13 @@ menu.onStart = ({ type, color, timePreset }) => {
   explosion.clear();
   if (crashBannerEl) crashBannerEl.style.display = 'none';
   gameState = 'playing';
+  audio.setSuspended(false);
+};
+// Continue = resume the existing flight without resetting the plane.
+menu.onContinue = () => {
+  plane.mesh.visible = !plane.crashed;
+  gameState = 'playing';
+  audio.setSuspended(false);
 };
 menu.onTimeChange = (preset) => applyTimePreset(preset);
 
@@ -177,6 +189,10 @@ if (backToMenuBtn) {
     if (crashBannerEl) crashBannerEl.style.display = 'none';
     plane.mesh.visible = false;
     gameState = 'menu';
+    audio.setSuspended(true);
+    // The player already has a flight in progress — show CONTINUE on the
+    // main menu so they can pick up where they left off.
+    menu.setContinueAvailable(!plane.crashed);
     menu.open();
   });
 }

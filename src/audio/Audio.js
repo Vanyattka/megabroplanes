@@ -47,6 +47,7 @@ export class Audio {
     this.ctx = null;
     this.started = false;
     this._muted = false;
+    this._suspended = false;
 
     // Audio graph nodes — created in start(), disposed in dispose().
     this._master = null;
@@ -144,17 +145,27 @@ export class Audio {
 
   setMasterVolume(v) {
     if (!this._master || !this.ctx) return;
-    const target = this._muted ? 0 : clamp(v, 0, 1);
+    const target = this._muted || this._suspended ? 0 : clamp(v, 0, 1);
     this._master.gain.setTargetAtTime(target, this.ctx.currentTime, 0.05);
   }
 
   toggleMute() {
     this._muted = !this._muted;
-    if (this._master && this.ctx) {
-      const target = this._muted ? 0 : AUDIO_MASTER_VOLUME;
-      this._master.gain.setTargetAtTime(target, this.ctx.currentTime, 0.05);
-    }
+    this._applyMaster();
     return this._muted;
+  }
+
+  // Used by main.js to silence audio while the main menu is showing. Separate
+  // from `mute` so toggling M doesn't get confused with menu/play transitions.
+  setSuspended(on) {
+    this._suspended = !!on;
+    this._applyMaster();
+  }
+
+  _applyMaster() {
+    if (!this._master || !this.ctx) return;
+    const target = this._muted || this._suspended ? 0 : AUDIO_MASTER_VOLUME;
+    this._master.gain.setTargetAtTime(target, this.ctx.currentTime, 0.08);
   }
 
   isMuted() { return this._muted; }

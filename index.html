@@ -191,7 +191,7 @@
         opacity: 0.8;
         margin: 0;
       }
-      #menu-main, #menu-chooser {
+      #menu-main, #menu-planes, #menu-settings {
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -214,9 +214,9 @@
       .menu-btn:hover { background: rgba(255, 204, 64, 0.18); border-color: #ffcc40; }
       .menu-btn:active { transform: scale(0.97); }
       .menu-btn.primary { background: rgba(255, 204, 64, 0.25); border-color: #ffcc40; }
-      #menu-chooser.hidden { display: none; }
-      #menu-chooser h2 { margin: 0; font-size: 20px; letter-spacing: 3px; }
-      #menu-chooser h3 { margin: 0; font-size: 14px; letter-spacing: 2px; opacity: 0.85; }
+      #menu-planes.hidden, #menu-settings.hidden { display: none; }
+      #menu-planes h2, #menu-settings h2 { margin: 0; font-size: 20px; letter-spacing: 3px; }
+      #menu-planes h3, #menu-settings h3 { margin: 0; font-size: 14px; letter-spacing: 2px; opacity: 0.85; }
       #plane-list {
         display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;
       }
@@ -269,7 +269,7 @@
         opacity: 0.9;
       }
       #menu { overflow-y: auto; padding: 30px 20px; }
-      #menu-chooser { max-width: 820px; }
+      #menu-planes, #menu-settings { max-width: 820px; }
       #color-list, #time-list, #gfx-list {
         display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
       }
@@ -342,18 +342,24 @@
       <p id="menu-subtitle">fly · drift · explode · vibes</p>
       <div id="menu-main">
         <button class="menu-btn primary" id="btn-start">START GAME</button>
-        <button class="menu-btn" id="btn-choose">CHOOSE PLANE</button>
+        <button class="menu-btn" id="btn-continue" hidden>CONTINUE</button>
+        <button class="menu-btn" id="btn-planes">PLANES</button>
+        <button class="menu-btn" id="btn-settings">SETTINGS</button>
       </div>
-      <div id="menu-chooser" class="hidden">
+      <div id="menu-planes" class="hidden">
         <h2>AIRCRAFT</h2>
         <div id="plane-list"></div>
         <h3>BODY COLOR</h3>
         <div id="color-list"></div>
+        <button class="menu-btn" id="btn-back-planes">BACK</button>
+      </div>
+      <div id="menu-settings" class="hidden">
+        <h2>SETTINGS</h2>
         <h3>TIME OF DAY</h3>
         <div id="time-list"></div>
         <h3>GRAPHICS</h3>
         <div id="gfx-list"></div>
-        <button class="menu-btn" id="btn-back">BACK</button>
+        <button class="menu-btn" id="btn-back-settings">BACK</button>
       </div>
       <div id="menu-footer-hint">WASD · QE · shift/ctrl · space · R · drag mouse to look</div>
     </div>

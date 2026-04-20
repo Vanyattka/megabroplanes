@@ -83,6 +83,10 @@ export class PostFx {
     this._refreshAnyOn();
   }
 
+  setBloomStrength(s) {
+    this.bloomPass.strength = s;
+  }
+
   setVignetteEnabled(on) {
     this.vignetteEnabled = !!on;
     this.vignettePass.enabled = this.vignetteEnabled;

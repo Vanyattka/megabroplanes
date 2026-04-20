@@ -28,11 +28,18 @@ function save(loadout) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(loadout)); } catch {}
 }
 
+// Main menu now has three screens:
+//   - main (START / CONTINUE / PLANES / SETTINGS buttons)
+//   - planes (aircraft picker + body color — no time/graphics clutter)
+//   - settings (time of day + graphics quality)
+// The planes and settings pages are exposed on their own so players can
+// fiddle with either without resetting their flight.
 export class Menu {
   constructor() {
     this.root = document.getElementById('menu');
     this.main = document.getElementById('menu-main');
-    this.chooser = document.getElementById('menu-chooser');
+    this.planesScreen = document.getElementById('menu-planes');
+    this.settingsScreen = document.getElementById('menu-settings');
     this.planeList = document.getElementById('plane-list');
     this.colorList = document.getElementById('color-list');
     this.timeList = document.getElementById('time-list');
@@ -43,10 +50,11 @@ export class Menu {
     this.selectedColor = saved?.color ?? DEFAULT_BODY_COLOR;
     this.selectedTimePreset = saved?.timePreset || DEFAULT_TIME_PRESET;
 
-    this.previews = [];           // [{ type, preview }]
+    this.previews = [];
     this._previewsInitialized = false;
     this._rafId = null;
     this._lastRaf = 0;
+    this._continueAvailable = false;
 
     this._renderPlaneCards();
     this._renderColors();
@@ -54,10 +62,12 @@ export class Menu {
     this._renderGfxPresets();
     this._wireButtons();
     this.onStart = null;
+    this.onContinue = null;
     this.onChange = null;
     this.onTimeChange = null;
 
     document.body.classList.add('menu-open');
+    this._refreshMainButtons();
   }
 
   getSelection() {
@@ -84,16 +94,34 @@ export class Menu {
     this._stopRaf();
   }
 
+  setContinueAvailable(on) {
+    this._continueAvailable = !!on;
+    this._refreshMainButtons();
+  }
+
+  _refreshMainButtons() {
+    const cont = document.getElementById('btn-continue');
+    if (cont) cont.hidden = !this._continueAvailable;
+  }
+
   _showMain() {
     this.main.classList.remove('hidden');
-    this.chooser.classList.add('hidden');
+    this.planesScreen.classList.add('hidden');
+    this.settingsScreen.classList.add('hidden');
     this._stopRaf();
   }
-  _showChooser() {
+  _showPlanes() {
     this.main.classList.add('hidden');
-    this.chooser.classList.remove('hidden');
+    this.planesScreen.classList.remove('hidden');
+    this.settingsScreen.classList.add('hidden');
     this._ensurePreviews();
     this._startRaf();
+  }
+  _showSettings() {
+    this.main.classList.add('hidden');
+    this.planesScreen.classList.add('hidden');
+    this.settingsScreen.classList.remove('hidden');
+    this._stopRaf();
   }
 
   _renderPlaneCards() {
@@ -158,7 +186,7 @@ export class Menu {
     if (this._rafId != null) return;
     this._lastRaf = performance.now();
     const loop = () => {
-      if (!this.isOpen() || this.chooser.classList.contains('hidden')) {
+      if (!this.isOpen() || this.planesScreen.classList.contains('hidden')) {
         this._rafId = null;
         return;
       }
@@ -262,16 +290,27 @@ export class Menu {
   }
 
   _wireButtons() {
+    const persist = () => save({
+      type: this.selectedType,
+      color: this.selectedColor,
+      timePreset: this.selectedTimePreset,
+    });
     document.getElementById('btn-start').addEventListener('click', () => {
-      save({
-        type: this.selectedType,
-        color: this.selectedColor,
-        timePreset: this.selectedTimePreset,
-      });
+      persist();
       this.hide();
       if (this.onStart) this.onStart(this.getSelection());
     });
-    document.getElementById('btn-choose').addEventListener('click', () => this._showChooser());
-    document.getElementById('btn-back').addEventListener('click', () => this._showMain());
+    const cont = document.getElementById('btn-continue');
+    if (cont) {
+      cont.addEventListener('click', () => {
+        if (!this._continueAvailable) return;
+        this.hide();
+        if (this.onContinue) this.onContinue();
+      });
+    }
+    document.getElementById('btn-planes').addEventListener('click', () => this._showPlanes());
+    document.getElementById('btn-settings').addEventListener('click', () => this._showSettings());
+    document.getElementById('btn-back-planes').addEventListener('click', () => this._showMain());
+    document.getElementById('btn-back-settings').addEventListener('click', () => this._showMain());
   }
 }
