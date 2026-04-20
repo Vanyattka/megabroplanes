@@ -8,17 +8,17 @@ const biomeNoise2D = createNoise2D(prng);
 // Biome reference palette. `amp` scales the noise (so mountains are taller,
 // forests flatter), `offset` shifts the whole terrain vertically (lakes sink
 // below water, mountains rise above).
-// Lake center is close to the noise extreme so the dominant-lake region is a
-// small minority of the map. Non-lake biomes get raised base offsets so their
-// natural noise dips rarely cross below water level — isolated ponds instead
-// of lake fields bleeding into every biome.
+// Lake center pushed further toward the noise extreme + narrower bandwidth
+// so "pure lake" areas become rarer. Non-lake biomes get higher base offsets
+// so noise dips rarely cross below water level — isolated ponds instead of
+// every forest being marshy.
 const BIOMES = [
-  { type: 'lake',     center: 0.05, amp: 0.30, offset:  -9, trees: 0.0, rocks: 0.2 },
-  { type: 'forest',   center: 0.34, amp: 0.55, offset:   9, trees: 2.8, rocks: 0.4 },
-  { type: 'hills',    center: 0.62, amp: 1.00, offset:  12, trees: 1.0, rocks: 1.0 },
-  { type: 'mountain', center: 0.92, amp: 2.00, offset:  18, trees: 0.3, rocks: 2.5 },
+  { type: 'lake',     center: 0.02, amp: 0.35, offset: -12, trees: 0.0, rocks: 0.2 },
+  { type: 'forest',   center: 0.35, amp: 0.55, offset:  14, trees: 2.8, rocks: 0.4 },
+  { type: 'hills',    center: 0.62, amp: 1.00, offset:  16, trees: 1.0, rocks: 1.0 },
+  { type: 'mountain', center: 0.92, amp: 2.00, offset:  22, trees: 0.3, rocks: 2.5 },
 ];
-const BANDWIDTH = 0.32;
+const BANDWIDTH = 0.26;
 
 // Return blended biome params at (x, z). Every field (amp/offset/trees/rocks)
 // smoothly interpolates between the 4 named biomes based on a low-frequency

@@ -1,27 +1,32 @@
 import { Vector3 } from 'three';
 import { biomeAt } from '../world/Biome.js';
+import { seaMaskAt } from '../world/SeaMask.js';
 import { getVillage } from '../world/Villages.js';
 import { getRuin } from '../world/Ruins.js';
-import { VILLAGE_CELL_SIZE, RUIN_CELL_SIZE } from '../config.js';
+import { listRoadSegmentsNear } from '../world/Roads.js';
+import {
+  VILLAGE_CELL_SIZE,
+  RUIN_CELL_SIZE,
+  SEA_THRESHOLD_LOW,
+  SEA_THRESHOLD_HIGH,
+} from '../config.js';
 
-const WORLD_RADIUS = 900;    // meters covered from center to edge
-const GRID = 80;              // internal resolution (80×80 = 6400 biome samples)
-const UPDATE_INTERVAL = 120;  // ms between repaints — 8 fps is fine for a map
+const WORLD_RADIUS = 900;
+const GRID = 80;
+const UPDATE_INTERVAL = 120; // ms between full refreshes
 
+// Biome → base color on the map. Sea mask overrides lake for the distinct
+// deeper-blue colour so big seas read differently from little ponds.
 const TERRAIN_COLORS = {
   lake: [58, 111, 160],
   forest: [45, 85, 45],
   hills: [106, 160, 80],
   mountain: [138, 112, 96],
 };
+const SEA_COLOR = [28, 64, 116]; // deeper blue than lake biome
 const BORDER_COLOR = 'rgba(255,255,255,0.55)';
 
 const _fwd = new Vector3();
-
-function hexToRgb(hex) {
-  const n = parseInt(hex.slice(1), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
 
 export class Minimap {
   constructor(mp) {
@@ -32,7 +37,9 @@ export class Minimap {
     this.mp = mp;
     this.lastRedraw = -Infinity;
 
-    // Internal buffer for the pixelated terrain layer.
+    // Internal buffer for the pixelated terrain layer, always drawn in a
+    // north-up world-aligned frame. We rotate it at composite time so the
+    // player's triangle is always at the centre pointing straight up.
     this.terrainCanvas = document.createElement('canvas');
     this.terrainCanvas.width = GRID;
     this.terrainCanvas.height = GRID;
@@ -49,15 +56,35 @@ export class Minimap {
     const w = this.canvas.width;
     const h = this.canvas.height;
     const ctx = this.ctx;
+    ctx.clearRect(0, 0, w, h);
 
     this._redrawTerrain(plane);
+
+    _fwd.set(0, 0, -1).applyQuaternion(plane.quaternion);
+    // Compass yaw: 0 = heading north (world -Z), +π/2 = heading east (+X).
+    const yaw = Math.atan2(_fwd.x, -_fwd.z);
+
+    // Everything inside this save/restore is drawn in the world-aligned
+    // frame but rotated so the plane's forward direction becomes canvas-up.
+    ctx.save();
+    ctx.translate(w / 2, h / 2);
+    ctx.rotate(-yaw);
+    ctx.translate(-w / 2, -h / 2);
+
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(this.terrainCanvas, 0, 0, w, h);
 
+    this._drawRoads(plane);
     this._drawVillages(plane);
     this._drawRuins(plane);
     this._drawRemotes(plane);
-    this._drawPlayer(plane);
+
+    ctx.restore();
+
+    // Fixed overlays — player marker always pointing up, compass "N" placed
+    // at the edge of the map in the true-north direction.
+    this._drawPlayerMarker();
+    this._drawCompass(yaw);
 
     ctx.strokeStyle = BORDER_COLOR;
     ctx.lineWidth = 2;
@@ -67,12 +94,18 @@ export class Minimap {
   _redrawTerrain(plane) {
     const data = this.terrainImage.data;
     const wpp = (WORLD_RADIUS * 2) / GRID;
+    const seaMid = (SEA_THRESHOLD_LOW + SEA_THRESHOLD_HIGH) * 0.5;
     for (let py = 0; py < GRID; py++) {
       const wz = plane.position.z + (py - GRID / 2) * wpp;
       for (let px = 0; px < GRID; px++) {
         const wx = plane.position.x + (px - GRID / 2) * wpp;
-        const b = biomeAt(wx, wz);
-        const c = TERRAIN_COLORS[b.type] || [85, 85, 85];
+        let c;
+        if (seaMaskAt(wx, wz) > seaMid) {
+          c = SEA_COLOR;
+        } else {
+          const b = biomeAt(wx, wz);
+          c = TERRAIN_COLORS[b.type] || [85, 85, 85];
+        }
         const i = (py * GRID + px) * 4;
         data[i] = c[0];
         data[i + 1] = c[1];
@@ -92,13 +125,32 @@ export class Minimap {
     };
   }
 
-  _inside(pos) {
+  _inside(pos, pad = 2) {
     return (
-      pos.x >= 2 &&
-      pos.x <= this.canvas.width - 2 &&
-      pos.y >= 2 &&
-      pos.y <= this.canvas.height - 2
+      pos.x >= pad &&
+      pos.x <= this.canvas.width - pad &&
+      pos.y >= pad &&
+      pos.y <= this.canvas.height - pad
     );
+  }
+
+  _drawRoads(plane) {
+    const ctx = this.ctx;
+    const segs = listRoadSegmentsNear(
+      plane.position.x,
+      plane.position.z,
+      WORLD_RADIUS + 120
+    );
+    ctx.strokeStyle = 'rgba(240, 230, 200, 0.78)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for (const s of segs) {
+      const a = this._worldToCanvas(s.ax, s.az, plane);
+      const b = this._worldToCanvas(s.bx, s.bz, plane);
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+    }
+    ctx.stroke();
   }
 
   _drawVillages(plane) {
@@ -111,7 +163,10 @@ export class Minimap {
         if (!v) continue;
         const pos = this._worldToCanvas(v.airportX, v.airportZ, plane);
         if (!this._inside(pos)) continue;
-        // Runway strip: a short rectangle rotated to the airport angle.
+
+        // Runway strip — a short dark rectangle, rotated to match the
+        // airport's heading. Since we're inside the rotated-by-yaw frame,
+        // the airport angle still maps correctly to world orientation.
         ctx.save();
         ctx.translate(pos.x, pos.y);
         ctx.rotate(v.angle);
@@ -119,7 +174,7 @@ export class Minimap {
         const rlen = v.sizeName === 'city' ? 14 : 9;
         ctx.fillRect(-rlen / 2, -1.5, rlen, 3);
         ctx.restore();
-        // Settlement marker on top.
+
         const s =
           v.sizeName === 'city' ? 8 :
           v.sizeName === 'large' ? 5 :
@@ -179,27 +234,46 @@ export class Minimap {
     }
   }
 
-  _drawPlayer(plane) {
+  _drawPlayerMarker() {
     const ctx = this.ctx;
     const cx = this.canvas.width / 2;
     const cy = this.canvas.height / 2;
-    _fwd.set(0, 0, -1).applyQuaternion(plane.quaternion);
-    // Canvas up is world -Z, canvas right is world +X. A triangle drawn
-    // pointing canvas-up rotates to plane's world heading.
-    const angle = Math.atan2(_fwd.x, -_fwd.z);
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(angle);
+    // With the map rotated by -yaw, the player always looks canvas-up. No
+    // per-frame rotation on the triangle itself.
     ctx.fillStyle = '#fff2a0';
     ctx.strokeStyle = '#000';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(0, -7);
-    ctx.lineTo(5, 5);
-    ctx.lineTo(-5, 5);
+    ctx.moveTo(cx, cy - 7);
+    ctx.lineTo(cx + 5, cy + 5);
+    ctx.lineTo(cx - 5, cy + 5);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
-    ctx.restore();
+  }
+
+  _drawCompass(yaw) {
+    const ctx = this.ctx;
+    const cx = this.canvas.width / 2;
+    const cy = this.canvas.height / 2;
+    const r = Math.min(this.canvas.width, this.canvas.height) / 2 - 14;
+    // After ctx.rotate(-yaw) the displayed world-north vector sits at
+    // (sin(yaw), -cos(yaw)) on the canvas. Place the "N" badge at that edge
+    // point so the compass always points at true north regardless of
+    // heading.
+    const nx = cx + Math.sin(yaw) * r;
+    const ny = cy - Math.cos(yaw) * r;
+    ctx.fillStyle = 'rgba(200, 40, 40, 0.9)';
+    ctx.beginPath();
+    ctx.arc(nx, ny, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.65)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('N', nx, ny);
   }
 }

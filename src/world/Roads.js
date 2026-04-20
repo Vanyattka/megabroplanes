@@ -227,3 +227,28 @@ export class Roads {
     SHARED_ROAD_MAT.dispose();
   }
 }
+
+// Re-enumerate road segments around a world position without touching 3D
+// meshes. Used by the minimap to draw the same roads the chunk manager
+// builds — same deterministic pair-selection logic, just skipping the
+// ribbon geometry. Segments returned as { ax, az, bx, bz }.
+export function listRoadSegmentsNear(worldX, worldZ, radius) {
+  const cxMin = Math.floor((worldX - radius) / CHUNK_SIZE);
+  const cxMax = Math.floor((worldX + radius) / CHUNK_SIZE);
+  const czMin = Math.floor((worldZ - radius) / CHUNK_SIZE);
+  const czMax = Math.floor((worldZ + radius) / CHUNK_SIZE);
+  const out = [];
+  const seen = new Set();
+  for (let cx = cxMin; cx <= cxMax; cx++) {
+    for (let cz = czMin; cz <= czMax; cz++) {
+      for (const s of roadsOwnedByChunk(cx, cz)) {
+        // Cheap dedupe in case multi-chunk iteration doubled anything.
+        const key = `${s.ax.toFixed(0)},${s.az.toFixed(0)}->${s.bx.toFixed(0)},${s.bz.toFixed(0)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(s);
+      }
+    }
+  }
+  return out;
+}

@@ -201,6 +201,14 @@ export const MAX_ROCK_FACTOR = 2.5;             // mountain peak rock-density mu
 // Water — shader-based reflective surface. Follows the camera horizontally,
 // sized to outlast fog on all sides.
 export const WATER_LEVEL = -4;
+// Sea mask — a very low-frequency noise layer on top of the biome system.
+// Where its value is high, terrain gets pushed down by up to SEA_DEPTH, so
+// multi-kilometer seas open up regardless of per-cell biome choice. The
+// smoothstep thresholds give shores a natural curve instead of a hard edge.
+export const SEA_SCALE = 0.00016;          // feature size ~6000m
+export const SEA_THRESHOLD_LOW = 0.58;     // no sea below this mask value
+export const SEA_THRESHOLD_HIGH = 0.80;    // fully deep sea at or above
+export const SEA_DEPTH = 45;               // max extra depth in meters
 export const WATER_SIZE = 2 * VIEW_DISTANCE_CHUNKS * CHUNK_SIZE * 1.8; // roomier than the minimum so fog hides the edge
 export const WATER_COLOR_SHALLOW = 0x77c5e5;
 export const WATER_COLOR_DEEP = 0x123a5a;
