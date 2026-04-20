@@ -12,15 +12,29 @@ export class AtmosphericSky {
     this.scene = scene;
     this.mesh = new ThreeSky();
     this.mesh.scale.setScalar(FOG_FAR_MAX * 4);
-    // Preetham's HDR range is aggressive — at "normal" parameters the
-    // horizon exceeds 1.0 and blooms, producing a white wash. We run with
-    // minimum-credible values: still a blue scattered sky with warm
-    // sunrise/sunset tints, but output bounded near 1.0 so bloom leaves it
-    // alone.
+    // Preetham's HDR range is aggressive — at default parameters the sky
+    // near the sun easily exceeds 2.0 luminance, which the bloom pass then
+    // spreads across the whole upper screen. We use low parameters AND
+    // patch the shader below so even the sun-facing dome is clamped under
+    // the bloom threshold.
     this.mesh.material.uniforms.turbidity.value = 1.0;
     this.mesh.material.uniforms.rayleigh.value = 0.35;
     this.mesh.material.uniforms.mieCoefficient.value = 0.001;
     this.mesh.material.uniforms.mieDirectionalG.value = 0.70;
+
+    // Hard LDR clamp injected into the fragment shader. Preetham's native
+    // output can spike to 3+ HDR when the sun is near overhead; that
+    // reliably blooms into a whiteout regardless of how we tune the
+    // parameters. Clamp to 1.9 (just below our 2.0 bloom threshold) so the
+    // atmosphere can never contribute any bloom energy.
+    this.mesh.material.onBeforeCompile = (shader) => {
+      const src = shader.fragmentShader;
+      shader.fragmentShader = src.replace(
+        /gl_FragColor\s*=\s*vec4\(\s*retColor\s*,\s*1\.0\s*\)\s*;/,
+        'gl_FragColor = vec4( clamp(retColor, vec3(0.0), vec3(1.9)), 1.0 );'
+      );
+    };
+    this.mesh.material.needsUpdate = true;
     this.mesh.material.uniforms.sunPosition.value = new Vector3(0, 1, 0);
     this.mesh.renderOrder = -2; // draw before everything, behind gradient dome too
     this.mesh.visible = false;
