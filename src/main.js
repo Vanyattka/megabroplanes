@@ -20,11 +20,9 @@ import { Audio } from './audio/Audio.js';
 import {
   CRASH_ENABLED_DEFAULT,
   CHUNK_SIZE,
-  VIEW_DISTANCE_MIN,
-  VIEW_DISTANCE_MAX,
   VIEW_ALT_SCALE,
-  FOG_FAR_MIN,
-  FOG_FAR_MAX,
+  FOG_NEAR_FRAC,
+  FOG_FAR_FRAC,
   TIME_PRESETS,
 } from './config.js';
 import { MultiplayerClient } from './net/Client.js';
@@ -233,12 +231,17 @@ function viewDistanceFor(plane) {
 function terrainViewRadiusFor(plane) {
   return (viewDistanceFor(plane) + 0.5) * CHUNK_SIZE;
 }
+function viewMetersFor(plane) {
+  return viewDistanceFor(plane) * CHUNK_SIZE;
+}
 function fogFarFor(plane) {
-  // Smoothstep altitude shaping so the fog thickens "believably" in valleys
-  // and thins out as you climb. Visually the sweet spot is ≈ t²·(3-2t).
-  const t = altitudeT(plane.position.y);
-  const shaped = t * t * (3 - 2 * t);
-  return FOG_FAR_MIN + shaped * (FOG_FAR_MAX - FOG_FAR_MIN);
+  // Fog far tracks the current view distance — so terrain is rendered all
+  // the way up to where fog becomes opaque, and the "edge of loaded chunks"
+  // is never visible as a hard line against the sky.
+  return viewMetersFor(plane) * FOG_FAR_FRAC;
+}
+function fogNearFor(plane) {
+  return viewMetersFor(plane) * FOG_NEAR_FRAC;
 }
 
 // Prime world
@@ -300,8 +303,11 @@ function renderStep() {
       Math.sin(t) * radius
     );
     renderer.camera.lookAt(0, 12, 0);
-    const fogFar = fogFarFor({ position: { y: 50 } });
-    if (renderer.scene.fog) renderer.scene.fog.far = fogFar;
+    const menuPlane = { position: { y: 50 } };
+    if (renderer.scene.fog) {
+      renderer.scene.fog.near = fogNearFor(menuPlane);
+      renderer.scene.fog.far = fogFarFor(menuPlane);
+    }
     sky.update(renderer.camera, renderer.camera.position);
     stars.update(renderer.camera);
     water.update(renderDt, renderer.camera.position, worldTime.horizonColor);
@@ -317,8 +323,10 @@ function renderStep() {
   }
 
   chaseCamera.update(plane, input, renderDt);
-  const fogFar = fogFarFor(plane);
-  if (renderer.scene.fog) renderer.scene.fog.far = fogFar;
+  if (renderer.scene.fog) {
+    renderer.scene.fog.near = fogNearFor(plane);
+    renderer.scene.fog.far = fogFarFor(plane);
+  }
   sky.update(renderer.camera, plane.position);
   stars.update(renderer.camera);
   water.update(renderDt, plane.position, worldTime.horizonColor);

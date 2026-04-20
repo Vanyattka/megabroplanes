@@ -18,13 +18,15 @@ export const VIEW_DISTANCE_CHUNKS = 4;
 export const VIEW_DISTANCE_MIN = 4;
 export const VIEW_DISTANCE_MAX = 7;
 export const VIEW_ALT_SCALE = 600;
-// Menu-selectable chunk streaming distance, independent of graphics preset
-// so weaker GPUs can still draw sharp shadows but see less of the world.
+// Menu-selectable chunk streaming distance, independent of graphics preset.
+// Mins are now "generous" so even at ground level the horizon feels open;
+// altitude stretches a bit further. Fog range in main.js scales with these
+// so the terrain edge is always hidden exactly where fog ends.
 export const VIEW_DISTANCE_PRESETS = {
-  short:  { label: 'Short',      min: 3, max: 5  },
-  medium: { label: 'Medium',     min: 4, max: 7  },
-  high:   { label: 'High',       min: 5, max: 9  },
-  xhigh:  { label: 'Extra High', min: 6, max: 11 },
+  short:  { label: 'Short',      min: 4, max: 6  },
+  medium: { label: 'Medium',     min: 6, max: 9  },
+  high:   { label: 'High',       min: 8, max: 11 },
+  xhigh:  { label: 'Extra High', min: 10, max: 14 },
 };
 export const DEFAULT_VIEW_PRESET = 'medium';
 export const NOISE_SCALE = 0.005;
@@ -214,6 +216,13 @@ export const BIOME_SCALE = 0.0006;              // biome feature size (~1700m ac
 export const MAX_TREE_FACTOR = 2.8;             // forest peak tree-density multiplier
 export const MAX_ROCK_FACTOR = 2.5;             // mountain peak rock-density multiplier
 
+// Fog range factors — fog_near starts at VIEW_DISTANCE_M × FOG_NEAR_FRAC and
+// fades to full at VIEW_DISTANCE_M × FOG_FAR_FRAC. Keeps the terrain edge
+// tucked inside full fog regardless of preset, so you never see a hard line
+// where chunks stop.
+export const FOG_NEAR_FRAC = 0.45;
+export const FOG_FAR_FRAC = 0.92;
+
 // Water — shader-based reflective surface. Follows the camera horizontally,
 // sized to outlast fog on all sides.
 export const WATER_LEVEL = -4;
@@ -297,7 +306,9 @@ export const TREE_MAX_SLOPE = 0.35;   // tan of slope: reject steep spots
 // Camera
 export const CAMERA_FOV = 70;
 export const CAMERA_NEAR = 0.1;
-export const CAMERA_FAR = FOG_FAR_MAX * 1.5; // matches the widest fog we'll use
+// Must accommodate the widest possible preset: Extra High max = 14 chunks ×
+// CHUNK_SIZE = 1792 m. Multiplier gives headroom for clouds and sky dome.
+export const CAMERA_FAR = 14 * CHUNK_SIZE * 1.6;
 export const CAMERA_OFFSET = [0, 3, 12]; // behind and above in plane's local frame
 // Raw per-frame lerp kept for reference; the actual follow uses a dt-based
 // exponential so the camera tracks at the same rate regardless of whether a
