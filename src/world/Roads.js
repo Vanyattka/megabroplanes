@@ -1,11 +1,13 @@
 import {
   BufferAttribute,
   BufferGeometry,
+  CatmullRomCurve3,
   DoubleSide,
   Mesh,
   MeshStandardMaterial,
   Vector3,
 } from 'three';
+import alea from 'alea';
 import {
   CHUNK_SIZE,
   ROAD_WIDTH,
@@ -15,69 +17,123 @@ import {
   ROAD_MAX_SLOPE,
   ROAD_RUNWAY_DISTANCE,
   ROAD_Y_OFFSET,
+  ROAD_CURVE_CONTROLS,
+  ROAD_CURVE_AMPLITUDE,
   VILLAGE_CELL_SIZE,
   RUNWAY_LENGTH,
+  WATER_LEVEL,
 } from '../config.js';
 import { getVillage } from './Villages.js';
 import { groundHeight } from './Ground.js';
-import { biomeAt } from './Biome.js';
 
 // One MeshStandardMaterial shared across every road mesh in the world —
 // the only thing that varies per road is the BufferGeometry ribbon shape.
 const SHARED_ROAD_MAT = new MeshStandardMaterial({
   color: ROAD_COLOR,
-  roughness: 0.95,
+  roughness: 1.0,
   metalness: 0.0,
   side: DoubleSide,
 });
 
-// Build a ribbon mesh hugging the terrain from (ax,az) to (bx,bz). Returns
-// { mesh, geometry } or null if the path is unbuildable (underwater, too
-// steep, or mountain biome in the middle).
-function buildRoadMesh(ax, az, bx, bz) {
+const WATER_CLEARANCE = 1.0; // road centerline must sit this high above water
+
+// Generate a gentle deterministic curve between two village centers by
+// jittering interior control points perpendicular to the main axis, then
+// fitting a centripetal Catmull-Rom spline. Seeding by endpoint coordinates
+// keeps the same pair always producing the same curve across clients.
+function buildCurveControlPoints(ax, az, bx, bz) {
   const dx = bx - ax;
   const dz = bz - az;
   const length = Math.sqrt(dx * dx + dz * dz);
-  if (length < ROAD_SAMPLE_STEP) return null;
-  const steps = Math.max(2, Math.ceil(length / ROAD_SAMPLE_STEP));
-
+  if (length < 1) return null;
   const fx = dx / length;
   const fz = dz / length;
-  // Perpendicular in XZ plane (right-hand: cross(forward, worldUp) = (fz, 0, -fx))
-  const rx = fz;
-  const rz = -fx;
-  const halfW = ROAD_WIDTH / 2;
+  const px = fz;  // perpendicular in XZ
+  const pz = -fx;
 
-  const verts = new Float32Array((steps + 1) * 2 * 3);
-  const indices = new Uint32Array(steps * 6);
+  const prng = alea(
+    `road:${ax.toFixed(1)}:${az.toFixed(1)}:${bx.toFixed(1)}:${bz.toFixed(1)}`
+  );
 
+  const n = ROAD_CURVE_CONTROLS;
+  const maxOff = length * ROAD_CURVE_AMPLITUDE;
+  const pts = [new Vector3(ax, 0, az)];
+  for (let i = 1; i <= n; i++) {
+    const t = i / (n + 1);
+    // Bell-shaped amplitude — endpoints wiggle less than the middle so the
+    // road actually reaches the airports tangentially.
+    const bell = Math.sin(t * Math.PI);
+    const off = (prng() * 2 - 1) * maxOff * bell;
+    pts.push(
+      new Vector3(ax + dx * t + px * off, 0, az + dz * t + pz * off)
+    );
+  }
+  pts.push(new Vector3(bx, 0, bz));
+  return { points: pts, length };
+}
+
+// Evaluate the curve and validate every sample. Returns the sampled
+// centerline + per-sample tangent, or null if the route is unbuildable.
+function sampleAndValidate(controlPoints, length) {
+  const curve = new CatmullRomCurve3(controlPoints, false, 'centripetal', 0.5);
+  const approxLen = curve.getLength();
+  const steps = Math.max(2, Math.ceil(approxLen / ROAD_SAMPLE_STEP));
+  const samples = curve.getSpacedPoints(steps);
+
+  const centerline = [];
   let prevY = null;
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const cx = ax + dx * t;
-    const cz = az + dz * t;
-    const y = groundHeight(cx, cz);
-    // Reject if the centerline dips below water.
-    if (y < -4 /* WATER_LEVEL inline to keep module deps small */) return null;
-    // Reject if slope between adjacent samples is too steep.
+  for (let i = 0; i < samples.length; i++) {
+    const p = samples[i];
+    const y = groundHeight(p.x, p.z);
+    if (y < WATER_LEVEL + WATER_CLEARANCE) return null;
     if (prevY !== null) {
-      const slope = Math.abs(y - prevY) / ROAD_SAMPLE_STEP;
-      if (slope > ROAD_MAX_SLOPE) return null;
+      const segLen =
+        i > 0
+          ? Math.hypot(p.x - samples[i - 1].x, p.z - samples[i - 1].z)
+          : ROAD_SAMPLE_STEP;
+      if (segLen > 1e-4) {
+        const slope = Math.abs(y - prevY) / segLen;
+        if (slope > ROAD_MAX_SLOPE) return null;
+      }
     }
     prevY = y;
-
-    const yOff = y + ROAD_Y_OFFSET;
-    // Left side
-    verts[i * 6 + 0] = cx + rx * halfW;
-    verts[i * 6 + 1] = yOff;
-    verts[i * 6 + 2] = cz + rz * halfW;
-    // Right side
-    verts[i * 6 + 3] = cx - rx * halfW;
-    verts[i * 6 + 4] = yOff;
-    verts[i * 6 + 5] = cz - rz * halfW;
+    centerline.push({ x: p.x, z: p.z, y });
   }
 
-  for (let i = 0; i < steps; i++) {
+  // Tangents via finite differences — used to build the ribbon.
+  const tangents = [];
+  for (let i = 0; i < centerline.length; i++) {
+    const a = i === 0 ? centerline[i] : centerline[i - 1];
+    const b =
+      i === centerline.length - 1 ? centerline[i] : centerline[i + 1];
+    const tx = b.x - a.x;
+    const tz = b.z - a.z;
+    const tl = Math.hypot(tx, tz) || 1;
+    tangents.push({ x: tx / tl, z: tz / tl });
+  }
+  return { centerline, tangents };
+}
+
+function buildRibbonGeometry(centerline, tangents) {
+  const n = centerline.length;
+  const verts = new Float32Array(n * 2 * 3);
+  const indices = new Uint32Array((n - 1) * 6);
+  const halfW = ROAD_WIDTH / 2;
+
+  for (let i = 0; i < n; i++) {
+    const p = centerline[i];
+    const t = tangents[i];
+    const rx = t.z;   // perpendicular (right-hand)
+    const rz = -t.x;
+    const y = p.y + ROAD_Y_OFFSET;
+    verts[i * 6 + 0] = p.x + rx * halfW;
+    verts[i * 6 + 1] = y;
+    verts[i * 6 + 2] = p.z + rz * halfW;
+    verts[i * 6 + 3] = p.x - rx * halfW;
+    verts[i * 6 + 4] = y;
+    verts[i * 6 + 5] = p.z - rz * halfW;
+  }
+  for (let i = 0; i < n - 1; i++) {
     const a = i * 2;
     const b = i * 2 + 1;
     const c = i * 2 + 2;
@@ -89,16 +145,25 @@ function buildRoadMesh(ax, az, bx, bz) {
     indices[i * 6 + 4] = c;
     indices[i * 6 + 5] = d;
   }
+  const geom = new BufferGeometry();
+  geom.setAttribute('position', new BufferAttribute(verts, 3));
+  geom.setIndex(new BufferAttribute(indices, 1));
+  geom.computeVertexNormals();
+  return geom;
+}
 
-  const geometry = new BufferGeometry();
-  geometry.setAttribute('position', new BufferAttribute(verts, 3));
-  geometry.setIndex(new BufferAttribute(indices, 1));
-  geometry.computeVertexNormals();
-
+// Returns { mesh, geometry } or null if this pair can't be connected by a
+// road without crossing water or climbing too steep a grade.
+function buildRoadMesh(ax, az, bx, bz) {
+  const ctl = buildCurveControlPoints(ax, az, bx, bz);
+  if (!ctl) return null;
+  const s = sampleAndValidate(ctl.points, ctl.length);
+  if (!s) return null;
+  const geometry = buildRibbonGeometry(s.centerline, s.tangents);
   const mesh = new Mesh(geometry, SHARED_ROAD_MAT);
   mesh.receiveShadow = false;
   mesh.frustumCulled = false;
-  return { mesh, geometry };
+  return { mesh, geometry, centerline: s.centerline };
 }
 
 // Villages.js doesn't expose cell coords for villages (cells are what define
@@ -133,23 +198,18 @@ function roadsOwnedByChunk(cx, cz) {
   for (const [gx, gz] of cells) {
     const v = getVillage(gx, gz);
     if (!v) continue;
-    // Only own the village if its airport center lies in this chunk.
     const ocx = Math.floor(v.airportX / CHUNK_SIZE);
     const ocz = Math.floor(v.airportZ / CHUNK_SIZE);
     if (ocx !== cx || ocz !== cz) continue;
 
     const fromKey = `${gx},${gz}`;
 
-    // Neighboring villages — iterate a ring so we don't miss any within range
-    // even though cells are 1800m and ROAD_MAX_LINK_DISTANCE is 3600m.
     const ring = Math.ceil(ROAD_MAX_VILLAGE_LINK_DISTANCE / VILLAGE_CELL_SIZE);
     for (let dx = -ring; dx <= ring; dx++) {
       for (let dz = -ring; dz <= ring; dz++) {
         if (dx === 0 && dz === 0) continue;
         const n = getVillage(gx + dx, gz + dz);
         if (!n) continue;
-        // Canonical ordering: only build this road if from-cell < to-cell
-        // lexicographically. Avoids building both A→B and B→A.
         const toKey = `${gx + dx},${gz + dz}`;
         if (fromKey > toKey) continue;
         const ddx = n.airportX - v.airportX;
@@ -163,12 +223,9 @@ function roadsOwnedByChunk(cx, cz) {
       }
     }
 
-    // Spur to the home runway (0,0). Skip for the home village itself.
     if (!v.isHome) {
-      const dd2 =
-        v.airportX * v.airportX + v.airportZ * v.airportZ;
+      const dd2 = v.airportX * v.airportX + v.airportZ * v.airportZ;
       if (dd2 < ROAD_RUNWAY_DISTANCE * ROAD_RUNWAY_DISTANCE) {
-        // Pick whichever runway endpoint is closer.
         const ex1 = RUNWAY_LENGTH / 2;
         const ex2 = -RUNWAY_LENGTH / 2;
         const d1 = (v.airportX - ex1) ** 2 + v.airportZ ** 2;
@@ -181,12 +238,13 @@ function roadsOwnedByChunk(cx, cz) {
   return out;
 }
 
-// Manages per-chunk road groups. ChunkManager calls buildForChunk on load
-// and disposeForChunk on unload.
+// Per-chunk road bucket. We store both the 3D mesh entries and the raw
+// centerline points so the minimap can re-draw the exact same curves as
+// 3D space, without re-sampling from scratch.
 export class Roads {
   constructor(scene) {
     this.scene = scene;
-    this.perChunk = new Map(); // "cx,cz" → { meshes: [{mesh, geometry}] }
+    this.perChunk = new Map(); // "cx,cz" → { meshes: [{mesh, geometry, centerline}] }
   }
 
   buildForChunk(cx, cz) {
@@ -214,7 +272,6 @@ export class Roads {
     for (const { mesh, geometry } of entry.meshes) {
       this.scene.remove(mesh);
       geometry.dispose();
-      // Material is shared; do not dispose here.
     }
     this.perChunk.delete(key);
   }
@@ -228,10 +285,10 @@ export class Roads {
   }
 }
 
-// Re-enumerate road segments around a world position without touching 3D
-// meshes. Used by the minimap to draw the same roads the chunk manager
-// builds — same deterministic pair-selection logic, just skipping the
-// ribbon geometry. Segments returned as { ax, az, bx, bz }.
+// Re-enumerate road centerlines around a world position without touching
+// any 3D meshes. Used by the minimap. A road is only returned if it would
+// actually be built (same validation as buildRoadMesh) so straight "ghost"
+// lines never appear over water.
 export function listRoadSegmentsNear(worldX, worldZ, radius) {
   const cxMin = Math.floor((worldX - radius) / CHUNK_SIZE);
   const cxMax = Math.floor((worldX + radius) / CHUNK_SIZE);
@@ -242,11 +299,14 @@ export function listRoadSegmentsNear(worldX, worldZ, radius) {
   for (let cx = cxMin; cx <= cxMax; cx++) {
     for (let cz = czMin; cz <= czMax; cz++) {
       for (const s of roadsOwnedByChunk(cx, cz)) {
-        // Cheap dedupe in case multi-chunk iteration doubled anything.
         const key = `${s.ax.toFixed(0)},${s.az.toFixed(0)}->${s.bx.toFixed(0)},${s.bz.toFixed(0)}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        out.push(s);
+        const ctl = buildCurveControlPoints(s.ax, s.az, s.bx, s.bz);
+        if (!ctl) continue;
+        const v = sampleAndValidate(ctl.points, ctl.length);
+        if (!v) continue; // same rejection as the 3D build
+        out.push({ centerline: v.centerline });
       }
     }
   }

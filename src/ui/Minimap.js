@@ -141,16 +141,21 @@ export class Minimap {
       plane.position.z,
       WORLD_RADIUS + 120
     );
-    ctx.strokeStyle = 'rgba(240, 230, 200, 0.78)';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(240, 220, 180, 0.82)';
+    ctx.lineWidth = 1.3;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
     for (const s of segs) {
-      const a = this._worldToCanvas(s.ax, s.az, plane);
-      const b = this._worldToCanvas(s.bx, s.bz, plane);
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
+      if (!s.centerline || s.centerline.length < 2) continue;
+      ctx.beginPath();
+      const first = this._worldToCanvas(s.centerline[0].x, s.centerline[0].z, plane);
+      ctx.moveTo(first.x, first.y);
+      for (let i = 1; i < s.centerline.length; i++) {
+        const p = this._worldToCanvas(s.centerline[i].x, s.centerline[i].z, plane);
+        ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
     }
-    ctx.stroke();
   }
 
   _drawVillages(plane) {

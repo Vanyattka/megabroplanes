@@ -12,7 +12,9 @@ import {
   RUNWAY_MARGIN,
   RUNWAY_BLEND,
   PLANE_BOTTOM_OFFSET,
+  SEA_THRESHOLD_LOW,
 } from '../config.js';
+import { seaMaskAt } from './SeaMask.js';
 
 // Village center sits far enough from the runway that the village rect never
 // overlaps the runway's flat zone. Without this, cities (halfW=140) place
@@ -77,11 +79,32 @@ function buildVillage(gcx, gcz, isHome) {
     airportX = gcx * VILLAGE_CELL_SIZE + margin + prng() * inner;
     airportZ = gcz * VILLAGE_CELL_SIZE + margin + prng() * inner;
     angle = Math.floor(prng() * 4) * (Math.PI / 2);
+
+    // Reject cells whose airport would land in the sea. Home (0,0) is
+    // exempt so the starting airport is always reachable even if the mask
+    // happens to peak at the origin.
+    if (seaMaskAt(airportX, airportZ) >= SEA_THRESHOLD_LOW) return null;
   }
 
   // Home is always medium so spawn area feels consistent.
   const sizeName = isHome ? 'medium' : pickSize(prng);
   const size = VILLAGE_SIZES[sizeName];
+
+  // Also reject if the ring of surrounding terrain (where houses and the
+  // approach road would go) is mostly under sea. This catches villages that
+  // land on a tiny coastal spit.
+  if (!isHome) {
+    let waterHits = 0;
+    const samples = 8;
+    const ringR = Math.max(size.halfL, size.halfW, perpOffsetFor(size) + 40);
+    for (let k = 0; k < samples; k++) {
+      const a = (k / samples) * Math.PI * 2;
+      const sx = airportX + Math.cos(a) * ringR;
+      const sz = airportZ + Math.sin(a) * ringR;
+      if (seaMaskAt(sx, sz) >= SEA_THRESHOLD_LOW) waterHits++;
+    }
+    if (waterHits >= samples / 2) return null;
+  }
 
   const fx = Math.cos(angle);
   const fz = Math.sin(angle);

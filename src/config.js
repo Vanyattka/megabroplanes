@@ -348,13 +348,18 @@ export const LANDING_LIGHT_COLOR = 0xfff8cc;
 // ---------------------------------------------------------------------------
 // Roads between villages — procedural ribbons on top of terrain.
 // ---------------------------------------------------------------------------
-export const ROAD_WIDTH = 6;
-export const ROAD_COLOR = 0x4a453f;
-export const ROAD_SAMPLE_STEP = 20;                     // meters between centerline samples
+export const ROAD_WIDTH = 8;
+export const ROAD_COLOR = 0x6d5a43;                     // gravel/compacted dirt — visible from altitude
+export const ROAD_SAMPLE_STEP = 14;                     // meters between centerline samples
 export const ROAD_MAX_VILLAGE_LINK_DISTANCE = 3600;     // don't attempt roads longer than this
-export const ROAD_MAX_SLOPE = 0.55;                     // |dy| / step; higher = too steep
+export const ROAD_MAX_SLOPE = 0.42;                     // |dy| / step; higher = too steep
 export const ROAD_RUNWAY_DISTANCE = 3000;               // spur-to-home-runway threshold
-export const ROAD_Y_OFFSET = 0.18;                      // lift above ground to avoid z-fight
+export const ROAD_Y_OFFSET = 0.22;                      // lift above ground to avoid z-fight
+// Road shape: deterministic gentle curve instead of a dead-straight line.
+// N control points between the two endpoints, each offset perpendicularly
+// by up to CURVE_AMPLITUDE fraction of the total length.
+export const ROAD_CURVE_CONTROLS = 3;                   // interior control points
+export const ROAD_CURVE_AMPLITUDE = 0.12;               // fraction of length
 
 // ---------------------------------------------------------------------------
 // Audio — procedural engine + wind through the Web Audio API.
