@@ -16,7 +16,15 @@ import {
   EXPLOSION_LIFE_MAX,
 } from '../config.js';
 
-const FIRE = [0xff7a28, 0xffbf3d, 0xff5020, 0xffd36b];
+// Fire particles use HDR colors (channel values >1) so they exceed the bloom
+// threshold (2.0) and glow against both day and night skies. Debris stays
+// in LDR — they're dark shrapnel, not light.
+const FIRE_HDR = [
+  [3.2, 1.5, 0.5],    // bright orange
+  [3.4, 2.4, 0.8],    // yellow-hot
+  [3.0, 1.0, 0.4],    // deep orange
+  [3.3, 2.7, 1.3],    // ember
+];
 const DEBRIS = [0x2a2a2a, 0x444444, 0x5a3a20];
 
 const _m = new Matrix4();
@@ -100,9 +108,13 @@ export class Explosion {
         Math.random() * (EXPLOSION_LIFE_MAX - EXPLOSION_LIFE_MIN);
 
       p.isFire = Math.random() < 0.7;
-      const palette = p.isFire ? FIRE : DEBRIS;
-      const hex = palette[Math.floor(Math.random() * palette.length)];
-      this.mesh.setColorAt(i, tmp.setHex(hex));
+      if (p.isFire) {
+        const rgb = FIRE_HDR[Math.floor(Math.random() * FIRE_HDR.length)];
+        this.mesh.setColorAt(i, tmp.setRGB(rgb[0], rgb[1], rgb[2]));
+      } else {
+        const hex = DEBRIS[Math.floor(Math.random() * DEBRIS.length)];
+        this.mesh.setColorAt(i, tmp.setHex(hex));
+      }
     }
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
   }

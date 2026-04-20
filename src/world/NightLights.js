@@ -19,11 +19,14 @@ export const NAV_LIGHT_GEOM = new SphereGeometry(NAV_LIGHT_RADIUS, 8, 6);
 
 // Full-brightness reference colors kept separate so updateLights can derive
 // the current-frame color without losing the target hue to repeated
-// multiplications.
-const RUNWAY_FULL = new Color(RUNWAY_LIGHT_COLOR);
-const NAV_FULL_LEFT = new Color(NAV_LIGHT_COLOR_LEFT);
-const NAV_FULL_RIGHT = new Color(NAV_LIGHT_COLOR_RIGHT);
-const NAV_FULL_TAIL = new Color(NAV_LIGHT_COLOR_TAIL);
+// multiplications. Values are HDR (>1) so these lights actually bloom
+// when the night factor ramps them up — the bloom threshold is set to 2.0
+// and a plain lit white surface caps around 1.8, so anything below that
+// doesn't glow.
+const RUNWAY_FULL = new Color().setRGB(2.9, 2.5, 1.3);
+const NAV_FULL_LEFT = new Color().setRGB(3.2, 0.5, 0.5);
+const NAV_FULL_RIGHT = new Color().setRGB(0.5, 3.2, 0.5);
+const NAV_FULL_TAIL = new Color().setRGB(3.5, 3.5, 3.5);
 
 // Runway lights fade in via opacity — invisible during the day, glowing at
 // night. MeshBasicMaterial ignores scene lighting so they always look self-lit.

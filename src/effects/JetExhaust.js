@@ -21,9 +21,12 @@ import {
 // engine nozzle. Uses a single InstancedMesh with additive blending so the
 // trail reads as "fire" against any background.
 
-const HOT = new Color(0xffd96a);
-const MID = new Color(0xff8c2a);
-const COOL = new Color(0xff3a1a);
+// HDR exhaust colors (channel values >1) push the particles above the bloom
+// threshold so they glow — critical for the "jet afterburner" feel at night
+// and for the plume staying visible against a bright daytime sky.
+const HOT = new Color().setRGB(3.5, 2.8, 1.0);
+const MID = new Color().setRGB(3.2, 1.6, 0.5);
+const COOL = new Color().setRGB(2.6, 0.7, 0.3);
 
 const _m = new Matrix4();
 const _q = new Quaternion();

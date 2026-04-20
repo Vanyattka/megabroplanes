@@ -372,12 +372,15 @@ export const SHADOW_FRUSTUM_HALF = 560;
 export const SHADOW_CAMERA_DISTANCE = 900;
 export const SHADOW_BIAS = -0.0006;
 export const SHADOW_NORMAL_BIAS = 0.04;
-// Bloom knobs. Threshold pushed toward HDR range so only genuinely emissive
-// pixels (sun disc, runway lamps at night, explosion fire, jet exhaust) bloom
-// — the plane's lit white body should NOT halo itself under a bright sky.
+// Bloom operates purely in HDR — threshold 2.0 is above the max luminance a
+// plain lit MeshStandardMaterial can reach (~1.8 for a white object under
+// strong sun + ambient), so accidental self-blooming of the plane/terrain
+// can't happen. Everything we DO want to bloom — sun disc, runway lamps,
+// nav lights, explosion fire, jet exhaust — is boosted to HDR colors well
+// above this threshold.
 export const BLOOM_STRENGTH = 0.55;
 export const BLOOM_RADIUS = 0.75;
-export const BLOOM_THRESHOLD = 1.0;
+export const BLOOM_THRESHOLD = 2.0;
 // Vignette strength (0 = off, ~0.35 is subtle).
 export const VIGNETTE_STRENGTH = 0.32;
 // Run-time multiplier — allows speed-of-day tweaking without code edits.

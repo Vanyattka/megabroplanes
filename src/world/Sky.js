@@ -43,15 +43,13 @@ const FRAG = /* glsl */ `
     vec3 dir = normalize(vDir);
     float t = clamp(dir.y * 0.5 + 0.5, 0.0, 1.0);
     t = pow(t, 0.55);
-    vec3 col = mix(uHorizon, uZenith, t);
+    // Base sky (horizon + zenith) kept in LDR range so it never blooms.
+    vec3 col = clamp(mix(uHorizon, uZenith, t), 0.0, 0.95);
     float sd = max(dot(dir, uSunDir), 0.0);
-    // Sun sharpness lowered and multiplier clamped so the dome itself
-    // never crosses the bloom threshold — the sun still reads as bright
-    // due to the halo, but the horizon doesn't bleed out.
-    col += uSunColor * pow(sd, 800.0) * 1.4 * uSunIntensity;
-    col += uSunColor * pow(sd, 10.0) * 0.25 * uSunIntensity;
-    // Hard ceiling keeps the whole sky in LDR range.
-    col = clamp(col, 0.0, 0.95);
+    // Sun contribution is added AFTER the clamp so the tight disc can go
+    // fully HDR — that's what we want bloom to capture. Halo stays soft.
+    col += uSunColor * pow(sd, 1200.0) * 6.0 * uSunIntensity;
+    col += uSunColor * pow(sd, 10.0) * 0.35 * uSunIntensity;
     gl_FragColor = vec4(col, 1.0);
   }
 `;
