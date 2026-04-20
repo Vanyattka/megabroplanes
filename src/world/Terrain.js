@@ -93,5 +93,8 @@ export function buildChunk(cx, cz) {
   const mesh = new Mesh(geo, mat);
   mesh.position.set(chunkOriginX, 0, chunkOriginZ);
   mesh.receiveShadow = true;
+  // Terrain casts shadows on Medium/High. Skip on Low to keep the shadow
+  // pass triangle count manageable on weak GPUs.
+  mesh.castShadow = !!gfx.settings.shadowTerrain;
   return mesh;
 }

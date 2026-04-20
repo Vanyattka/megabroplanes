@@ -321,6 +321,7 @@ export const GRAPHICS_PRESETS = {
     label: 'Low',
     shadows: 0,
     shadowTrees: false,
+    shadowTerrain: false,
     shadowFrustumHalf: 360,
     bloom: false,
     bloomStrength: 0,
@@ -335,6 +336,7 @@ export const GRAPHICS_PRESETS = {
     label: 'Medium',
     shadows: 1024,
     shadowTrees: false,
+    shadowTerrain: true,   // mountains/hills throw shadows on valleys
     shadowFrustumHalf: 420,
     bloom: true,
     bloomStrength: 0.35,
@@ -349,6 +351,7 @@ export const GRAPHICS_PRESETS = {
     label: 'High',
     shadows: 4096,
     shadowTrees: true,
+    shadowTerrain: true,
     shadowFrustumHalf: 720,
     bloom: true,
     bloomStrength: 0.5,
@@ -367,8 +370,11 @@ export const DEFAULT_GFX_PRESET = 'medium';
 // Sun shadow camera tracks the plane — orthographic frustum half-size.
 export const SHADOW_FRUSTUM_HALF = 560;
 export const SHADOW_CAMERA_DISTANCE = 900;
-export const SHADOW_BIAS = -0.0006;
-export const SHADOW_NORMAL_BIAS = 0.04;
+export const SHADOW_BIAS = -0.0005;
+// Normal bias gets a bump — terrain is flat-shaded so neighbouring triangles
+// disagree sharply about their normals, which makes self-shadowing acne
+// very visible without a healthy offset along the geometric normal.
+export const SHADOW_NORMAL_BIAS = 0.08;
 // Bloom operates purely in HDR — threshold 2.0 is above the max luminance a
 // plain lit MeshStandardMaterial can reach, so accidental self-blooming of
 // the plane/terrain can't happen. Everything we DO want to bloom (sun disc,
