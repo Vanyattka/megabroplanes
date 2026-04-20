@@ -6,19 +6,33 @@ import {
 import { getVillage } from './Villages.js';
 import { buildVillageGroup, disposeVillageGroup } from './VillageMeshes.js';
 
-// Same time-budgeted streaming approach as ChunkManager — a fresh city
-// group (all houses + windows InstancedMesh + airport structures) can be
-// the single priciest build in a frame.
+// Same early-exit pattern as ChunkManager: villages only need to be
+// rechecked when the player crosses a cell boundary. In between, this
+// update is a no-op.
 export class VillageManager {
   constructor(scene) {
     this.scene = scene;
     this.active = new Map();
+    this._lastCx = NaN;
+    this._lastCz = NaN;
+    this._lastMaxSq = -1;
   }
 
   update(planePos, maxDistance = Infinity) {
     const pcx = Math.floor(planePos.x / VILLAGE_CELL_SIZE);
     const pcz = Math.floor(planePos.z / VILLAGE_CELL_SIZE);
     const maxSq = maxDistance * maxDistance;
+    if (
+      pcx === this._lastCx &&
+      pcz === this._lastCz &&
+      maxSq === this._lastMaxSq
+    ) {
+      return;
+    }
+    this._lastCx = pcx;
+    this._lastCz = pcz;
+    this._lastMaxSq = maxSq;
+
     const needed = new Set();
     const pending = [];
 
@@ -44,13 +58,12 @@ export class VillageManager {
       pending.sort((a, b) => a.d2 - b.d2);
       const tStart = performance.now();
       const deadline = tStart + VILLAGE_BUILD_BUDGET_MS;
-      let built = 0;
-      for (const p of pending) {
+      for (let i = 0; i < pending.length; i++) {
+        const p = pending[i];
+        if (i > 0 && performance.now() > deadline) break;
         const group = buildVillageGroup(p.village);
         this.scene.add(group);
         this.active.set(p.key, group);
-        built++;
-        if (built >= 1 && performance.now() > deadline) break;
       }
     }
 

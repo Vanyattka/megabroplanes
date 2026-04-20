@@ -6,12 +6,26 @@ export class RuinsManager {
   constructor(scene) {
     this.scene = scene;
     this.active = new Map();
+    this._lastCx = NaN;
+    this._lastCz = NaN;
+    this._lastMaxSq = -1;
   }
 
   update(planePos, maxDistance = Infinity) {
     const pcx = Math.floor(planePos.x / RUIN_CELL_SIZE);
     const pcz = Math.floor(planePos.z / RUIN_CELL_SIZE);
     const maxSq = maxDistance * maxDistance;
+    if (
+      pcx === this._lastCx &&
+      pcz === this._lastCz &&
+      maxSq === this._lastMaxSq
+    ) {
+      return;
+    }
+    this._lastCx = pcx;
+    this._lastCz = pcz;
+    this._lastMaxSq = maxSq;
+
     const needed = new Set();
     const pending = [];
 
@@ -35,13 +49,12 @@ export class RuinsManager {
       pending.sort((a, b) => a.d2 - b.d2);
       const tStart = performance.now();
       const deadline = tStart + RUIN_BUILD_BUDGET_MS;
-      let built = 0;
-      for (const p of pending) {
+      for (let i = 0; i < pending.length; i++) {
+        const p = pending[i];
+        if (i > 0 && performance.now() > deadline) break;
         const g = buildRuinGroup(p.ruin);
         this.scene.add(g);
         this.active.set(p.key, g);
-        built++;
-        if (built >= 1 && performance.now() > deadline) break;
       }
     }
 

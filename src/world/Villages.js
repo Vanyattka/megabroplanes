@@ -27,7 +27,7 @@ const villageCache = new Map();
 
 // Smoothstep distance from a rotated rectangle: 0 inside, 1 once further than
 // RUNWAY_BLEND from the rect, smoothstep between.
-function rectFlatFactor(x, z, cx, cz, angle, halfL, halfW) {
+export function rectFlatFactor(x, z, cx, cz, angle, halfL, halfW) {
   const dx = x - cx;
   const dz = z - cz;
   const c = Math.cos(-angle);
@@ -255,7 +255,7 @@ export function getVillage(gcx, gcz) {
   return v;
 }
 
-function airportFlatFactorFor(x, z, v) {
+export function airportFlatFactorFor(x, z, v) {
   const halfL = RUNWAY_LENGTH / 2 + RUNWAY_MARGIN;
   const halfW = RUNWAY_WIDTH / 2 + RUNWAY_MARGIN;
   const fA = rectFlatFactor(x, z, v.airportX, v.airportZ, v.angle, halfL, halfW);
@@ -277,6 +277,58 @@ export function villageFlatFactor(x, z) {
       if (f < minF) minF = f;
       if (minF === 0) return 0;
     }
+  }
+  return minF;
+}
+
+// Hot path for terrain chunk builds: given a chunk's world rect, return the
+// short list of villages whose influence actually reaches it. Usually 0
+// entries (no village near), occasionally 1–2. Per-vertex flat-factor can
+// then iterate only those villages instead of doing a full 3×3 cell lookup
+// 1089 times per chunk.
+export function villagesAffectingArea(minX, maxX, minZ, maxZ) {
+  // Smoothstep blend of RUNWAY_BLEND extends the influence past the runway
+  // rect, so include a full blend margin.
+  const pcxMin = Math.floor((minX - RUNWAY_BLEND) / VILLAGE_CELL_SIZE);
+  const pcxMax = Math.floor((maxX + RUNWAY_BLEND) / VILLAGE_CELL_SIZE);
+  const pczMin = Math.floor((minZ - RUNWAY_BLEND) / VILLAGE_CELL_SIZE);
+  const pczMax = Math.floor((maxZ + RUNWAY_BLEND) / VILLAGE_CELL_SIZE);
+  const out = [];
+  for (let gcx = pcxMin; gcx <= pcxMax; gcx++) {
+    for (let gcz = pczMin; gcz <= pczMax; gcz++) {
+      const v = getVillage(gcx, gcz);
+      if (!v) continue;
+      // Quick AABB reject — is the village's max reach (village rect +
+      // runway blend) even close to the chunk bbox?
+      const rHalfL = Math.max(
+        RUNWAY_LENGTH / 2 + RUNWAY_MARGIN,
+        v.villageRect.halfL
+      ) + RUNWAY_BLEND;
+      const rHalfW = Math.max(
+        RUNWAY_WIDTH / 2 + RUNWAY_MARGIN,
+        v.villageRect.halfW
+      ) + RUNWAY_BLEND;
+      const vMinX = v.airportX - rHalfL;
+      const vMaxX = v.airportX + rHalfL;
+      const vMinZ = v.airportZ - rHalfW;
+      const vMaxZ = v.airportZ + rHalfW;
+      if (vMaxX < minX || vMinX > maxX || vMaxZ < minZ || vMinZ > maxZ) continue;
+      out.push(v);
+    }
+  }
+  return out;
+}
+
+// Flat factor using a precomputed village list — same math, zero cell
+// lookups per call. Typical chunks pass an empty list and this returns 1
+// immediately.
+export function villageFlatFactorFromList(x, z, villages) {
+  if (villages.length === 0) return 1;
+  let minF = 1;
+  for (let i = 0; i < villages.length; i++) {
+    const f = airportFlatFactorFor(x, z, villages[i]);
+    if (f < minF) minF = f;
+    if (minF === 0) return 0;
   }
   return minF;
 }

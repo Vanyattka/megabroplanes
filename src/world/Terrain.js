@@ -8,8 +8,15 @@ import {
   CHUNK_SIZE,
   CHUNK_RESOLUTION,
   SLOPE_ROCK_THRESHOLD,
+  WATER_LEVEL,
+  SEA_THRESHOLD_LOW,
+  SEA_THRESHOLD_HIGH,
+  SEA_DEPTH,
 } from '../config.js';
-import { groundHeight } from './Ground.js';
+import { heightAt as noiseHeightAt } from './Noise.js';
+import { biomeAt } from './Biome.js';
+import { seaMaskAt } from './SeaMask.js';
+import { villagesAffectingArea, villageFlatFactorFromList } from './Villages.js';
 import { gfx } from '../ui/GraphicsSettings.js';
 
 const ROCK = [0.48, 0.44, 0.40];
@@ -30,6 +37,36 @@ function vertexHash(x, z) {
   return s - Math.floor(s);
 }
 
+function smoothstep01(edge0, edge1, x) {
+  if (x <= edge0) return 0;
+  if (x >= edge1) return 1;
+  const t = (x - edge0) / (edge1 - edge0);
+  return t * t * (3 - 2 * t);
+}
+
+// Inline fast-path groundHeight that takes a precomputed village list.
+// Avoids the per-vertex 3×3 cell lookup that Ground.groundHeight does —
+// biggest single win for chunks far from any village (most of them).
+function groundHeightFast(x, z, villages) {
+  const f = villageFlatFactorFromList(x, z, villages);
+  if (f === 0) return 0;
+  const b = biomeAt(x, z);
+  let h = noiseHeightAt(x, z) * b.amp + b.offset;
+  const seaStrength = smoothstep01(
+    SEA_THRESHOLD_LOW,
+    SEA_THRESHOLD_HIGH,
+    seaMaskAt(x, z)
+  );
+  h -= seaStrength * SEA_DEPTH;
+  if (b.type !== 'lake' && seaStrength < 0.3) {
+    const LAND_FLOOR = WATER_LEVEL + 2;
+    if (h < LAND_FLOOR) {
+      h = LAND_FLOOR - 3 * (1 - Math.exp((h - LAND_FLOOR) / 20));
+    }
+  }
+  return h * f;
+}
+
 export function buildChunk(cx, cz) {
   const geo = new PlaneGeometry(
     CHUNK_SIZE,
@@ -43,10 +80,19 @@ export function buildChunk(cx, cz) {
   const chunkOriginX = cx * CHUNK_SIZE + CHUNK_SIZE / 2;
   const chunkOriginZ = cz * CHUNK_SIZE + CHUNK_SIZE / 2;
 
+  // Precompute villages that actually touch this chunk's area. Usually 0;
+  // sometimes 1–2 near a settlement. Saves 9 × 1089 = ~10k wasted cell
+  // lookups per chunk when we're out in open terrain.
+  const minX = chunkOriginX - CHUNK_SIZE / 2;
+  const maxX = chunkOriginX + CHUNK_SIZE / 2;
+  const minZ = chunkOriginZ - CHUNK_SIZE / 2;
+  const maxZ = chunkOriginZ + CHUNK_SIZE / 2;
+  const villages = villagesAffectingArea(minX, maxX, minZ, maxZ);
+
   for (let i = 0; i < positions.count; i++) {
     const worldX = chunkOriginX + positions.getX(i);
     const worldZ = chunkOriginZ + positions.getZ(i);
-    positions.setY(i, groundHeight(worldX, worldZ));
+    positions.setY(i, groundHeightFast(worldX, worldZ, villages));
   }
 
   geo.computeVertexNormals();
