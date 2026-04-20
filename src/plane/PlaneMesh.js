@@ -115,31 +115,39 @@ export function buildPlaneMesh(type = DEFAULT_PLANE_TYPE, colorHex = DEFAULT_BOD
   const group = new Group();
   const body = bodyMaterial(colorHex);
 
-  const fuselage = new Mesh(g.fuselage, body);
+  // All solid plane parts cast shadows; nav/light meshes are added later
+  // without shadows to keep their additive look clean.
+  const enableShadows = (m) => {
+    m.castShadow = true;
+    m.receiveShadow = true;
+    return m;
+  };
+
+  const fuselage = enableShadows(new Mesh(g.fuselage, body));
   group.add(fuselage);
 
-  const wing = new Mesh(g.wing, body);
+  const wing = enableShadows(new Mesh(g.wing, body));
   wing.position.set(0, g.wingY, g.wingZ);
   group.add(wing);
 
   // Elevator — entire horizontal tail rotates about its leading edge for pitch.
-  const elevator = new Mesh(g.elevator, body);
+  const elevator = enableShadows(new Mesh(g.elevator, body));
   elevator.position.set(0, g.elevatorY, g.elevatorZ);
   elevator.name = 'elevator';
   group.add(elevator);
 
   // Rudder — entire vertical tail rotates about its leading edge for yaw.
-  const rudder = new Mesh(g.rudder, ACCENT_MAT);
+  const rudder = enableShadows(new Mesh(g.rudder, ACCENT_MAT));
   rudder.position.set(0, g.rudderY, g.rudderZ);
   rudder.name = 'rudder';
   group.add(rudder);
 
-  const cockpit = new Mesh(g.cockpit, DARK_MAT);
+  const cockpit = enableShadows(new Mesh(g.cockpit, DARK_MAT));
   cockpit.position.set(0, g.cockpitY, g.cockpitZ);
   group.add(cockpit);
 
   if (type === 'jet') {
-    const engine = new Mesh(g.engine, DARK_MAT);
+    const engine = enableShadows(new Mesh(g.engine, DARK_MAT));
     engine.position.set(0, 0, g.engineZ);
     group.add(engine);
   } else {

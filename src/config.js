@@ -300,6 +300,63 @@ export const TIME_PRESETS = {
   night:   { label: 'Night',   t: 0.0  },
 };
 export const DEFAULT_TIME_PRESET = 'auto';
+
+// Graphics presets — picked from the main menu, persisted in localStorage.
+// Each preset collapses a handful of individual toggles into a single choice
+// so players on weaker GPUs can drop quality without hunting in sub-menus.
+export const GRAPHICS_PRESETS = {
+  low: {
+    label: 'Low',
+    shadows: 0,           // shadow map size; 0 = disabled
+    shadowTrees: false,   // instanced tree/rock cast shadows
+    bloom: false,
+    vignette: false,
+    atmoSky: false,
+    contactShadows: false,
+    terrainDetail: false,
+    pixelRatio: 1.0,
+    toneMappingExposure: 1.0,
+  },
+  medium: {
+    label: 'Medium',
+    shadows: 1024,
+    shadowTrees: false,
+    bloom: true,
+    vignette: true,
+    atmoSky: true,
+    contactShadows: true,
+    terrainDetail: true,
+    pixelRatio: 1.0,
+    toneMappingExposure: 1.0,
+  },
+  high: {
+    label: 'High',
+    shadows: 2048,
+    shadowTrees: true,
+    bloom: true,
+    vignette: true,
+    atmoSky: true,
+    contactShadows: true,
+    terrainDetail: true,
+    pixelRatio: Math.min(
+      typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1,
+      1.5
+    ),
+    toneMappingExposure: 1.0,
+  },
+};
+export const DEFAULT_GFX_PRESET = 'medium';
+// Sun shadow camera tracks the plane — orthographic frustum half-size.
+export const SHADOW_FRUSTUM_HALF = 560;
+export const SHADOW_CAMERA_DISTANCE = 900;
+export const SHADOW_BIAS = -0.0006;
+export const SHADOW_NORMAL_BIAS = 0.04;
+// Bloom knobs.
+export const BLOOM_STRENGTH = 0.55;
+export const BLOOM_RADIUS = 0.75;
+export const BLOOM_THRESHOLD = 0.82;
+// Vignette strength (0 = off, ~0.35 is subtle).
+export const VIGNETTE_STRENGTH = 0.32;
 // Run-time multiplier — allows speed-of-day tweaking without code edits.
 export const DAY_TIME_MULT = 1.0;
 // Keyframes interpolated (in t order) to colour the sky, fog, and lights.

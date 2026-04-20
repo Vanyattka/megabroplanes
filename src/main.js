@@ -35,6 +35,8 @@ import { Menu } from './ui/Menu.js';
 import { Plane } from './plane/Plane.js';
 import { ChaseCamera } from './camera/ChaseCamera.js';
 import { Hud } from './ui/Hud.js';
+import { PostFx } from './effects/PostFx.js';
+import { gfx } from './ui/GraphicsSettings.js';
 
 const renderer = new Renderer();
 const clock = new Clock();
@@ -62,6 +64,26 @@ const clouds = new Clouds(renderer.scene);
 const plane = new Plane(renderer.scene);
 // Hidden initially — menu state will animate an orbit camera over the world.
 plane.mesh.visible = false;
+
+// Post-processing pipeline — bloom + vignette on top of the render pass.
+const postfx = new PostFx(renderer.renderer, renderer.scene, renderer.camera);
+window.addEventListener('resize', () => {
+  postfx.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Apply graphics-settings changes across the subsystems that care. Tree
+// shadows and terrain detail noise are only applied to *new* chunks — old
+// chunks keep their existing look until they unload, which is fine.
+function applyGfx(settings) {
+  renderer.renderer.setPixelRatio(settings.pixelRatio);
+  renderer.renderer.toneMappingExposure = settings.toneMappingExposure;
+  sky.setShadowMapSize(settings.shadows);
+  sky.setAtmospheric(settings.atmoSky);
+  postfx.setBloomEnabled(settings.bloom);
+  postfx.setVignetteEnabled(settings.vignette);
+}
+applyGfx(gfx.settings);
+gfx.onChange(applyGfx);
 
 const sharedShadowTex = makeShadowTexture();
 const planeShadow = new PlaneShadow(renderer.scene, sharedShadowTex);
@@ -193,8 +215,11 @@ function terrainViewRadiusFor(plane) {
   return (viewDistanceFor(plane) + 0.5) * CHUNK_SIZE;
 }
 function fogFarFor(plane) {
+  // Smoothstep altitude shaping so the fog thickens "believably" in valleys
+  // and thins out as you climb. Visually the sweet spot is ≈ t²·(3-2t).
   const t = altitudeT(plane.position.y);
-  return FOG_FAR_MIN + t * (FOG_FAR_MAX - FOG_FAR_MIN);
+  const shaped = t * t * (3 - 2 * t);
+  return FOG_FAR_MIN + shaped * (FOG_FAR_MAX - FOG_FAR_MIN);
 }
 
 // Prime world
@@ -258,7 +283,7 @@ function renderStep() {
     renderer.camera.lookAt(0, 12, 0);
     const fogFar = fogFarFor({ position: { y: 50 } });
     if (renderer.scene.fog) renderer.scene.fog.far = fogFar;
-    sky.update(renderer.camera);
+    sky.update(renderer.camera, renderer.camera.position);
     stars.update(renderer.camera);
     water.update(renderDt, renderer.camera.position, worldTime.horizonColor);
     clouds.update(
@@ -268,14 +293,14 @@ function renderStep() {
       renderer.camera,
       worldTime.horizonColor
     );
-    renderer.render();
+    postfx.render();
     return;
   }
 
   chaseCamera.update(plane, input, renderDt);
   const fogFar = fogFarFor(plane);
   if (renderer.scene.fog) renderer.scene.fog.far = fogFar;
-  sky.update(renderer.camera);
+  sky.update(renderer.camera, plane.position);
   stars.update(renderer.camera);
   water.update(renderDt, plane.position, worldTime.horizonColor);
   clouds.update(
@@ -298,7 +323,7 @@ function renderStep() {
     airspeed: plane.velocity.length(),
   });
 
-  renderer.render();
+  postfx.render();
   hud.update(plane);
   minimap.update(plane);
 }

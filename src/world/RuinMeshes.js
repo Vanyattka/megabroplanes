@@ -18,6 +18,12 @@ function pickMat(prng) {
   return stoneMats[Math.floor(prng() * stoneMats.length)];
 }
 
+function shadowed(m) {
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
+}
+
 export function buildRuinGroup(ruin) {
   const group = new Group();
   const prng = alea(ruin.seed);
@@ -25,10 +31,10 @@ export function buildRuinGroup(ruin) {
   // Main tower — partial, always present.
   const towerSide = 2.4 + prng() * 1.2;
   const towerH = 5 + prng() * 5;
-  const tower = new Mesh(
+  const tower = shadowed(new Mesh(
     new BoxGeometry(towerSide, towerH, towerSide),
     pickMat(prng)
-  );
+  ));
   tower.position.set(0, towerH / 2, 0);
   tower.rotation.y = (prng() - 0.5) * 0.3;
   group.add(tower);
@@ -36,10 +42,10 @@ export function buildRuinGroup(ruin) {
   // Broken top chunk leaning off the tower.
   if (prng() < 0.75) {
     const chunkH = 1 + prng() * 1.5;
-    const chunk = new Mesh(
+    const chunk = shadowed(new Mesh(
       new BoxGeometry(towerSide * 0.65, chunkH, towerSide * 0.65),
       pickMat(prng)
-    );
+    ));
     chunk.position.set(
       (prng() - 0.5) * 1.5,
       towerH + chunkH / 2 - 0.3,
@@ -57,10 +63,10 @@ export function buildRuinGroup(ruin) {
     const r = 5 + prng() * 3.5;
     const wallLen = 2 + prng() * 3.5;
     const wallH = 1.5 + prng() * 2.2;
-    const wall = new Mesh(
+    const wall = shadowed(new Mesh(
       new BoxGeometry(wallLen, wallH, 0.7),
       pickMat(prng)
-    );
+    ));
     wall.position.set(Math.cos(theta) * r, wallH / 2, Math.sin(theta) * r);
     wall.rotation.y = theta + Math.PI / 2;
     wall.rotation.z = (prng() - 0.5) * 0.18;
@@ -73,10 +79,10 @@ export function buildRuinGroup(ruin) {
     const theta = prng() * Math.PI * 2;
     const r = 2.5 + prng() * 5.5;
     const size = 0.5 + prng() * 0.8;
-    const rubble = new Mesh(
+    const rubble = shadowed(new Mesh(
       new BoxGeometry(size * 1.5, size, size * 1.2),
       pickMat(prng)
-    );
+    ));
     rubble.position.set(Math.cos(theta) * r, size / 2, Math.sin(theta) * r);
     rubble.rotation.y = prng() * Math.PI;
     rubble.rotation.x = (prng() - 0.5) * 0.3;
@@ -90,8 +96,6 @@ export function buildRuinGroup(ruin) {
 }
 
 export function disposeRuinGroup(group) {
-  // Geometries are unique per ruin — dispose them. Materials are shared and
-  // must stay alive.
   group.traverse((obj) => {
     if (obj.isMesh && obj.geometry) obj.geometry.dispose();
   });

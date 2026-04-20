@@ -10,6 +10,7 @@ import {
   SLOPE_ROCK_THRESHOLD,
 } from '../config.js';
 import { groundHeight } from './Ground.js';
+import { gfx } from '../ui/GraphicsSettings.js';
 
 const ROCK = [0.48, 0.44, 0.40];
 
@@ -19,6 +20,14 @@ function colorByHeight(y) {
   if (y < 25) return [0.40, 0.48, 0.30];      // darker grass
   if (y < 40) return [0.55, 0.52, 0.45];      // scrub
   return [0.96, 0.96, 0.96];                  // snow
+}
+
+// Deterministic per-vertex hash in [0, 1). Used to perturb vertex colors
+// so each triangle reads as slightly different grass/rock instead of one
+// flat biome band.
+function vertexHash(x, z) {
+  const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
+  return s - Math.floor(s);
 }
 
 export function buildChunk(cx, cz) {
@@ -42,10 +51,12 @@ export function buildChunk(cx, cz) {
 
   geo.computeVertexNormals();
 
-  // Color after normals so we can bias toward rock on steep slopes.
+  const detail = !!gfx.settings.terrainDetail;
   const normals = geo.attributes.normal;
   const colors = new Float32Array(positions.count * 3);
   for (let i = 0; i < positions.count; i++) {
+    const x = positions.getX(i);
+    const z = positions.getZ(i);
     const y = positions.getY(i);
     const ny = normals.getY(i);
     let rgb;
@@ -54,9 +65,21 @@ export function buildChunk(cx, cz) {
     } else {
       rgb = colorByHeight(y);
     }
-    colors[i * 3] = rgb[0];
-    colors[i * 3 + 1] = rgb[1];
-    colors[i * 3 + 2] = rgb[2];
+    let r = rgb[0], g = rgb[1], b = rgb[2];
+    if (detail) {
+      // Two hashes per vertex for slightly anisotropic jitter — breaks up
+      // per-triangle banding. Kept small (~±5%) so the biome palette still
+      // reads clearly.
+      const h1 = vertexHash(chunkOriginX + x, chunkOriginZ + z) - 0.5;
+      const h2 = vertexHash(chunkOriginX + x + 17.3, chunkOriginZ + z - 9.7) - 0.5;
+      const jitter = h1 * 0.09 + h2 * 0.05;
+      r = Math.max(0, Math.min(1, r + jitter * 0.6));
+      g = Math.max(0, Math.min(1, g + jitter));
+      b = Math.max(0, Math.min(1, b + jitter * 0.5));
+    }
+    colors[i * 3] = r;
+    colors[i * 3 + 1] = g;
+    colors[i * 3 + 2] = b;
   }
   geo.setAttribute('color', new BufferAttribute(colors, 3));
 
@@ -69,5 +92,6 @@ export function buildChunk(cx, cz) {
 
   const mesh = new Mesh(geo, mat);
   mesh.position.set(chunkOriginX, 0, chunkOriginZ);
+  mesh.receiveShadow = true;
   return mesh;
 }

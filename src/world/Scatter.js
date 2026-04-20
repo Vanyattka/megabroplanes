@@ -27,6 +27,7 @@ import {
   MAX_ROCK_FACTOR,
   WATER_LEVEL,
 } from '../config.js';
+import { gfx } from '../ui/GraphicsSettings.js';
 
 // Shared geometries and materials — one set for the whole world. Do not
 // dispose per-chunk; only dispose the per-chunk InstancedMesh instance buffer.
@@ -89,6 +90,11 @@ export function buildScatter(cx, cz) {
   if (treeMatrices.length > 0) {
     const trunks = new InstancedMesh(trunkGeom, trunkMat, treeMatrices.length);
     const tops = new InstancedMesh(topGeom, topMat, treeMatrices.length);
+    const castTreeShadows = !!gfx.settings.shadowTrees;
+    trunks.castShadow = castTreeShadows;
+    trunks.receiveShadow = true;
+    tops.castShadow = castTreeShadows;
+    tops.receiveShadow = true;
     for (let i = 0; i < treeMatrices.length; i++) {
       trunks.setMatrixAt(i, treeMatrices[i]);
       tops.setMatrixAt(i, treeMatrices[i]);
@@ -121,6 +127,8 @@ export function buildScatter(cx, cz) {
 
   if (rockMatrices.length > 0) {
     const rocks = new InstancedMesh(rockGeom, rockMat, rockMatrices.length);
+    rocks.castShadow = !!gfx.settings.shadowTrees;
+    rocks.receiveShadow = true;
     for (let i = 0; i < rockMatrices.length; i++) {
       rocks.setMatrixAt(i, rockMatrices[i]);
     }

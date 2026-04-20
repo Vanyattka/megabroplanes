@@ -4,6 +4,7 @@ import {
   InstancedMesh,
   Matrix4,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   PlaneGeometry,
   Quaternion,
@@ -21,6 +22,8 @@ import { getRunwayMaterial } from './Runway.js';
 import { groundHeight } from './Ground.js';
 import { buildPlaneMesh } from '../plane/PlaneMesh.js';
 import { RUNWAY_LIGHT_GEOM, runwayLightMat } from './NightLights.js';
+import { makeShadowTexture } from './Shadow.js';
+import { gfx } from '../ui/GraphicsSettings.js';
 
 // ---------------------------------------------------------------------------
 // Shared geometries (module-level, never disposed per chunk). Each variant's
@@ -217,6 +220,20 @@ function roofGeomFor(v) {
 // ---------------------------------------------------------------------------
 // Building
 
+// Shared textured disc placed under every house when contact shadows are
+// enabled. This is the "fake AO" that makes each building feel planted on
+// the ground even when the sun shadow map can't reach it (e.g. low graphics
+// preset) or when it's occluded by the building itself.
+const CONTACT_SHADOW_GEOM = new PlaneGeometry(1, 1);
+CONTACT_SHADOW_GEOM.rotateX(-Math.PI / 2);
+const contactShadowTex = makeShadowTexture();
+const contactShadowMat = new MeshBasicMaterial({
+  map: contactShadowTex,
+  transparent: true,
+  depthWrite: false,
+  opacity: 0.55,
+});
+
 function buildHouse(house, prng) {
   const g = new Group();
   const v = house.variant;
@@ -226,8 +243,14 @@ function buildHouse(house, prng) {
   const wallMat = wallPool[Math.floor(prng() * wallPool.length)];
   const roofMat = roofPool[Math.floor(prng() * roofPool.length)];
 
-  g.add(new Mesh(wallsGeomFor(v), wallMat));
-  g.add(new Mesh(roofGeomFor(v), roofMat));
+  const walls = new Mesh(wallsGeomFor(v), wallMat);
+  walls.castShadow = true;
+  walls.receiveShadow = true;
+  g.add(walls);
+  const roof = new Mesh(roofGeomFor(v), roofMat);
+  roof.castShadow = true;
+  roof.receiveShadow = true;
+  g.add(roof);
 
   const door = new Mesh(geom.door, doorMat);
   door.position.set(0, 0, dims.frontZ);
@@ -237,6 +260,18 @@ function buildHouse(house, prng) {
     const chim = new Mesh(geom.chimney, chimneyMat);
     chim.position.set(dims.chimney.x, dims.chimney.y, dims.chimney.z);
     g.add(chim);
+  }
+
+  // Contact shadow disc stamped under the footprint. Slightly larger than
+  // the house so the soft edge spills out naturally.
+  if (gfx.settings.contactShadows) {
+    const contact = new Mesh(CONTACT_SHADOW_GEOM, contactShadowMat);
+    const sx = dims.halfX * 2 + 2.5;
+    const sz = dims.halfZ * 2 + 2.5;
+    contact.scale.set(sx, 1, sz);
+    contact.position.y = 0.08;
+    contact.renderOrder = 1;
+    g.add(contact);
   }
   return g;
 }
@@ -304,20 +339,22 @@ function buildAirportStructures(village) {
     };
   }
 
+  const shadowed = (m) => { m.castShadow = true; m.receiveShadow = true; return m; };
+
   // Terminal with a control tower on top.
   {
     const p = worldPos(-210, 42);
-    const terminal = new Mesh(airportGeom.terminal, terminalMat);
+    const terminal = shadowed(new Mesh(airportGeom.terminal, terminalMat));
     terminal.position.set(p.x, 0, p.z);
     terminal.rotation.y = village.angle;
     out.push(terminal);
 
-    const tower = new Mesh(airportGeom.tower, terminalMat);
+    const tower = shadowed(new Mesh(airportGeom.tower, terminalMat));
     tower.position.set(p.x, 5, p.z);
     tower.rotation.y = village.angle;
     out.push(tower);
 
-    const towerTop = new Mesh(airportGeom.towerTop, towerAccentMat);
+    const towerTop = shadowed(new Mesh(airportGeom.towerTop, towerAccentMat));
     towerTop.position.set(p.x, 10, p.z);
     towerTop.rotation.y = village.angle;
     out.push(towerTop);
@@ -326,7 +363,7 @@ function buildAirportStructures(village) {
   // Hangar alongside the terminal.
   {
     const p = worldPos(-160, 50);
-    const hangar = new Mesh(airportGeom.hangar, hangarMat);
+    const hangar = shadowed(new Mesh(airportGeom.hangar, hangarMat));
     hangar.position.set(p.x, 0, p.z);
     hangar.rotation.y = village.angle;
     out.push(hangar);

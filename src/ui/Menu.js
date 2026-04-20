@@ -5,8 +5,10 @@ import {
   DEFAULT_BODY_COLOR,
   TIME_PRESETS,
   DEFAULT_TIME_PRESET,
+  GRAPHICS_PRESETS,
 } from '../config.js';
 import { PlanePreview } from './PlanePreview.js';
+import { gfx } from './GraphicsSettings.js';
 
 const STORAGE_KEY = 'mbp:loadout';
 
@@ -34,6 +36,7 @@ export class Menu {
     this.planeList = document.getElementById('plane-list');
     this.colorList = document.getElementById('color-list');
     this.timeList = document.getElementById('time-list');
+    this.gfxList = document.getElementById('gfx-list');
 
     const saved = loadSaved();
     this.selectedType = saved?.type || DEFAULT_PLANE_TYPE;
@@ -48,6 +51,7 @@ export class Menu {
     this._renderPlaneCards();
     this._renderColors();
     this._renderTimePresets();
+    this._renderGfxPresets();
     this._wireButtons();
     this.onStart = null;
     this.onChange = null;
@@ -220,6 +224,30 @@ export class Menu {
     if (!this.timeList) return;
     for (const b of this.timeList.querySelectorAll('.time-btn')) {
       b.classList.toggle('selected', b.dataset.preset === this.selectedTimePreset);
+    }
+  }
+
+  _renderGfxPresets() {
+    if (!this.gfxList) return;
+    this.gfxList.innerHTML = '';
+    const current = gfx.preset;
+    for (const key of Object.keys(GRAPHICS_PRESETS)) {
+      const p = GRAPHICS_PRESETS[key];
+      const btn = document.createElement('button');
+      btn.className = 'time-btn' + (key === current ? ' selected' : '');
+      btn.dataset.gfx = key;
+      btn.textContent = p.label.toUpperCase();
+      btn.addEventListener('click', () => {
+        gfx.set(key);
+        this._updateGfxPresets();
+      });
+      this.gfxList.appendChild(btn);
+    }
+  }
+  _updateGfxPresets() {
+    if (!this.gfxList) return;
+    for (const b of this.gfxList.querySelectorAll('.time-btn')) {
+      b.classList.toggle('selected', b.dataset.gfx === gfx.preset);
     }
   }
 

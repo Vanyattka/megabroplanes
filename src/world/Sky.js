@@ -4,6 +4,7 @@ import {
   Color,
   DirectionalLight,
   Mesh,
+  Object3D,
   ShaderMaterial,
   SphereGeometry,
   Vector3,
@@ -14,7 +15,13 @@ import {
   ZENITH_COLOR,
   SUN_DIRECTION,
   SUN_COLOR,
+  SHADOW_FRUSTUM_HALF,
+  SHADOW_CAMERA_DISTANCE,
+  SHADOW_BIAS,
+  SHADOW_NORMAL_BIAS,
 } from '../config.js';
+import { worldTime } from './WorldTime.js';
+import { AtmosphericSky } from './AtmosphericSky.js';
 
 const VERT = /* glsl */ `
   varying vec3 vDir;
@@ -84,12 +91,75 @@ export class Sky {
 
     this.sun = new DirectionalLight(0xfff1c8, 1.1);
     this.sun.position.copy(sunDir).multiplyScalar(500);
+    // Shadow camera — tight ortho frustum that follows the plane. Configured
+    // up front so the only per-frame work is moving position + target.
+    this.sun.shadow.mapSize.set(1024, 1024);
+    this.sun.shadow.camera.near = 0.5;
+    this.sun.shadow.camera.far = SHADOW_CAMERA_DISTANCE * 2.2;
+    this.sun.shadow.camera.left = -SHADOW_FRUSTUM_HALF;
+    this.sun.shadow.camera.right = SHADOW_FRUSTUM_HALF;
+    this.sun.shadow.camera.top = SHADOW_FRUSTUM_HALF;
+    this.sun.shadow.camera.bottom = -SHADOW_FRUSTUM_HALF;
+    this.sun.shadow.bias = SHADOW_BIAS;
+    this.sun.shadow.normalBias = SHADOW_NORMAL_BIAS;
+    this.sun.shadow.camera.updateProjectionMatrix();
+    // The DirectionalLight needs its `target` added to the scene if we want
+    // to move it each frame — otherwise the shadow camera ignores target
+    // updates after the first frame.
+    this.sunTarget = new Object3D();
+    scene.add(this.sunTarget);
+    this.sun.target = this.sunTarget;
     scene.add(this.sun);
+    this._sunDir = sunDir.clone();
+
+    // Optional atmospheric dome — enabled by the graphics settings. When
+    // visible, it sits behind the gradient dome, which we hide so only the
+    // atmospheric version drives the sky.
+    this.atmospheric = new AtmosphericSky(scene);
+    this._atmoEnabled = false;
+  }
+
+  setAtmospheric(on) {
+    this._atmoEnabled = !!on;
+    this.atmospheric.setEnabled(this._atmoEnabled);
+    // The gradient dome is skipped when atmospheric is active — otherwise
+    // the two would blend into washed-out gray.
+    this.mesh.visible = !this._atmoEnabled;
+  }
+
+  // Plug in new shadow-map resolution from the graphics settings. Zero = off.
+  setShadowMapSize(size) {
+    if (!this.sun) return;
+    this.sun.castShadow = size > 0;
+    if (size > 0) {
+      this.sun.shadow.mapSize.set(size, size);
+      if (this.sun.shadow.map) {
+        this.sun.shadow.map.dispose();
+        this.sun.shadow.map = null; // rebuild on next render
+      }
+    }
   }
 
   // Keep the sky centered on the camera so the horizon stays at infinity.
-  update(camera) {
+  // Also slide the sun's shadow frustum to follow the plane so shadows stay
+  // crisp near the player without needing CSMs.
+  update(camera, planePos) {
     this.mesh.position.copy(camera.position);
+    if (this._atmoEnabled) {
+      this.atmospheric.update(camera, worldTime.sunDir);
+    }
+    if (planePos && this.sun) {
+      // worldTime.sunDir is the authoritative sun direction (written each
+      // frame by DayNight). We place the light above the plane in that
+      // direction so the shadow frustum stays centered on the player.
+      this._sunDir.copy(worldTime.sunDir);
+      this.sun.position
+        .copy(this._sunDir)
+        .multiplyScalar(SHADOW_CAMERA_DISTANCE)
+        .add(planePos);
+      this.sunTarget.position.copy(planePos);
+      this.sun.shadow.camera.updateProjectionMatrix();
+    }
   }
 
   dispose() {

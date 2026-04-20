@@ -147,7 +147,9 @@ export class DayNight {
     if (this.sun) {
       this.sun.color.copy(this._c4);
       this.sun.intensity = sunI;
-      this.sun.position.copy(this._sunDir).multiplyScalar(500);
+      // Sun position (and its shadow camera) are moved by Sky.update() each
+      // frame so the shadow frustum tracks the plane. We only set direction
+      // here via worldTime.sunDir.
     }
     if (this.sky && this.sky.material && this.sky.material.uniforms) {
       const u_ = this.sky.material.uniforms;

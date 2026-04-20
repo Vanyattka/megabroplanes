@@ -1,9 +1,12 @@
 import {
-  WebGLRenderer,
-  Scene,
-  PerspectiveCamera,
+  ACESFilmicToneMapping,
   Color,
   Fog,
+  PerspectiveCamera,
+  PCFSoftShadowMap,
+  Scene,
+  SRGBColorSpace,
+  WebGLRenderer,
 } from 'three';
 import {
   FOG_COLOR,
@@ -16,9 +19,19 @@ import {
 
 export class Renderer {
   constructor() {
-    this.renderer = new WebGLRenderer({ antialias: true });
+    this.renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    // ACES filmic tone mapping + linear→sRGB output turns our basic
+    // MeshStandardMaterial palette into something that reads as a "graded"
+    // image — brights roll off, darks deepen, colors feel richer.
+    this.renderer.outputColorSpace = SRGBColorSpace;
+    this.renderer.toneMapping = ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
+    // PCF soft shadows when the graphics preset enables them; the light
+    // itself toggles castShadow so this is free when shadows are off.
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = PCFSoftShadowMap;
     document.body.appendChild(this.renderer.domElement);
 
     this.scene = new Scene();
