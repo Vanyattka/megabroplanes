@@ -100,6 +100,12 @@ export class ChunkManager {
     }
   }
 
+  // Expose whether a chunk is loaded so VillageManager / RuinsManager can
+// avoid "floating village with no ground under it" pop-in.
+  hasChunk(cx, cz) {
+    return this.chunks.has(`${cx},${cz}`);
+  }
+
   _buildTerrain({ cx, cz, key, d2 }) {
     const terrain = buildChunk(cx, cz);
     const group = new Group();

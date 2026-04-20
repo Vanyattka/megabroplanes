@@ -289,8 +289,10 @@ export const JET_EXHAUST_OFFSET_Z = 5.5; // local +Z distance behind plane
 // Scatter density per chunk — these are candidate counts. Biome acceptance
 // filters them down; a pure forest keeps nearly all candidates, mountains
 // reject most trees but keep most rocks.
-export const TREES_PER_CHUNK = 140;
-export const ROCKS_PER_CHUNK = 40;
+// 100 still feels "dense" in forest biomes (~100 trees per chunk after biome
+// acceptance) but chops scatter CPU cost by ~30% per chunk.
+export const TREES_PER_CHUNK = 100;
+export const ROCKS_PER_CHUNK = 32;
 
 // Streaming budget — maximum milliseconds per frame spent building new
 // chunks/villages/ruins. At least one gets built per frame regardless (so

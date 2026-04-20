@@ -244,10 +244,16 @@ function fogNearFor(plane) {
   return viewMetersFor(plane) * FOG_NEAR_FRAC;
 }
 
+// Predicate villages/ruins use to avoid popping in above a chunk whose
+// terrain isn't loaded yet.
+function chunkReady(cx, cz) {
+  return chunks.hasChunk(cx, cz);
+}
+
 // Prime world
 chunks.update(plane.position, viewDistanceFor(plane));
-villages.update(plane.position, terrainViewRadiusFor(plane));
-ruins.update(plane.position, terrainViewRadiusFor(plane));
+villages.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
+ruins.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
 
 let lastRenderTime = performance.now();
 let resetHeld = false;
@@ -255,8 +261,8 @@ let resetHeld = false;
 function physicsStep(dt) {
   if (gameState === 'menu') {
     chunks.update(plane.position, viewDistanceFor(plane));
-    villages.update(plane.position, terrainViewRadiusFor(plane));
-    ruins.update(plane.position, terrainViewRadiusFor(plane));
+    villages.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
+    ruins.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
     return;
   }
 
@@ -280,8 +286,8 @@ function physicsStep(dt) {
     if (crashBannerEl) crashBannerEl.style.display = 'block';
   }
   chunks.update(plane.position, viewDistanceFor(plane));
-  villages.update(plane.position, terrainViewRadiusFor(plane));
-  ruins.update(plane.position, terrainViewRadiusFor(plane));
+  villages.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
+  ruins.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
 }
 
 function renderStep() {

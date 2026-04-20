@@ -18,15 +18,26 @@ import {
   TREE_MIN_HEIGHT,
   TREE_MAX_HEIGHT,
   TREE_MAX_SLOPE,
-} from '../config.js';
-import { groundHeight } from './Ground.js';
-import { isInVillageArea } from './Villages.js';
-import { biomeAt } from './Biome.js';
-import {
   MAX_TREE_FACTOR,
   MAX_ROCK_FACTOR,
   WATER_LEVEL,
+  SEA_THRESHOLD_LOW,
+  SEA_THRESHOLD_HIGH,
+  SEA_DEPTH,
+  RUNWAY_LENGTH,
+  RUNWAY_WIDTH,
+  RUNWAY_MARGIN,
+  VILLAGE_CELL_SIZE,
 } from '../config.js';
+import { heightAt as noiseHeightAt } from './Noise.js';
+import { biomeAt } from './Biome.js';
+import { seaMaskAt } from './SeaMask.js';
+import {
+  villagesAffectingArea,
+  villageFlatFactorFromList,
+  rectFlatFactor,
+  getVillage,
+} from './Villages.js';
 import { gfx } from '../ui/GraphicsSettings.js';
 
 // Shared geometries and materials — one set for the whole world. Do not
@@ -41,11 +52,51 @@ const trunkMat = new MeshStandardMaterial({ color: 0x5a3a20, flatShading: true, 
 const topMat = new MeshStandardMaterial({ color: 0x2d6b22, flatShading: true, roughness: 1 });
 const rockMat = new MeshStandardMaterial({ color: 0x7a7572, flatShading: true, roughness: 1 });
 
-function slopeAt(x, z) {
-  const d = 2;
-  const hx = (groundHeight(x + d, z) - groundHeight(x - d, z)) / (2 * d);
-  const hz = (groundHeight(x, z + d) - groundHeight(x, z - d)) / (2 * d);
-  return Math.sqrt(hx * hx + hz * hz);
+function smoothstep01(edge0, edge1, x) {
+  if (x <= edge0) return 0;
+  if (x >= edge1) return 1;
+  const t = (x - edge0) / (edge1 - edge0);
+  return t * t * (3 - 2 * t);
+}
+
+// Inline groundHeight that consumes a pre-computed village list instead of
+// doing a 3×3 cell lookup every call. With ~700 groundHeight calls per
+// chunk (140 tree candidates × up to 5 calls for height + slope), dropping
+// the cell lookup from O(9) to O(villages.length) is the biggest single win.
+function groundHeightFast(x, z, villages) {
+  const f = villageFlatFactorFromList(x, z, villages);
+  if (f === 0) return 0;
+  const b = biomeAt(x, z);
+  let h = noiseHeightAt(x, z) * b.amp + b.offset;
+  const seaStrength = smoothstep01(SEA_THRESHOLD_LOW, SEA_THRESHOLD_HIGH, seaMaskAt(x, z));
+  h -= seaStrength * SEA_DEPTH;
+  if (b.type !== 'lake' && seaStrength < 0.3) {
+    const LAND_FLOOR = WATER_LEVEL + 2;
+    if (h < LAND_FLOOR) {
+      h = LAND_FLOOR - 3 * (1 - Math.exp((h - LAND_FLOOR) / 20));
+    }
+  }
+  return h * f;
+}
+
+// Scatter-local village-area test that uses the precomputed list.
+function isInVillageAreaFast(x, z, villages) {
+  if (villages.length === 0) return false;
+  const pad = 12;
+  for (const v of villages) {
+    const hL = RUNWAY_LENGTH / 2 + RUNWAY_MARGIN + pad;
+    const hW = RUNWAY_WIDTH / 2 + RUNWAY_MARGIN + pad;
+    if (rectFlatFactor(x, z, v.airportX, v.airportZ, v.angle, hL, hW) === 0) {
+      return true;
+    }
+    const r = v.villageRect;
+    if (
+      rectFlatFactor(x, z, r.cx, r.cz, r.angle, r.halfL + pad, r.halfW + pad) === 0
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 const _m = new Matrix4();
@@ -62,20 +113,37 @@ export function buildScatter(cx, cz) {
 
   const chunkOriginX = cx * CHUNK_SIZE;
   const chunkOriginZ = cz * CHUNK_SIZE;
+  // Villages that could reach any point inside this chunk. Typically 0 for
+  // open terrain, 1 when a village edge overlaps, occasionally 2.
+  const villages = villagesAffectingArea(
+    chunkOriginX,
+    chunkOriginX + CHUNK_SIZE,
+    chunkOriginZ,
+    chunkOriginZ + CHUNK_SIZE
+  );
+
+  const slopeAt = (x, z) => {
+    const d = 2;
+    const hx =
+      (groundHeightFast(x + d, z, villages) -
+        groundHeightFast(x - d, z, villages)) /
+      (2 * d);
+    const hz =
+      (groundHeightFast(x, z + d, villages) -
+        groundHeightFast(x, z - d, villages)) /
+      (2 * d);
+    return Math.sqrt(hx * hx + hz * hz);
+  };
 
   // Trees — trunk and top share the same per-instance matrix.
   const treeMatrices = [];
   for (let i = 0; i < TREES_PER_CHUNK; i++) {
     const x = chunkOriginX + prng() * CHUNK_SIZE;
     const z = chunkOriginZ + prng() * CHUNK_SIZE;
-    // Cheap rejection first. biomeAt is ~3µs and rejects ~70% of candidates
-    // in mountains / lakes before we ever touch the expensive groundHeight +
-    // slopeAt (which is 4 more groundHeight calls). This reorder drops the
-    // scatter build from ~12ms to ~4ms per chunk.
     const b = biomeAt(x, z);
     if (prng() > b.trees / MAX_TREE_FACTOR) continue;
-    if (isInVillageArea(x, z)) continue;
-    const y = groundHeight(x, z);
+    if (isInVillageAreaFast(x, z, villages)) continue;
+    const y = groundHeightFast(x, z, villages);
     if (y < TREE_MIN_HEIGHT || y > TREE_MAX_HEIGHT) continue;
     if (y <= WATER_LEVEL + 0.5) continue;
     if (slopeAt(x, z) > TREE_MAX_SLOPE) continue;
@@ -111,11 +179,10 @@ export function buildScatter(cx, cz) {
   for (let i = 0; i < ROCKS_PER_CHUNK; i++) {
     const x = chunkOriginX + prng() * CHUNK_SIZE;
     const z = chunkOriginZ + prng() * CHUNK_SIZE;
-    // Same cheap-first pattern as trees.
     const b = biomeAt(x, z);
     if (prng() > b.rocks / MAX_ROCK_FACTOR) continue;
-    if (isInVillageArea(x, z)) continue;
-    const y = groundHeight(x, z);
+    if (isInVillageAreaFast(x, z, villages)) continue;
+    const y = groundHeightFast(x, z, villages);
     if (y < 0.3) continue;
     if (y <= WATER_LEVEL + 0.5) continue;
 
