@@ -337,9 +337,12 @@ export const GRAPHICS_PRESETS = {
     shadowTrees: false,
     shadowFrustumHalf: 420,
     bloom: true,
-    bloomStrength: 0.4,
+    bloomStrength: 0.3,
     vignette: true,
-    atmoSky: true,
+    // Simple gradient sky on Medium — Preetham's HDR output has been the
+    // source of the daytime whiteout complaints, and the gradient renders
+    // sunrise/sunset just fine using the keyframe colors.
+    atmoSky: false,
     contactShadows: true,
     terrainDetail: true,
     pixelRatio: 1.0,

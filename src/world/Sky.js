@@ -45,8 +45,13 @@ const FRAG = /* glsl */ `
     t = pow(t, 0.55);
     vec3 col = mix(uHorizon, uZenith, t);
     float sd = max(dot(dir, uSunDir), 0.0);
-    col += uSunColor * pow(sd, 1024.0) * 5.0 * uSunIntensity;
-    col += uSunColor * pow(sd, 8.0) * 0.35 * uSunIntensity;
+    // Sun sharpness lowered and multiplier clamped so the dome itself
+    // never crosses the bloom threshold — the sun still reads as bright
+    // due to the halo, but the horizon doesn't bleed out.
+    col += uSunColor * pow(sd, 800.0) * 1.4 * uSunIntensity;
+    col += uSunColor * pow(sd, 10.0) * 0.25 * uSunIntensity;
+    // Hard ceiling keeps the whole sky in LDR range.
+    col = clamp(col, 0.0, 0.95);
     gl_FragColor = vec4(col, 1.0);
   }
 `;

@@ -12,15 +12,15 @@ export class AtmosphericSky {
     this.scene = scene;
     this.mesh = new ThreeSky();
     this.mesh.scale.setScalar(FOG_FAR_MAX * 4);
-    // The canonical three.js example runs Preetham at ~0.5 toneMappingExposure
-    // because its HDR output is extremely bright. Our scene needs ~1.0
-    // exposure to keep the terrain lit, so we pick parameters at the bottom
-    // of the sensible range — the sky reads as a natural blue gradient
-    // instead of a blinding white dome.
-    this.mesh.material.uniforms.turbidity.value = 2.0;
-    this.mesh.material.uniforms.rayleigh.value = 0.7;
-    this.mesh.material.uniforms.mieCoefficient.value = 0.002;
-    this.mesh.material.uniforms.mieDirectionalG.value = 0.75;
+    // Preetham's HDR range is aggressive — at "normal" parameters the
+    // horizon exceeds 1.0 and blooms, producing a white wash. We run with
+    // minimum-credible values: still a blue scattered sky with warm
+    // sunrise/sunset tints, but output bounded near 1.0 so bloom leaves it
+    // alone.
+    this.mesh.material.uniforms.turbidity.value = 1.0;
+    this.mesh.material.uniforms.rayleigh.value = 0.35;
+    this.mesh.material.uniforms.mieCoefficient.value = 0.001;
+    this.mesh.material.uniforms.mieDirectionalG.value = 0.70;
     this.mesh.material.uniforms.sunPosition.value = new Vector3(0, 1, 0);
     this.mesh.renderOrder = -2; // draw before everything, behind gradient dome too
     this.mesh.visible = false;
