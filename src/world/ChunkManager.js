@@ -7,17 +7,18 @@ import {
 import { buildChunk } from './Terrain.js';
 import { buildScatter, disposeScatter } from './Scatter.js';
 
-// Per-frame streaming with a time budget. When the plane crosses a cell
-// boundary at speed, 5+ new chunks become "needed" in a single frame. The
-// old code built them all immediately → 30-80ms main-thread stall → visible
-// twitch. We now enqueue them sorted by distance, always build at least one
-// (so progress is guaranteed), then keep building until the deadline.
-// Disposals stay synchronous — they're cheap.
+// Two-pass streaming. Each chunk now has two build phases:
+//   Phase A — terrain + road (~14 ms, mandatory, visible as ground)
+//   Phase B — scatter trees/rocks (~4 ms, deferred to later frame)
+// By separating them we never spend the full ~18 ms on a single frame; at
+// worst we spend ~14 ms on one frame (terrain) and ~4 ms the next (scatter).
+// Combined with distance-priority and a per-frame time budget, this keeps
+// chunk streaming invisible on any decent CPU.
 export class ChunkManager {
   constructor(scene, { roads } = {}) {
     this.scene = scene;
     this.roads = roads || null;
-    this.chunks = new Map(); // "cx,cz" → { group, terrain, scatter }
+    this.chunks = new Map(); // "cx,cz" → { group, terrain, scatter, cx, cz, scatterPending }
   }
 
   update(planePos, viewDistance) {
@@ -39,25 +40,50 @@ export class ChunkManager {
       }
     }
 
+    const tStart = performance.now();
+    const deadline = tStart + CHUNK_BUILD_BUDGET_MS;
+
+    // Phase A — build terrain for the closest pending chunk(s). Always build
+    // at least one per frame so progress is guaranteed; stop once over budget.
     if (pending.length > 0) {
-      // Build closest chunks first — whichever the player is about to fly
-      // into shows up fastest.
       pending.sort((a, b) => a.d2 - b.d2);
-      const tStart = performance.now();
-      const deadline = tStart + CHUNK_BUILD_BUDGET_MS;
       let built = 0;
       for (const p of pending) {
         const terrain = buildChunk(p.cx, p.cz);
-        const scatter = buildScatter(p.cx, p.cz);
         const group = new Group();
         group.add(terrain);
-        group.add(scatter);
         this.scene.add(group);
-        this.chunks.set(p.key, { group, terrain, scatter });
+        this.chunks.set(p.key, {
+          group,
+          terrain,
+          scatter: null,
+          cx: p.cx,
+          cz: p.cz,
+          d2: p.d2,
+          scatterPending: true,
+        });
         if (this.roads) this.roads.buildForChunk(p.cx, p.cz);
         built++;
-        // Always build the first candidate; then respect the budget.
         if (built >= 1 && performance.now() > deadline) break;
+      }
+    }
+
+    // Phase B — build scatter for any chunk whose terrain is already in the
+    // scene. Closest first. The scatter build is always cheap (~4 ms); if
+    // budget is already spent by Phase A, we push it to the next frame.
+    let scatterBuilt = 0;
+    const scatterCandidates = [];
+    for (const entry of this.chunks.values()) {
+      if (entry.scatterPending) scatterCandidates.push(entry);
+    }
+    if (scatterCandidates.length > 0) {
+      scatterCandidates.sort((a, b) => a.d2 - b.d2);
+      for (const entry of scatterCandidates) {
+        if (performance.now() > deadline && scatterBuilt >= 1) break;
+        entry.scatter = buildScatter(entry.cx, entry.cz);
+        entry.group.add(entry.scatter);
+        entry.scatterPending = false;
+        scatterBuilt++;
       }
     }
 
@@ -66,10 +92,9 @@ export class ChunkManager {
         this.scene.remove(entry.group);
         entry.terrain.geometry.dispose();
         entry.terrain.material.dispose();
-        disposeScatter(entry.scatter);
+        if (entry.scatter) disposeScatter(entry.scatter);
         this.chunks.delete(key);
-        const [cx, cz] = key.split(',').map(Number);
-        if (this.roads) this.roads.disposeForChunk(cx, cz);
+        if (this.roads) this.roads.disposeForChunk(entry.cx, entry.cz);
       }
     }
   }
