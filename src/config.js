@@ -194,13 +194,12 @@ export const ZENITH_COLOR = 0x3b72c4;  // deeper overhead blue
 export const SUN_DIRECTION = [0.35, 0.45, -0.5]; // normalized in Sky.js
 export const SUN_COLOR = 0xfff1c8;
 export const FOG_COLOR = HORIZON_COLOR;
-// Fog near pushed out to 350m so the plane and close terrain never pick up
-// haze. Far bounds roughly doubled so the world is visibly richer.
-export const FOG_NEAR = 350;
-export const FOG_FAR = 900;
-// Dynamic fog bounds — scaled by altitude. FOG_FAR above is the base (ground).
-export const FOG_FAR_MIN = 900;
-export const FOG_FAR_MAX = 1750;
+// Fog kept well outside the runway. Push further so near-camera objects
+// (plane, runway) never pick up any haze.
+export const FOG_NEAR = 600;
+export const FOG_FAR = 1300;
+export const FOG_FAR_MIN = 1300;
+export const FOG_FAR_MAX = 2200;
 
 // Terrain coloring — slope threshold (vertex normal.y below this = rock).
 export const SLOPE_ROCK_THRESHOLD = 0.72;
@@ -344,7 +343,7 @@ export const GRAPHICS_PRESETS = {
     contactShadows: true,
     terrainDetail: true,
     pixelRatio: 1.0,
-    toneMappingExposure: 0.85,
+    toneMappingExposure: 1.0,
   },
   high: {
     label: 'High',
@@ -361,7 +360,7 @@ export const GRAPHICS_PRESETS = {
       typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1,
       1.75
     ),
-    toneMappingExposure: 0.92,
+    toneMappingExposure: 1.05,
   },
 };
 export const DEFAULT_GFX_PRESET = 'medium';
@@ -382,21 +381,22 @@ export const VIGNETTE_STRENGTH = 0.32;
 export const DAY_TIME_MULT = 1.0;
 // Keyframes interpolated (in t order) to colour the sky, fog, and lights.
 // Values at t=0 and t=1 must match (seamless loop).
-// Brighter than a truly "dark" sim at midnight — a moon-lit sky so you can
-// still see terrain and find your way home. Dawn/dusk are warmer.
+// Keyframes decouple horizonColor (sky dome gradient) from fogColor (the
+// haze tint). Day fog is a saturated blue so distant objects read distinctly
+// against the horizon instead of bleaching to white.
 export const DAY_NIGHT_KEYFRAMES = [
   // midnight
   { t: 0.00, skyColor: 0x0a1530, horizonColor: 0x182940, fogColor: 0x182940, sunColor: 0x6e80a0, sunIntensity: 0.22, ambientColor: 0x4a5878, ambientIntensity: 0.40, starsOpacity: 1.0 },
   // pre-dawn
-  { t: 0.18, skyColor: 0x232a48, horizonColor: 0x5a4456, fogColor: 0x4e3f52, sunColor: 0x9c78b8, sunIntensity: 0.30, ambientColor: 0x5a5866, ambientIntensity: 0.45, starsOpacity: 0.55 },
+  { t: 0.18, skyColor: 0x232a48, horizonColor: 0x5a4456, fogColor: 0x3a3646, sunColor: 0x9c78b8, sunIntensity: 0.30, ambientColor: 0x5a5866, ambientIntensity: 0.45, starsOpacity: 0.55 },
   // dawn
-  { t: 0.25, skyColor: 0x4a6ea8, horizonColor: 0xe6a378, fogColor: 0xe0a683, sunColor: 0xffb070, sunIntensity: 0.65, ambientColor: 0x9a7a70, ambientIntensity: 0.60, starsOpacity: 0.15 },
+  { t: 0.25, skyColor: 0x4a6ea8, horizonColor: 0xe6a378, fogColor: 0xa37b62, sunColor: 0xffb070, sunIntensity: 0.65, ambientColor: 0x9a7a70, ambientIntensity: 0.60, starsOpacity: 0.15 },
   // noon
-  { t: 0.5,  skyColor: 0x3b72c4, horizonColor: 0xcfe2f3, fogColor: 0xcfe2f3, sunColor: 0xfff4d0, sunIntensity: 1.20, ambientColor: 0xffffff, ambientIntensity: 0.85, starsOpacity: 0.0 },
+  { t: 0.5,  skyColor: 0x3b72c4, horizonColor: 0xcfe2f3, fogColor: 0x7da0be, sunColor: 0xfff4d0, sunIntensity: 1.20, ambientColor: 0xffffff, ambientIntensity: 0.85, starsOpacity: 0.0 },
   // dusk
-  { t: 0.75, skyColor: 0x2a3f7a, horizonColor: 0xf08a55, fogColor: 0xe28060, sunColor: 0xff6a2a, sunIntensity: 0.65, ambientColor: 0x8a5030, ambientIntensity: 0.60, starsOpacity: 0.15 },
+  { t: 0.75, skyColor: 0x2a3f7a, horizonColor: 0xf08a55, fogColor: 0xa85d40, sunColor: 0xff6a2a, sunIntensity: 0.65, ambientColor: 0x8a5030, ambientIntensity: 0.60, starsOpacity: 0.15 },
   // post-dusk
-  { t: 0.82, skyColor: 0x232a48, horizonColor: 0x5a4456, fogColor: 0x4e3f52, sunColor: 0x9c78b8, sunIntensity: 0.30, ambientColor: 0x5a5866, ambientIntensity: 0.45, starsOpacity: 0.55 },
+  { t: 0.82, skyColor: 0x232a48, horizonColor: 0x5a4456, fogColor: 0x3a3646, sunColor: 0x9c78b8, sunIntensity: 0.30, ambientColor: 0x5a5866, ambientIntensity: 0.45, starsOpacity: 0.55 },
   // midnight (loop close)
   { t: 1.00, skyColor: 0x0a1530, horizonColor: 0x182940, fogColor: 0x182940, sunColor: 0x6e80a0, sunIntensity: 0.22, ambientColor: 0x4a5878, ambientIntensity: 0.40, starsOpacity: 1.0 },
 ];
