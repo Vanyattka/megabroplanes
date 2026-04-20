@@ -393,11 +393,13 @@ export const DAY_NIGHT_KEYFRAMES = [
   // pre-dawn
   { t: 0.18, skyColor: 0x232a48, horizonColor: 0x5a4456, fogColor: 0x3a3646, sunColor: 0x9c78b8, sunIntensity: 0.30, ambientColor: 0x5a5866, ambientIntensity: 0.45, starsOpacity: 0.55 },
   // dawn
-  { t: 0.25, skyColor: 0x4a6ea8, horizonColor: 0xe6a378, fogColor: 0xa37b62, sunColor: 0xffb070, sunIntensity: 0.65, ambientColor: 0x9a7a70, ambientIntensity: 0.60, starsOpacity: 0.15 },
-  // noon
-  { t: 0.5,  skyColor: 0x3b72c4, horizonColor: 0xcfe2f3, fogColor: 0x7da0be, sunColor: 0xfff4d0, sunIntensity: 1.20, ambientColor: 0xffffff, ambientIntensity: 0.85, starsOpacity: 0.0 },
+  { t: 0.25, skyColor: 0x3e5c90, horizonColor: 0xc78358, fogColor: 0xa37b62, sunColor: 0xffb070, sunIntensity: 0.65, ambientColor: 0x9a7a70, ambientIntensity: 0.60, starsOpacity: 0.15 },
+  // noon — horizon pulled into a real sky-blue instead of near-white, zenith
+  // slightly deeper. The old pale horizon was the reason daytime read as
+  // "mostly white with blue above."
+  { t: 0.5,  skyColor: 0x2a62b4, horizonColor: 0x7aa5c9, fogColor: 0x7da0be, sunColor: 0xfff4d0, sunIntensity: 1.20, ambientColor: 0xffffff, ambientIntensity: 0.85, starsOpacity: 0.0 },
   // dusk
-  { t: 0.75, skyColor: 0x2a3f7a, horizonColor: 0xf08a55, fogColor: 0xa85d40, sunColor: 0xff6a2a, sunIntensity: 0.65, ambientColor: 0x8a5030, ambientIntensity: 0.60, starsOpacity: 0.15 },
+  { t: 0.75, skyColor: 0x243868, horizonColor: 0xcb6b3c, fogColor: 0xa85d40, sunColor: 0xff6a2a, sunIntensity: 0.65, ambientColor: 0x8a5030, ambientIntensity: 0.60, starsOpacity: 0.15 },
   // post-dusk
   { t: 0.82, skyColor: 0x232a48, horizonColor: 0x5a4456, fogColor: 0x3a3646, sunColor: 0x9c78b8, sunIntensity: 0.30, ambientColor: 0x5a5866, ambientIntensity: 0.45, starsOpacity: 0.55 },
   // midnight (loop close)
