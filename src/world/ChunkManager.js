@@ -3,6 +3,8 @@ import {
   CHUNK_SIZE,
   VIEW_DISTANCE_CHUNKS,
   CHUNK_BUILD_BUDGET_MS,
+  CHUNK_BUILD_BUDGET_MAX_MS,
+  CHUNK_BUILD_BUDGET_PER_PENDING_MS,
 } from '../config.js';
 import { buildChunk } from './Terrain.js';
 import { buildScatter, disposeScatter } from './Scatter.js';
@@ -71,15 +73,22 @@ export class ChunkManager {
       }
     }
 
-    // Build closest pending chunks first. Always build at least one so the
-    // player never sees a hole in the near view after a cell crossing; stop
-    // as soon as the deadline is hit.
+    // Adaptive deadline — the more chunks we owe the player, the longer a
+    // single update() is allowed to spend. Initial load (hundreds pending)
+    // gets the max budget so the world fills in quickly; normal flight
+    // (a handful pending) gets the small base budget for smooth frames.
+    const n = pending.length;
+    const adaptiveMs = Math.min(
+      CHUNK_BUILD_BUDGET_MAX_MS,
+      CHUNK_BUILD_BUDGET_MS + n * CHUNK_BUILD_BUDGET_PER_PENDING_MS
+    );
+    const adaptiveDeadline = performance.now() + adaptiveMs;
+
     if (pending.length > 0) {
       pending.sort((a, b) => a.d2 - b.d2);
       for (let i = 0; i < pending.length; i++) {
         const p = pending[i];
-        // First iteration: always build. Subsequent: respect budget.
-        if (i > 0 && performance.now() > deadline) break;
+        if (i > 0 && performance.now() > adaptiveDeadline) break;
         this._buildTerrain(p);
       }
     }
@@ -130,25 +139,32 @@ export class ChunkManager {
     if (performance.now() > deadline) return;
     if (this._scatterQueue.length === 0) return;
 
-    // Pick the closest-to-plane scatter — recompute distance since the
-    // plane has moved since the chunk was queued.
-    let bestIdx = -1;
-    let bestD2 = Infinity;
-    for (let i = 0; i < this._scatterQueue.length; i++) {
-      const e = this._scatterQueue[i];
-      const dx = e.cx * CHUNK_SIZE + CHUNK_SIZE / 2 - planePos.x;
-      const dz = e.cz * CHUNK_SIZE + CHUNK_SIZE / 2 - planePos.z;
-      const d2 = dx * dx + dz * dz;
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        bestIdx = i;
-      }
-    }
-    if (bestIdx === -1) return;
-    const entry = this._scatterQueue.splice(bestIdx, 1)[0];
+    // Scatter drain shares the same adaptive budget — with hundreds of
+    // chunks pending, a single drain can build many scatter groups.
+    const n = this._scatterQueue.length;
+    const adaptiveMs = Math.min(
+      CHUNK_BUILD_BUDGET_MAX_MS,
+      CHUNK_BUILD_BUDGET_MS + n * CHUNK_BUILD_BUDGET_PER_PENDING_MS
+    );
+    const localDeadline = performance.now() + adaptiveMs;
 
-    entry.scatter = buildScatter(entry.cx, entry.cz);
-    entry.group.add(entry.scatter);
-    entry.scatterPending = false;
+    // Sort by closest-to-plane once and drain as many as budget allows.
+    this._scatterQueue.sort((a, b) => {
+      const adx = a.cx * CHUNK_SIZE + CHUNK_SIZE / 2 - planePos.x;
+      const adz = a.cz * CHUNK_SIZE + CHUNK_SIZE / 2 - planePos.z;
+      const bdx = b.cx * CHUNK_SIZE + CHUNK_SIZE / 2 - planePos.x;
+      const bdz = b.cz * CHUNK_SIZE + CHUNK_SIZE / 2 - planePos.z;
+      return adx * adx + adz * adz - (bdx * bdx + bdz * bdz);
+    });
+
+    let built = 0;
+    while (this._scatterQueue.length > 0) {
+      if (built >= 1 && performance.now() > localDeadline) break;
+      const entry = this._scatterQueue.shift();
+      entry.scatter = buildScatter(entry.cx, entry.cz);
+      entry.group.add(entry.scatter);
+      entry.scatterPending = false;
+      built++;
+    }
   }
 }

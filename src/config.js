@@ -294,11 +294,15 @@ export const JET_EXHAUST_OFFSET_Z = 5.5; // local +Z distance behind plane
 export const TREES_PER_CHUNK = 100;
 export const ROCKS_PER_CHUNK = 32;
 
-// Streaming budget — maximum milliseconds per frame spent building new
-// chunks/villages/ruins. At least one gets built per frame regardless (so
-// progress is guaranteed), but subsequent work stops once the deadline hits
-// and resumes next frame. Faster CPUs naturally fit more per frame.
-export const CHUNK_BUILD_BUDGET_MS = 5;
+// Streaming budget — the BASE number of milliseconds a chunks.update() call
+// is allowed to spend building new chunks. The effective budget is adaptive:
+// when there's a big backlog (initial load / huge view distance increase)
+// it climbs to CHUNK_BUILD_BUDGET_MAX_MS so the world fills in quickly;
+// when the backlog is small (normal flight) it drops back toward the base
+// value so frame rate stays smooth.
+export const CHUNK_BUILD_BUDGET_MS = 4;
+export const CHUNK_BUILD_BUDGET_MAX_MS = 24;
+export const CHUNK_BUILD_BUDGET_PER_PENDING_MS = 0.25;
 export const VILLAGE_BUILD_BUDGET_MS = 3;
 export const RUIN_BUILD_BUDGET_MS = 2;
 export const TREE_MIN_HEIGHT = 1.5;
