@@ -16,6 +16,8 @@ import {
   SEA_THRESHOLD_LOW,
 } from '../config.js';
 import { seaMaskAt } from './SeaMask.js';
+import { biomeAt } from './Biome.js';
+import { heightAt as noiseHeightAt } from './Noise.js';
 
 // Village center sits far enough from the runway that the village rect never
 // overlaps the runway's flat zone. Without this, cities (halfW=140) place
@@ -86,6 +88,30 @@ function buildVillage(gcx, gcz, isHome) {
     // exempt so the starting airport is always reachable even if the mask
     // happens to peak at the origin.
     if (seaMaskAt(airportX, airportZ) >= SEA_THRESHOLD_LOW) return null;
+
+    // Reject cells whose airport would sit in mountain terrain. An
+    // airport's flat zone (320×35 m rect + 300 m blend) carves a ~600 m
+    // plateau through any mountain it lands on — very visible as a
+    // V-shaped wedge cut out of a ridge. Sampling the raw noise height
+    // at the 4 corners of the airport rect + center is enough to catch
+    // cells that would flatten a meaningful chunk of mountain. 22 m
+    // roughly corresponds to the amp*noise range of the hills biome, so
+    // anything above it is genuinely mountainous.
+    const b = biomeAt(airportX, airportZ);
+    if (b.type === 'mountain') return null;
+    const MOUNTAIN_HEIGHT_LIMIT = 22;
+    const probes = [
+      [airportX, airportZ],
+      [airportX + RUNWAY_LENGTH / 2, airportZ],
+      [airportX - RUNWAY_LENGTH / 2, airportZ],
+      [airportX, airportZ + 60],
+      [airportX, airportZ - 60],
+    ];
+    for (const [sx, sz] of probes) {
+      const pb = biomeAt(sx, sz);
+      const h = noiseHeightAt(sx, sz) * pb.amp + pb.offset;
+      if (h > MOUNTAIN_HEIGHT_LIMIT) return null;
+    }
   }
 
   // Home is always medium so spawn area feels consistent.
