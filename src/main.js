@@ -237,10 +237,6 @@ function setPhotoMode(on) {
     plane._prevPosition.copy(plane.position);
     plane._prevQuaternion.copy(plane.quaternion);
     plane.syncMesh();
-    // Flush the jet plume — any live particle carries plane.velocity as its
-    // base and would drift forward ahead of the frozen plane for the rest
-    // of its lifetime otherwise.
-    jetExhaust.clear();
     // Aim orbit at the plane and seed the camera on the current chase-cam
     // position so there's no visual jump.
     orbitControls.target.copy(plane.position);
