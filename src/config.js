@@ -52,6 +52,12 @@ export const RUNWAY_MARGIN = 20;
 // the slope and makes the transition look natural without extending the
 // flat zone into territory you'd actually fly over.
 export const RUNWAY_BLEND = 300;
+// Village flatten uses a much tighter blend than the runway. The runway
+// strip needs a long gentle ramp (300 m) so pilots can line up with the
+// horizon, but the village pad is just wide enough for houses and roads
+// to sit flat — 80 m blend keeps nearby mountains from losing their
+// natural profile to the village footprint.
+export const VILLAGE_BLEND = 80;
 export const RUNWAY_Y = 0.02;
 
 // Villages — one village per grid cell. Size tiers vary house count, streets,

@@ -11,6 +11,7 @@ import {
   RUNWAY_WIDTH,
   RUNWAY_MARGIN,
   RUNWAY_BLEND,
+  VILLAGE_BLEND,
   PLANE_BOTTOM_OFFSET,
   SEA_THRESHOLD_LOW,
 } from '../config.js';
@@ -25,9 +26,10 @@ function perpOffsetFor(size) {
 
 const villageCache = new Map();
 
-// Smoothstep distance from a rotated rectangle: 0 inside, 1 once further than
-// RUNWAY_BLEND from the rect, smoothstep between.
-export function rectFlatFactor(x, z, cx, cz, angle, halfL, halfW) {
+// Smoothstep distance from a rotated rectangle: 0 inside, 1 once further
+// than `blend` from the rect, smoothstep between. `blend` defaults to
+// RUNWAY_BLEND for backward compat with older callers.
+export function rectFlatFactor(x, z, cx, cz, angle, halfL, halfW, blend = RUNWAY_BLEND) {
   const dx = x - cx;
   const dz = z - cz;
   const c = Math.cos(-angle);
@@ -38,8 +40,8 @@ export function rectFlatFactor(x, z, cx, cz, angle, halfL, halfW) {
   const distZ = Math.max(0, Math.abs(lz) - halfW);
   const d = Math.sqrt(distX * distX + distZ * distZ);
   if (d <= 0) return 0;
-  if (d >= RUNWAY_BLEND) return 1;
-  const t = d / RUNWAY_BLEND;
+  if (d >= blend) return 1;
+  const t = d / blend;
   return t * t * (3 - 2 * t);
 }
 
@@ -255,19 +257,23 @@ export function getVillage(gcx, gcz) {
   return v;
 }
 
-// Flat-factor around a village: only the runway strip forces the ground
-// flat. The village rect is left OFF — previously it extended the flat
-// zone perpendicular to the runway by 100–230 m (village halfL) plus a
-// 300 m blend on each side. For home (medium village, halfL=100,
-// halfW=45, offset 85 m from runway) that smushed the bases of any
-// hills within ~430 m of the runway, making mountains visibly "cut"
-// where the flat zone ended. Houses sit on natural terrain now —
-// village-on-a-slope reads as a hillside settlement, which looks fine
-// and keeps mountains near the runway intact.
+// Flat-factor around a village:
+//   - Airport rect uses the full RUNWAY_BLEND (300 m) so pilots see a
+//     gentle smooth horizon approaching the strip.
+//   - Village rect uses the much tighter VILLAGE_BLEND (80 m) — just
+//     enough to put a flat pad under the houses and roads without
+//     chewing the bases of mountains within hundreds of metres of the
+//     settlement. Using the same 300 m blend on both rectangles was
+//     what sliced visible "walls" off nearby hills: the village rect
+//     alone extended flat zone 300–400 m past the village footprint.
 export function airportFlatFactorFor(x, z, v) {
-  const halfL = RUNWAY_LENGTH / 2 + RUNWAY_MARGIN;
-  const halfW = RUNWAY_WIDTH / 2 + RUNWAY_MARGIN;
-  return rectFlatFactor(x, z, v.airportX, v.airportZ, v.angle, halfL, halfW);
+  const airportHalfL = RUNWAY_LENGTH / 2 + RUNWAY_MARGIN;
+  const airportHalfW = RUNWAY_WIDTH / 2 + RUNWAY_MARGIN;
+  const fA = rectFlatFactor(x, z, v.airportX, v.airportZ, v.angle, airportHalfL, airportHalfW, RUNWAY_BLEND);
+  if (fA === 0) return 0;
+  const r = v.villageRect;
+  const fV = rectFlatFactor(x, z, r.cx, r.cz, r.angle, r.halfL, r.halfW, VILLAGE_BLEND);
+  return Math.min(fA, fV);
 }
 
 export function villageFlatFactor(x, z) {

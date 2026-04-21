@@ -21,6 +21,7 @@ import {
   RUNWAY_WIDTH,
   RUNWAY_MARGIN,
   RUNWAY_BLEND,
+  VILLAGE_BLEND,
 } from '../config.js';
 import { heightAt as noiseHeightAt } from './Noise.js';
 import { biomeAt } from './Biome.js';
@@ -52,10 +53,9 @@ function smoothstep01(edge0, edge1, x) {
 }
 
 // Rotated-rectangle flat-factor — inlined copy of Villages.rectFlatFactor
-// so this file has no dependency on the Villages module (which pulls in
-// Three.js-adjacent village-mesh stuff transitively).
-// 0 inside the rect, 1 once further than RUNWAY_BLEND away, smoothstep between.
-function rectFlatFactor(x, z, cx, cz, angle, halfL, halfW) {
+// so this file has no dependency on the Villages module.
+// 0 inside the rect, 1 once further than `blend` away, smoothstep between.
+function rectFlatFactor(x, z, cx, cz, angle, halfL, halfW, blend) {
   const dx = x - cx;
   const dz = z - cz;
   const c = Math.cos(-angle);
@@ -66,14 +66,15 @@ function rectFlatFactor(x, z, cx, cz, angle, halfL, halfW) {
   const distZ = Math.max(0, Math.abs(lz) - halfW);
   const d = Math.sqrt(distX * distX + distZ * distZ);
   if (d <= 0) return 0;
-  if (d >= RUNWAY_BLEND) return 1;
-  const t = d / RUNWAY_BLEND;
+  if (d >= blend) return 1;
+  const t = d / blend;
   return t * t * (3 - 2 * t);
 }
 
-// Mirror of Villages.airportFlatFactorFor — only the runway strip
-// flattens the ground. Village rect is placement-only, not a flatten
-// rect. See Villages.airportFlatFactorFor for the rationale.
+// Mirror of Villages.airportFlatFactorFor: airport rect uses RUNWAY_BLEND
+// (300 m — long gentle runway approach); village rect uses VILLAGE_BLEND
+// (80 m — just enough flat pad for houses/roads) so mountains near the
+// village don't get their bases chopped off over a 300 m blend ring.
 function villageFlatFactorFromData(x, z, villages) {
   if (villages.length === 0) return 1;
   const airportHalfL = RUNWAY_LENGTH / 2 + RUNWAY_MARGIN;
@@ -81,8 +82,12 @@ function villageFlatFactorFromData(x, z, villages) {
   let minF = 1;
   for (let i = 0; i < villages.length; i++) {
     const v = villages[i];
-    const fA = rectFlatFactor(x, z, v.airportX, v.airportZ, v.angle, airportHalfL, airportHalfW);
-    if (fA < minF) minF = fA;
+    const fA = rectFlatFactor(x, z, v.airportX, v.airportZ, v.angle, airportHalfL, airportHalfW, RUNWAY_BLEND);
+    if (fA === 0) return 0;
+    const r = v.villageRect;
+    const fV = rectFlatFactor(x, z, r.cx, r.cz, r.angle, r.halfL, r.halfW, VILLAGE_BLEND);
+    const f = Math.min(fA, fV);
+    if (f < minF) minF = f;
     if (minF === 0) return 0;
   }
   return minF;
