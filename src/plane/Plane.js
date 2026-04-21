@@ -1,4 +1,4 @@
-import { Object3D, Quaternion, SpotLight, Vector3 } from 'three';
+import { Object3D, PointLight, Quaternion, SpotLight, Vector3 } from 'three';
 import { buildPlaneMesh, disposePlaneMesh } from './PlaneMesh.js';
 import { step as physicsStep } from './Physics.js';
 import { applyControls } from './Controls.js';
@@ -13,6 +13,11 @@ import {
   LANDING_LIGHT_ANGLE,
   LANDING_LIGHT_PENUMBRA,
   LANDING_LIGHT_COLOR,
+  JET_LIGHT_COLOR,
+  JET_LIGHT_INTENSITY,
+  JET_LIGHT_DISTANCE,
+  JET_LIGHT_DECAY,
+  JET_EXHAUST_OFFSET_Z,
 } from '../config.js';
 
 export class Plane {
@@ -51,8 +56,26 @@ export class Plane {
 
     this.mesh = buildPlaneMesh(this.type, this.color);
     this._installLandingLight();
+    this._installJetLight();
     if (this.scene) this.scene.add(this.mesh);
     this.reset();
+  }
+
+  _installJetLight() {
+    // PointLight parented to the plane mesh so it follows automatically.
+    // Only actually lit when the plane type is jet (otherwise intensity=0).
+    const light = new PointLight(
+      JET_LIGHT_COLOR,
+      0,
+      JET_LIGHT_DISTANCE,
+      JET_LIGHT_DECAY
+    );
+    light.castShadow = false;
+    // Sit the light just past the engine nozzle so it illuminates the wing
+    // undersides, tail, and any ground/water within the falloff radius.
+    light.position.set(0, 0, JET_EXHAUST_OFFSET_Z + 0.5);
+    this.mesh.add(light);
+    this._jetLight = light;
   }
 
   _installLandingLight() {
@@ -104,7 +127,9 @@ export class Plane {
     const wasOn = this.landingLightOn;
     this._landingLight = null;
     this._landingTarget = null;
+    this._jetLight = null;
     this._installLandingLight();
+    this._installJetLight();
     if (this._landingLight) {
       this._landingLight.intensity = wasOn ? LANDING_LIGHT_INTENSITY : 0;
     }
@@ -182,6 +207,16 @@ export class Plane {
     const tail = this.mesh.getObjectByName('nav-tail');
     if (tail) {
       tail.visible = (Math.floor(this._blinkT * NAV_TAIL_BLINK_HZ) % 2) === 0;
+    }
+
+    // Jet engine light — glows orange on ground, wings, water surface when
+    // the player is flying a jet. Intensity rides throttle so idle is dim
+    // and full burner is bright.
+    if (this._jetLight) {
+      const jetActive = this.type === 'jet' && !this.crashed;
+      this._jetLight.intensity = jetActive
+        ? JET_LIGHT_INTENSITY * (0.25 + 0.75 * this.throttle)
+        : 0;
     }
   }
 }

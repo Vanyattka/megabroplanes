@@ -304,12 +304,22 @@ export const JET_EXHAUST_SPEED = 22;   // backward speed relative to plane
 export const JET_EXHAUST_SPREAD = 2.0; // velocity jitter
 export const JET_EXHAUST_OFFSET_Z = 5.5; // local +Z distance behind plane
 
+// Jet exhaust illuminates nearby geometry. PointLight attached behind the
+// plane; intensity scales with throttle. Water shader reads the same values
+// so the plume streak on water lights up when the jet is low.
+export const JET_LIGHT_COLOR = 0xff6820;
+export const JET_LIGHT_INTENSITY = 18;  // peak at full throttle
+export const JET_LIGHT_DISTANCE = 90;   // falls off to zero by this range
+export const JET_LIGHT_DECAY = 1.6;
+
 // Scatter density per chunk — these are candidate counts. Biome acceptance
 // filters them down; a pure forest keeps nearly all candidates, mountains
 // reject most trees but keep most rocks.
-// 100 still feels "dense" in forest biomes (~100 trees per chunk after biome
-// acceptance) but chops scatter CPU cost by ~30% per chunk.
-export const TREES_PER_CHUNK = 100;
+// Forest density bumped — 160 candidates gives roughly 150 trees per chunk
+// in a pure forest biome (biome acceptance is ~1.0 there). Slope/water
+// rejection still trims the count on steep or wet ground so the extra cost
+// is mostly paid where it shows up visually.
+export const TREES_PER_CHUNK = 160;
 export const ROCKS_PER_CHUNK = 32;
 
 // Streaming budget — the BASE number of milliseconds a chunks.update() call

@@ -46,6 +46,9 @@ const FRAG = /* glsl */ `
   uniform vec3  uSunDir;
   uniform vec3  uSunColor;
   uniform float uSunIntensity;
+  uniform vec3  uJetPos;
+  uniform vec3  uJetColor;
+  uniform float uJetIntensity;
   varying vec3 vWorldPos;
   varying vec3 vViewDir;
 
@@ -92,6 +95,20 @@ const FRAG = /* glsl */ `
       col += uSunColor * (spec * 4.5 + glow * 0.35) * uSunIntensity;
     }
 
+    // Jet engine reflection — falls off with distance from the engine, so
+    // the hot orange smear only appears on water directly below a jet.
+    if (uJetIntensity > 0.02) {
+      vec3 toJet = uJetPos - vWorldPos;
+      float jetDist = length(toJet);
+      if (jetDist < 120.0) {
+        vec3 toJetN = toJet / jetDist;
+        vec3 halfJ = normalize(viewDir + toJetN);
+        float specJ = pow(max(dot(n, halfJ), 0.0), 90.0);
+        float attenuation = 1.0 - smoothstep(20.0, 120.0, jetDist);
+        col += uJetColor * specJ * 3.0 * attenuation * uJetIntensity;
+      }
+    }
+
     gl_FragColor = vec4(col, uOpacity);
   }
 `;
@@ -118,6 +135,9 @@ export class Water {
         uSunDir: { value: new Vector3(0, 1, 0) },
         uSunColor: { value: new Color(0xffffff) },
         uSunIntensity: { value: 1.0 },
+        uJetPos: { value: new Vector3() },
+        uJetColor: { value: new Color(0xff6820) },
+        uJetIntensity: { value: 0 },
       },
       vertexShader: VERT,
       fragmentShader: FRAG,
@@ -139,7 +159,10 @@ export class Water {
   // planePos: Vector3-like — water tracks under the player every frame.
   // worldTint: horizon color. Overhead / sun info come from worldTime so the
   // reflections match the same day/night cycle every other system uses.
-  update(dt, planePos, worldTint) {
+  // jet (optional): { position: Vector3, intensity: number } — when a jet
+  // plane is flying low its engine paints a hot orange reflection on the
+  // water directly under/behind it.
+  update(dt, planePos, worldTint, jet = null) {
     this._time += dt * WATER_NORMAL_SCROLL_SPEED;
     const u = this.material.uniforms;
     u.uTime.value = this._time;
@@ -151,13 +174,18 @@ export class Water {
 
     if (worldTint) u.uSkyColor.value.copy(worldTint);
     u.uDeepSkyColor.value.copy(worldTime.skyColor);
-    // Day factor — invert the nightFactor so 1.0 at noon, ~0.0 at midnight.
-    // Adds a small floor so mid-dusk water isn't pitch black.
     const df = 1.0 - (worldTime.nightFactor ?? 0);
     u.uDayFactor.value = Math.max(0.05, df);
     u.uSunDir.value.copy(worldTime.sunDir);
     u.uSunColor.value.copy(worldTime.sunColor);
     u.uSunIntensity.value = worldTime.sunIntensity;
+
+    if (jet && jet.intensity > 0.02) {
+      u.uJetPos.value.copy(jet.position);
+      u.uJetIntensity.value = jet.intensity;
+    } else {
+      u.uJetIntensity.value = 0;
+    }
   }
 
   dispose() {

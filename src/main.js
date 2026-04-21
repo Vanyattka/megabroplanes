@@ -1,3 +1,4 @@
+import { Vector3 } from 'three';
 import { Renderer } from './core/Renderer.js';
 import { Clock } from './core/Clock.js';
 import { Input } from './core/Input.js';
@@ -40,6 +41,9 @@ import { gfx, view } from './ui/GraphicsSettings.js';
 import { profiler } from './debug/Profiler.js';
 
 const renderer = new Renderer();
+// Scratch Vector3 reused by the per-frame jet reflection query so we
+// don't allocate one a frame.
+const _tmpVec3 = new Vector3();
 const clock = new Clock();
 const input = new Input();
 
@@ -382,7 +386,16 @@ function renderStep(alpha) {
   }
   sky.update(renderer.camera, plane.position);
   stars.update(renderer.camera);
-  water.update(renderDt, plane.position, worldTime.horizonColor);
+  // When the player flies a jet, pass the engine position + intensity so the
+  // water shader paints a hot orange reflection under it.
+  const jetInfo =
+    plane.type === 'jet' && plane._jetLight
+      ? {
+          position: plane._jetLight.getWorldPosition(_tmpVec3),
+          intensity: plane._jetLight.intensity / 18, // normalize to 0..1
+        }
+      : null;
+  water.update(renderDt, plane.position, worldTime.horizonColor, jetInfo);
   clouds.update(
     renderDt,
     plane.position,

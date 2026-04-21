@@ -14,12 +14,15 @@ const biomeNoise2D = createNoise2D(prng);
 // peaks punch well into the snowline (see Terrain.colorByHeight). Centers
 // are slightly re-spaced so all five biomes get similar coverage despite
 // the bell-shaped noise distribution.
+// Mountain centers pushed further into the noise extreme to make them
+// rarer — with a bell-shaped distribution, shifting center from 0.82 to
+// 0.90 drops coverage by roughly half. Hills expand to fill the gap.
 const BIOMES = [
   { type: 'lake',         center: 0.02, amp: 0.35, offset: -12, trees: 0.0, rocks: 0.2 },
   { type: 'forest',       center: 0.32, amp: 0.55, offset:  14, trees: 2.8, rocks: 0.4 },
-  { type: 'hills',        center: 0.58, amp: 1.00, offset:  16, trees: 1.0, rocks: 1.0 },
-  { type: 'mountain',     center: 0.82, amp: 2.00, offset:  22, trees: 0.3, rocks: 2.5 },
-  { type: 'highmountain', center: 0.98, amp: 3.4, offset:  55, trees: 0.05, rocks: 4.0 },
+  { type: 'hills',        center: 0.62, amp: 1.00, offset:  16, trees: 1.0, rocks: 1.0 },
+  { type: 'mountain',     center: 0.92, amp: 2.00, offset:  22, trees: 0.3, rocks: 2.5 },
+  { type: 'highmountain', center: 1.04, amp: 3.4,  offset:  55, trees: 0.05, rocks: 4.0 },
 ];
 const BANDWIDTH = 0.22;
 
