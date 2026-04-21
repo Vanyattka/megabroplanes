@@ -255,14 +255,19 @@ export function getVillage(gcx, gcz) {
   return v;
 }
 
+// Flat-factor around a village: only the runway strip forces the ground
+// flat. The village rect is left OFF — previously it extended the flat
+// zone perpendicular to the runway by 100–230 m (village halfL) plus a
+// 300 m blend on each side. For home (medium village, halfL=100,
+// halfW=45, offset 85 m from runway) that smushed the bases of any
+// hills within ~430 m of the runway, making mountains visibly "cut"
+// where the flat zone ended. Houses sit on natural terrain now —
+// village-on-a-slope reads as a hillside settlement, which looks fine
+// and keeps mountains near the runway intact.
 export function airportFlatFactorFor(x, z, v) {
   const halfL = RUNWAY_LENGTH / 2 + RUNWAY_MARGIN;
   const halfW = RUNWAY_WIDTH / 2 + RUNWAY_MARGIN;
-  const fA = rectFlatFactor(x, z, v.airportX, v.airportZ, v.angle, halfL, halfW);
-  if (fA === 0) return 0;
-  const r = v.villageRect;
-  const fV = rectFlatFactor(x, z, r.cx, r.cz, r.angle, r.halfL, r.halfW);
-  return Math.min(fA, fV);
+  return rectFlatFactor(x, z, v.airportX, v.airportZ, v.angle, halfL, halfW);
 }
 
 export function villageFlatFactor(x, z) {

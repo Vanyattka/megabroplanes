@@ -71,6 +71,9 @@ function rectFlatFactor(x, z, cx, cz, angle, halfL, halfW) {
   return t * t * (3 - 2 * t);
 }
 
+// Mirror of Villages.airportFlatFactorFor — only the runway strip
+// flattens the ground. Village rect is placement-only, not a flatten
+// rect. See Villages.airportFlatFactorFor for the rationale.
 function villageFlatFactorFromData(x, z, villages) {
   if (villages.length === 0) return 1;
   const airportHalfL = RUNWAY_LENGTH / 2 + RUNWAY_MARGIN;
@@ -79,11 +82,7 @@ function villageFlatFactorFromData(x, z, villages) {
   for (let i = 0; i < villages.length; i++) {
     const v = villages[i];
     const fA = rectFlatFactor(x, z, v.airportX, v.airportZ, v.angle, airportHalfL, airportHalfW);
-    if (fA === 0) return 0;
-    const r = v.villageRect;
-    const fV = rectFlatFactor(x, z, r.cx, r.cz, r.angle, r.halfL, r.halfW);
-    const f = Math.min(fA, fV);
-    if (f < minF) minF = f;
+    if (fA < minF) minF = fA;
     if (minF === 0) return 0;
   }
   return minF;
