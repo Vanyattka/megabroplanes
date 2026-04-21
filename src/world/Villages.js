@@ -74,9 +74,41 @@ function buildVillage(gcx, gcz, isHome) {
   let airportZ;
   let angle;
   if (isHome) {
-    airportX = 0;
-    airportZ = 0;
-    angle = 0;
+    // Home airport: search a small grid of candidate positions around the
+    // origin cell and pick the flattest. Running just once at module load,
+    // so the cost is negligible. Without this, the starting airport
+    // sometimes landed on a ridge and its flatten zone visibly sliced
+    // adjacent hills near the spawn point.
+    const candidates = [];
+    const STEP = 200;
+    for (let dx = -400; dx <= 400; dx += STEP) {
+      for (let dz = -400; dz <= 400; dz += STEP) {
+        for (const a of [0, Math.PI / 2]) {
+          candidates.push({ x: dx, z: dz, angle: a });
+        }
+      }
+    }
+    let best = candidates[0];
+    let bestScore = Infinity;
+    for (const c of candidates) {
+      // Rotate probe offsets with candidate angle so we're measuring the
+      // RUNWAY's flat zone, not a fixed axis-aligned one.
+      const fx = Math.cos(c.angle);
+      const fz = Math.sin(c.angle);
+      let score = 0;
+      for (const along of [-300, -150, 0, 150, 300]) {
+        for (const perp of [-200, 0, 200]) {
+          const px = c.x + fx * along - fz * perp;
+          const pz = c.z + fz * along + fx * perp;
+          const b = biomeAt(px, pz);
+          score += Math.max(0, noiseHeightAt(px, pz) * b.amp + b.offset);
+        }
+      }
+      if (score < bestScore) { bestScore = score; best = c; }
+    }
+    airportX = best.x;
+    airportZ = best.z;
+    angle = best.angle;
   } else {
     const margin = 300;
     const inner = VILLAGE_CELL_SIZE - 2 * margin;
