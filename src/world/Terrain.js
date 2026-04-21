@@ -18,8 +18,29 @@ import { biomeAt } from './Biome.js';
 import { seaMaskAt } from './SeaMask.js';
 import { villagesAffectingArea, villageFlatFactorFromList } from './Villages.js';
 import { gfx } from '../ui/GraphicsSettings.js';
+import { profiler } from '../debug/Profiler.js';
 
 const ROCK = [0.48, 0.44, 0.40];
+
+// One MeshStandardMaterial shared across every terrain chunk in the world.
+// Before this, buildChunk() allocated a fresh material per chunk — and
+// because Three.js compiles shader programs lazily on first render, every
+// new chunk triggered a 40–80 ms shader-compile stall (very visible as
+// occasional hiccups even after CPU generation was tight).
+//
+// With one shared material the program compiles exactly once. Per-chunk
+// variation is already driven by vertex colors (see colors attribute in
+// buildChunk), so no visual change. castShadow is a mesh-level flag so it
+// stays configurable per chunk without needing material variants.
+const SHARED_TERRAIN_MAT = new MeshStandardMaterial({
+  vertexColors: true,
+  flatShading: true,
+  roughness: 1.0,
+  metalness: 0.0,
+});
+export function getSharedTerrainMaterial() {
+  return SHARED_TERRAIN_MAT;
+}
 
 function colorByHeight(y) {
   if (y < 1) return [0.85, 0.80, 0.60];       // sand
@@ -68,6 +89,7 @@ function groundHeightFast(x, z, villages) {
 }
 
 export function buildChunk(cx, cz) {
+  const _t0 = profiler.timeBegin();
   const geo = new PlaneGeometry(
     CHUNK_SIZE,
     CHUNK_SIZE,
@@ -96,6 +118,13 @@ export function buildChunk(cx, cz) {
   }
 
   geo.computeVertexNormals();
+  // Three.js caches the bounding sphere from the initial flat plane. After
+  // we displace vertices by heightAt (up to ~60 m in mountains, -18 m under
+  // water), the stale sphere is too small — frustum culling skips chunks
+  // whose mesh extends outside the old, flat disk. That caused the "wall"
+  // pop-in at chunk boundaries near the runway (where height changes fast
+  // across the blend zone). Recomputing after setY keeps culling accurate.
+  geo.computeBoundingSphere();
 
   const detail = !!gfx.settings.terrainDetail;
   const normals = geo.attributes.normal;
@@ -129,18 +158,12 @@ export function buildChunk(cx, cz) {
   }
   geo.setAttribute('color', new BufferAttribute(colors, 3));
 
-  const mat = new MeshStandardMaterial({
-    vertexColors: true,
-    flatShading: true,
-    roughness: 1.0,
-    metalness: 0.0,
-  });
-
-  const mesh = new Mesh(geo, mat);
+  const mesh = new Mesh(geo, SHARED_TERRAIN_MAT);
   mesh.position.set(chunkOriginX, 0, chunkOriginZ);
   mesh.receiveShadow = true;
   // Terrain casts shadows on Medium/High. Skip on Low to keep the shadow
   // pass triangle count manageable on weak GPUs.
   mesh.castShadow = !!gfx.settings.shadowTerrain;
+  profiler.timeEnd('terrain', _t0);
   return mesh;
 }

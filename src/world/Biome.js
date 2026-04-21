@@ -1,6 +1,7 @@
 import { createNoise2D } from 'simplex-noise';
 import alea from 'alea';
 import { BIOME_SCALE } from '../config.js';
+import { profiler } from '../debug/Profiler.js';
 
 const prng = alea('biome-seed');
 const biomeNoise2D = createNoise2D(prng);
@@ -24,6 +25,7 @@ const BANDWIDTH = 0.26;
 // smoothly interpolates between the 4 named biomes based on a low-frequency
 // simplex — so biome transitions are gradual, not hard-edged.
 export function biomeAt(x, z) {
+  if (profiler.enabled) profiler.counters.biomeAt++;
   const n = biomeNoise2D(x * BIOME_SCALE, z * BIOME_SCALE); // -1..1
   const t = n * 0.5 + 0.5; // 0..1
 

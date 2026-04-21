@@ -47,6 +47,23 @@ export class RuinsManager {
     }
   }
 
+  // Synchronously build every pending ruin whose chunk is ready.
+  primeAll(planePos, maxDistance, isChunkReady) {
+    this.update(planePos, maxDistance, isChunkReady);
+    const remaining = [];
+    for (const p of this.pending) {
+      if (isChunkReady) {
+        const rcx = Math.floor(p.ruin.x / CHUNK_SIZE);
+        const rcz = Math.floor(p.ruin.z / CHUNK_SIZE);
+        if (!isChunkReady(rcx, rcz)) { remaining.push(p); continue; }
+      }
+      const g = buildRuinGroup(p.ruin);
+      this.scene.add(g);
+      this.active.set(p.key, g);
+    }
+    this.pending = remaining;
+  }
+
   _recomputeNeeded(pcx, pcz, planePos, maxSq) {
     const needed = new Set();
     const pending = [];

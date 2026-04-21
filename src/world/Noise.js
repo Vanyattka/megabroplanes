@@ -1,11 +1,13 @@
 import { createNoise2D } from 'simplex-noise';
 import alea from 'alea';
 import { NOISE_SCALE, HEIGHT_AMPLITUDE, NOISE_SEED } from '../config.js';
+import { profiler } from '../debug/Profiler.js';
 
 const prng = alea(NOISE_SEED);
 const noise2D = createNoise2D(prng);
 
 export function heightAt(worldX, worldZ) {
+  if (profiler.enabled) profiler.counters.heightAt++;
   const s = NOISE_SCALE;
   let h = 0;
   h += noise2D(worldX * s, worldZ * s) * HEIGHT_AMPLITUDE;

@@ -24,6 +24,7 @@ import {
   FOG_NEAR_FRAC,
   FOG_FAR_FRAC,
   TIME_PRESETS,
+  PRIME_RADIUS_CHUNKS,
 } from './config.js';
 import { MultiplayerClient } from './net/Client.js';
 import { RemotePlaneManager } from './net/RemotePlaneManager.js';
@@ -35,6 +36,7 @@ import { ChaseCamera } from './camera/ChaseCamera.js';
 import { Hud } from './ui/Hud.js';
 import { PostFx } from './effects/PostFx.js';
 import { gfx, view } from './ui/GraphicsSettings.js';
+import { profiler } from './debug/Profiler.js';
 
 const renderer = new Renderer();
 const clock = new Clock();
@@ -250,19 +252,42 @@ function chunkReady(cx, cz) {
   return chunks.hasChunk(cx, cz);
 }
 
-// Prime world
-chunks.update(plane.position, viewDistanceFor(plane));
-villages.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
-ruins.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
+// Prime world — build just the inner PRIME_RADIUS_CHUNKS ring synchronously
+// so the runway and immediate surroundings are present on the first frame.
+// Priming the FULL view (441 chunks at VD=10) was a mistake: Three.js
+// uploads each geometry to the GPU lazily on first render, so the first
+// ~20 s of play dripped out 22–60 ms frames as 441 VBOs uploaded one at
+// a time while the menu camera panned. Small prime → GPU catches up
+// instantly → outer rings stream in via normal update() within a couple
+// of seconds, spread across many frames so the upload cost is invisible.
+const primeRadius = Math.min(PRIME_RADIUS_CHUNKS, viewDistanceFor(plane));
+chunks.primeAll(plane.position, primeRadius);
+// Villages/ruins still use the full radius so their "which cells can be
+// built" calculation is correct — but primeAll only builds those whose
+// terrain chunk is actually loaded, and outside primeRadius the gate
+// fails, so only nearby villages/ruins end up built synchronously.
+villages.primeAll(plane.position, terrainViewRadiusFor(plane), chunkReady);
+ruins.primeAll(plane.position, terrainViewRadiusFor(plane), chunkReady);
 
 let lastRenderTime = performance.now();
 let resetHeld = false;
 
+// Stream new chunks/villages/ruins. Runs every physicsStep — the per-
+// subsystem update() functions have cheap fast-paths when nothing changed
+// (ChunkManager in particular exits in ~0 ms when the plane cell is
+// unchanged and no scatter is pending), so this is essentially free most
+// ticks and only allocates work when new cells are needed.
+function streamUpdate() {
+  // Pass fog_far as the visibility radius so chunks fully hidden by fog
+  // are skipped in rendering — a major GPU win that keeps loaded chunks
+  // available for when the plane turns and they come back into view.
+  chunks.update(plane.position, viewDistanceFor(plane), fogFarFor(plane));
+  villages.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
+  ruins.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
+}
+
 function physicsStep(dt) {
   if (gameState === 'menu') {
-    chunks.update(plane.position, viewDistanceFor(plane));
-    villages.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
-    ruins.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
     return;
   }
 
@@ -285,15 +310,26 @@ function physicsStep(dt) {
     plane.mesh.visible = false;
     if (crashBannerEl) crashBannerEl.style.display = 'block';
   }
-  chunks.update(plane.position, viewDistanceFor(plane));
-  villages.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
-  ruins.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
+  // NOTE: chunks/villages/ruins streaming is NOT called here — it belongs in
+  // renderStep. Physics runs 1–3× per render frame via the accumulator, and
+  // calling streamUpdate() from here gave each sub-step its own 10 ms build
+  // budget, letting a single long frame eat 30 ms of chunk work. It also
+  // made the camera "zoom in and out" during loading: plane advanced by
+  // FIXED_STEP while wall-clock advanced by 30 ms, so camera lerp (driven by
+  // renderDt) overshot the plane's actual position. Running streaming once
+  // per render frame fixes both.
 }
 
 function renderStep() {
   const now = performance.now();
   const renderDt = Math.min(0.1, (now - lastRenderTime) / 1000);
   lastRenderTime = now;
+
+  // Stream chunks/villages/ruins exactly once per render frame. Before, this
+  // was in physicsStep — which runs 1–3× per render via the accumulator,
+  // so streaming ran multiple times and could eat 30 ms/frame on long
+  // frames. Plane physics still gets its proper N physics sub-steps.
+  streamUpdate();
 
   // Day/night advances regardless of menu state — the sky keeps changing
   // behind the menu, which looks nice.
@@ -362,7 +398,9 @@ function renderStep() {
 }
 
 function loop() {
+  profiler.frameBegin();
   clock.tick(physicsStep, renderStep);
+  profiler.frameEnd();
   requestAnimationFrame(loop);
 }
 

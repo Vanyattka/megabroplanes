@@ -1,6 +1,7 @@
 import { createNoise2D } from 'simplex-noise';
 import alea from 'alea';
 import { SEA_SCALE } from '../config.js';
+import { profiler } from '../debug/Profiler.js';
 
 // Deterministic low-frequency noise that flags where the world should have a
 // sea. Separate seed from the biome/terrain noise so sea regions don't align
@@ -13,6 +14,7 @@ const noise2D = createNoise2D(prng);
 // Returns a value in [0, 1]. Tuned so the majority of the map reads as
 // "land" (< 0.55) and large contiguous pockets read as "sea" (> 0.7).
 export function seaMaskAt(x, z) {
+  if (profiler.enabled) profiler.counters.seaMaskAt++;
   const s = SEA_SCALE;
   // Two octaves — the lower one defines continent-sized basins; the higher
   // one adds gentle shoreline wobble so seas don't look like perfect ovals.

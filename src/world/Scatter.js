@@ -39,6 +39,7 @@ import {
   getVillage,
 } from './Villages.js';
 import { gfx } from '../ui/GraphicsSettings.js';
+import { profiler } from '../debug/Profiler.js';
 
 // Shared geometries and materials — one set for the whole world. Do not
 // dispose per-chunk; only dispose the per-chunk InstancedMesh instance buffer.
@@ -108,6 +109,7 @@ const _scale = new Vector3();
 // Build scatter (trees + rocks) for a single chunk. Deterministic per (cx,cz)
 // so chunks look identical whether freshly built or revisited.
 export function buildScatter(cx, cz) {
+  const _t0 = profiler.timeBegin();
   const group = new Group();
   const prng = alea(`scatter:${cx}:${cz}`);
 
@@ -206,6 +208,7 @@ export function buildScatter(cx, cz) {
     group.add(rocks);
   }
 
+  profiler.timeEnd('scatter', _t0);
   return group;
 }
 

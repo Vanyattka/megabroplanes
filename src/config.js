@@ -22,13 +22,20 @@ export const VIEW_ALT_SCALE = 600;
 // Mins are now "generous" so even at ground level the horizon feels open;
 // altitude stretches a bit further. Fog range in main.js scales with these
 // so the terrain edge is always hidden exactly where fog ends.
+// Each step roughly doubles the chunk count in the grid — and rendering
+// cost scales nearly linearly with chunk count (even with frustum culling,
+// the scene graph / shadow pass / GC all grow). The jump from max=13 to
+// max=22 was too aggressive — it rendered 2000+ chunks without any LOD,
+// halving FPS even on M3. These values keep draw distance generous while
+// staying within GPU budget for a moderate-geometry Three.js scene.
 export const VIEW_DISTANCE_PRESETS = {
-  short:  { label: 'Short',      min: 4, max: 6  },
-  medium: { label: 'Medium',     min: 6, max: 9  },
-  high:   { label: 'High',       min: 8, max: 11 },
+  short:  { label: 'Short',      min: 4,  max: 6  },
+  medium: { label: 'Medium',     min: 6,  max: 9  },
+  high:   { label: 'High',       min: 8,  max: 11 },
   xhigh:  { label: 'Extra High', min: 10, max: 14 },
+  ultra:  { label: 'Ultra',      min: 12, max: 17 },
 };
-export const DEFAULT_VIEW_PRESET = 'medium';
+export const DEFAULT_VIEW_PRESET = 'high';
 export const NOISE_SCALE = 0.005;
 export const HEIGHT_AMPLITUDE = 30;
 export const NOISE_SEED = 'plane-mvp-seed';
@@ -39,7 +46,12 @@ export const RUNWAY_WIDTH = 30;
 export const RUNWAY_MARGIN = 20;
 // Distance beyond the flat zone over which terrain height ramps from 0 to
 // full noise. Prevents a sudden wall of hills at the runway ends.
-export const RUNWAY_BLEND = 150;
+// Longer blend distance = gentler transition from flat runway to natural
+// terrain. 150 m produced a near-vertical wall where mountains meet the
+// flat zone (60 m height / 150 m horizontal = 22° slope). 300 m halves
+// the slope and makes the transition look natural without extending the
+// flat zone into territory you'd actually fly over.
+export const RUNWAY_BLEND = 300;
 export const RUNWAY_Y = 0.02;
 
 // Villages — one village per grid cell. Size tiers vary house count, streets,
@@ -300,9 +312,39 @@ export const ROCKS_PER_CHUNK = 32;
 // it climbs to CHUNK_BUILD_BUDGET_MAX_MS so the world fills in quickly;
 // when the backlog is small (normal flight) it drops back toward the base
 // value so frame rate stays smooth.
+// Budget — single ceiling of 8 ms per update(). buildChunk measures ≈ 2.2 ms
+// on M3, so a frame that actually does work builds ~3 chunks (~13 ms wall
+// total incl. render). primeAll() handles the heavy startup load before
+// the first frame, so we never need a mid-flight "burst" mode: any burst
+// ceiling above 8 ms creates visible 25–30 ms stalls the moment the
+// backlog gets large enough to trigger it (which, on altitude changes at
+// high VD, happens regularly).
+//
+// If altitude increases add a ring of 20–40 new chunks, those fill over
+// 10–15 frames at 8 ms each (~200 ms total) — invisible because fog hides
+// the outer ring and the player moves < 10 m in that window.
 export const CHUNK_BUILD_BUDGET_MS = 4;
-export const CHUNK_BUILD_BUDGET_MAX_MS = 24;
-export const CHUNK_BUILD_BUDGET_PER_PENDING_MS = 0.25;
+export const CHUNK_BUILD_BUDGET_MAX_MS = 10;
+export const CHUNK_BUILD_BUDGET_PER_PENDING_MS = 0.15;
+// primeAll radius (in chunks) used at startup. Too large (e.g. full VD of
+// 441 chunks) and the first ~20 s of play stutters at 45 fps while 100s of
+// VBOs upload to the GPU. Too small and the visible world looks "small"
+// until outer rings stream in. 5 = 121 chunks ≈ 1400 m initial horizon,
+// which is close to full fog_far at medium preset — feels immediately
+// "loaded" at Start without swamping the GPU (prime blocks ~350 ms, which
+// happens once on Start before the first frame so the player doesn't see it).
+export const PRIME_RADIUS_CHUNKS = 5;
+
+// ---------------------------------------------------------------------------
+// Debug profiler — flip DEBUG_PROFILER to true, run `npm run dev`, fly around
+// for ~30 s crossing chunk boundaries, then check the DevTools console.
+// A summary prints every DEBUG_PROFILER_REPORT_INTERVAL_MS; every frame
+// longer than DEBUG_PROFILER_LONG_FRAME_MS is logged inline with breakdown.
+// Zero runtime cost when DEBUG_PROFILER = false.
+// ---------------------------------------------------------------------------
+export const DEBUG_PROFILER = true;
+export const DEBUG_PROFILER_LONG_FRAME_MS = 20;
+export const DEBUG_PROFILER_REPORT_INTERVAL_MS = 5000;
 export const VILLAGE_BUILD_BUDGET_MS = 3;
 export const RUIN_BUILD_BUDGET_MS = 2;
 export const TREE_MIN_HEIGHT = 1.5;

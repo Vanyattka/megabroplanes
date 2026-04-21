@@ -65,6 +65,25 @@ export class VillageManager {
     }
   }
 
+  // Build every pending village whose underlying chunk is already loaded.
+  // Call AFTER chunks.primeAll() at startup so the runway village and any
+  // nearby airports are present on the first rendered frame.
+  primeAll(planePos, maxDistance, isChunkReady) {
+    this.update(planePos, maxDistance, isChunkReady);
+    const remaining = [];
+    for (const p of this.pending) {
+      if (isChunkReady) {
+        const vcx = Math.floor(p.village.airportX / CHUNK_SIZE);
+        const vcz = Math.floor(p.village.airportZ / CHUNK_SIZE);
+        if (!isChunkReady(vcx, vcz)) { remaining.push(p); continue; }
+      }
+      const group = buildVillageGroup(p.village);
+      this.scene.add(group);
+      this.active.set(p.key, group);
+    }
+    this.pending = remaining;
+  }
+
   _recomputeNeeded(pcx, pcz, planePos, maxSq) {
     const needed = new Set();
     const pending = [];

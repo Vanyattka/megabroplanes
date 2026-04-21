@@ -298,21 +298,30 @@ export function villagesAffectingArea(minX, maxX, minZ, maxZ) {
     for (let gcz = pczMin; gcz <= pczMax; gcz++) {
       const v = getVillage(gcx, gcz);
       if (!v) continue;
-      // Quick AABB reject — is the village's max reach (village rect +
-      // runway blend) even close to the chunk bbox?
-      const rHalfL = Math.max(
-        RUNWAY_LENGTH / 2 + RUNWAY_MARGIN,
-        v.villageRect.halfL
-      ) + RUNWAY_BLEND;
-      const rHalfW = Math.max(
-        RUNWAY_WIDTH / 2 + RUNWAY_MARGIN,
-        v.villageRect.halfW
-      ) + RUNWAY_BLEND;
-      const vMinX = v.airportX - rHalfL;
-      const vMaxX = v.airportX + rHalfL;
-      const vMinZ = v.airportZ - rHalfW;
-      const vMaxZ = v.airportZ + rHalfW;
-      if (vMaxX < minX || vMinX > maxX || vMaxZ < minZ || vMinZ > maxZ) continue;
+      // Conservative reject — covers BOTH the airport rect AND the village
+      // rect (which can be offset from the airport by tens to hundreds of
+      // meters AND rotated by an arbitrary angle). Previous version used
+      // the per-axis max of airport/village halves as an AABB centered on
+      // the airport, ignoring the village's offset and rotation. Two
+      // adjacent chunks could then disagree on whether a village affects
+      // them, leaving a vertical seam where one chunk had the flat-factor
+      // ramp and its neighbour didn't — the "wall at the runway" bug.
+      //
+      // Worst-case radius from the airport center: airport's own diagonal,
+      // OR village offset + village diagonal (both half-dims rotated).
+      // Add RUNWAY_BLEND on top (the smoothstep influence radius). Using
+      // this as an AABB half-size centered on the airport is slightly
+      // generous — a few extra chunks get the village in their list —
+      // but is always safe against seams.
+      const airportHalfL = RUNWAY_LENGTH / 2 + RUNWAY_MARGIN;
+      const airportHalfW = RUNWAY_WIDTH / 2 + RUNWAY_MARGIN;
+      const airportDiag = Math.hypot(airportHalfL, airportHalfW);
+      const vr = v.villageRect;
+      const offset = Math.hypot(vr.cx - v.airportX, vr.cz - v.airportZ);
+      const villageDiag = Math.hypot(vr.halfL, vr.halfW);
+      const reach = Math.max(airportDiag, offset + villageDiag) + RUNWAY_BLEND;
+      if (v.airportX + reach < minX || v.airportX - reach > maxX) continue;
+      if (v.airportZ + reach < minZ || v.airportZ - reach > maxZ) continue;
       out.push(v);
     }
   }

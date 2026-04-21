@@ -25,6 +25,7 @@ import {
 } from '../config.js';
 import { getVillage } from './Villages.js';
 import { groundHeight } from './Ground.js';
+import { profiler } from '../debug/Profiler.js';
 
 // One MeshStandardMaterial shared across every road mesh in the world —
 // the only thing that varies per road is the BufferGeometry ribbon shape.
@@ -250,9 +251,11 @@ export class Roads {
   buildForChunk(cx, cz) {
     const key = `${cx},${cz}`;
     if (this.perChunk.has(key)) return;
+    const _t0 = profiler.timeBegin();
     const specs = roadsOwnedByChunk(cx, cz);
     if (specs.length === 0) {
       this.perChunk.set(key, { meshes: [] });
+      profiler.timeEnd('roads', _t0);
       return;
     }
     const meshes = [];
@@ -263,6 +266,7 @@ export class Roads {
       meshes.push(r);
     }
     this.perChunk.set(key, { meshes });
+    profiler.timeEnd('roads', _t0);
   }
 
   disposeForChunk(cx, cz) {
