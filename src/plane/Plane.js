@@ -22,6 +22,17 @@ export class Plane {
     this.velocity = new Vector3();
     this.quaternion = new Quaternion();
     this.angularVelocity = new Vector3();
+    // Snapshot at the start of each physics step — the "previous" end
+    // of the interpolation window used by the render pass.
+    this._prevPosition = new Vector3();
+    this._prevQuaternion = new Quaternion();
+    // Interpolated state rendered this frame. The chase camera and any
+    // visual consumer should read these (not position/quaternion) so
+    // motion is smooth at render rates higher than the 60 Hz physics
+    // rate. Starts equal to position/quaternion; updated by
+    // updateRender(alpha) every render frame.
+    this.renderPosition = new Vector3();
+    this.renderQuaternion = new Quaternion();
     this.throttle = 0;
     this.onGround = true;
     this.crashed = false;
@@ -107,6 +118,10 @@ export class Plane {
     this.velocity.set(0, 0, 0);
     this.quaternion.copy(spawn.quaternion);
     this.angularVelocity.set(0, 0, 0);
+    this._prevPosition.copy(spawn.position);
+    this._prevQuaternion.copy(spawn.quaternion);
+    this.renderPosition.copy(spawn.position);
+    this.renderQuaternion.copy(spawn.quaternion);
     this.throttle = 0;
     this.onGround = true;
     this._roughLogged = false;
@@ -117,16 +132,37 @@ export class Plane {
   }
 
   syncMesh() {
+    // After setLoadout/reset: snap mesh directly to authoritative state.
+    // Normal per-frame updates go through updateRender(alpha) instead.
     this.mesh.position.copy(this.position);
     this.mesh.quaternion.copy(this.quaternion);
   }
 
+  // Interpolate between the previous and current physics state at
+  // `alpha` (0..1, from Clock.tick). Called every render frame, lets
+  // the plane move smoothly between 60 Hz physics ticks at e.g. 120 Hz
+  // render. Must be called AFTER update() and BEFORE anything reads
+  // renderPosition (chase camera, plane shadow, etc.).
+  updateRender(alpha) {
+    if (this.crashed) return;
+    this.renderPosition.copy(this._prevPosition).lerp(this.position, alpha);
+    this.renderQuaternion.copy(this._prevQuaternion).slerp(this.quaternion, alpha);
+    this.mesh.position.copy(this.renderPosition);
+    this.mesh.quaternion.copy(this.renderQuaternion);
+  }
+
   update(dt, input, getHeight, isOnRunway, crashesEnabled, touch) {
     if (this.crashed) return;
+    // Snapshot the "previous" state BEFORE we mutate position/quaternion.
+    // updateRender(alpha) will interpolate from here to the new values.
+    this._prevPosition.copy(this.position);
+    this._prevQuaternion.copy(this.quaternion);
     applyControls(this, input, dt, touch);
     const braking = input.isPressed('Space') || !!(touch && touch.brake);
     physicsStep(this, dt, getHeight, isOnRunway, braking, crashesEnabled);
-    this.syncMesh();
+    // Don't syncMesh here — updateRender will position the mesh using
+    // the interpolated render state. If we snapped the mesh to the raw
+    // post-physics position, we'd get the 60 Hz step visible on screen.
 
     const prop = this.mesh.getObjectByName('propeller');
     if (prop) prop.rotation.z += this.throttle * 30 * dt;

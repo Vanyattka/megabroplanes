@@ -15,6 +15,7 @@ import { JetExhaust } from './effects/JetExhaust.js';
 import { DayNight } from './world/DayNight.js';
 import { Stars } from './world/Stars.js';
 import { Roads } from './world/Roads.js';
+import { ChunkWorkerPool } from './world/ChunkWorkerPool.js';
 import { worldTime } from './world/WorldTime.js';
 import { Audio } from './audio/Audio.js';
 import {
@@ -55,7 +56,11 @@ const dayNight = new DayNight({
 // Roads are owned per chunk — ChunkManager calls roads.buildForChunk /
 // disposeForChunk so road meshes live and die with their terrain.
 const roads = new Roads(renderer.scene);
-const chunks = new ChunkManager(renderer.scene, { roads });
+// 2-worker pool offloads terrain compute (~3 ms CPU per chunk) off the
+// main thread. primeAll still runs synchronously so the world is ready by
+// the first frame; mid-flight streaming uses the pool.
+const chunkPool = new ChunkWorkerPool(2);
+const chunks = new ChunkManager(renderer.scene, { roads, pool: chunkPool });
 const villages = new VillageManager(renderer.scene);
 const ruins = new RuinsManager(renderer.scene);
 const water = new Water(renderer.scene);
@@ -320,10 +325,16 @@ function physicsStep(dt) {
   // per render frame fixes both.
 }
 
-function renderStep() {
+function renderStep(alpha) {
   const now = performance.now();
   const renderDt = Math.min(0.1, (now - lastRenderTime) / 1000);
   lastRenderTime = now;
+
+  // Interpolate plane state between its last two physics snapshots so the
+  // mesh and camera move smoothly at 120+ fps even though physics ticks
+  // at 60 Hz. Without this the camera "rubber-bands" every other frame
+  // whenever render is faster than physics.
+  plane.updateRender(alpha);
 
   // Stream chunks/villages/ruins exactly once per render frame. Before, this
   // was in physicsStep — which runs 1–3× per render via the accumulator,

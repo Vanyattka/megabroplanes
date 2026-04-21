@@ -44,9 +44,15 @@ export class ChaseCamera {
     _qYaw.setFromAxisAngle(_axisY, this.yaw);
     _qPitch.setFromAxisAngle(_axisX, this.pitch);
     _offset.applyQuaternion(_qPitch).applyQuaternion(_qYaw);
-    _offset.applyQuaternion(plane.quaternion);
+    // Read the interpolated render state — not raw plane.position —
+    // so at high render framerates the camera isn't snapping every
+    // other frame when physics ticks. Fall back to position/quaternion
+    // for backward compat (e.g. the menu orbit camera passes a dummy).
+    const planePos = plane.renderPosition || plane.position;
+    const planeQuat = plane.renderQuaternion || plane.quaternion;
+    _offset.applyQuaternion(planeQuat);
 
-    _desired.copy(plane.position).add(_offset);
+    _desired.copy(planePos).add(_offset);
 
     if (!this.initialized) {
       this.camera.position.copy(_desired);
@@ -62,6 +68,6 @@ export class ChaseCamera {
       const alpha = 1 - Math.exp(-clampedDt * CAMERA_FOLLOW_RATE);
       this.camera.position.lerp(_desired, alpha);
     }
-    this.camera.lookAt(plane.position);
+    this.camera.lookAt(planePos);
   }
 }

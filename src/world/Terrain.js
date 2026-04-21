@@ -1,37 +1,24 @@
 import {
   BufferAttribute,
+  BufferGeometry,
   Mesh,
   MeshStandardMaterial,
-  PlaneGeometry,
+  Sphere,
+  Vector3,
 } from 'three';
-import {
-  CHUNK_SIZE,
-  CHUNK_RESOLUTION,
-  SLOPE_ROCK_THRESHOLD,
-  WATER_LEVEL,
-  SEA_THRESHOLD_LOW,
-  SEA_THRESHOLD_HIGH,
-  SEA_DEPTH,
-} from '../config.js';
-import { heightAt as noiseHeightAt } from './Noise.js';
-import { biomeAt } from './Biome.js';
-import { seaMaskAt } from './SeaMask.js';
-import { villagesAffectingArea, villageFlatFactorFromList } from './Villages.js';
+import { CHUNK_SIZE, CHUNK_RESOLUTION } from '../config.js';
+import { villagesAffectingArea } from './Villages.js';
+import { villagesToWorkerData } from './VillageData.js';
+import { computeTerrainData } from './TerrainCompute.js';
 import { gfx } from '../ui/GraphicsSettings.js';
 import { profiler } from '../debug/Profiler.js';
 
-const ROCK = [0.48, 0.44, 0.40];
-
-// One MeshStandardMaterial shared across every terrain chunk in the world.
-// Before this, buildChunk() allocated a fresh material per chunk — and
-// because Three.js compiles shader programs lazily on first render, every
-// new chunk triggered a 40–80 ms shader-compile stall (very visible as
-// occasional hiccups even after CPU generation was tight).
-//
-// With one shared material the program compiles exactly once. Per-chunk
-// variation is already driven by vertex colors (see colors attribute in
-// buildChunk), so no visual change. castShadow is a mesh-level flag so it
-// stays configurable per chunk without needing material variants.
+// One MeshStandardMaterial shared across every terrain chunk. Before this,
+// buildChunk() allocated a fresh material per chunk — Three.js compiles
+// shader programs lazily on first render, so every new chunk triggered a
+// 40–80 ms shader-compile stall. With one shared material the program
+// compiles exactly once; per-chunk variation is driven by vertex colors.
+// castShadow is a mesh-level flag so it's still configurable per chunk.
 const SHARED_TERRAIN_MAT = new MeshStandardMaterial({
   vertexColors: true,
   flatShading: true,
@@ -42,128 +29,75 @@ export function getSharedTerrainMaterial() {
   return SHARED_TERRAIN_MAT;
 }
 
-function colorByHeight(y) {
-  if (y < 1) return [0.85, 0.80, 0.60];       // sand
-  if (y < 10) return [0.35, 0.55, 0.25];      // grass
-  if (y < 25) return [0.40, 0.48, 0.30];      // darker grass
-  if (y < 40) return [0.55, 0.52, 0.45];      // scrub
-  return [0.96, 0.96, 0.96];                  // snow
-}
-
-// Deterministic per-vertex hash in [0, 1). Used to perturb vertex colors
-// so each triangle reads as slightly different grass/rock instead of one
-// flat biome band.
-function vertexHash(x, z) {
-  const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
-  return s - Math.floor(s);
-}
-
-function smoothstep01(edge0, edge1, x) {
-  if (x <= edge0) return 0;
-  if (x >= edge1) return 1;
-  const t = (x - edge0) / (edge1 - edge0);
-  return t * t * (3 - 2 * t);
-}
-
-// Inline fast-path groundHeight that takes a precomputed village list.
-// Avoids the per-vertex 3×3 cell lookup that Ground.groundHeight does —
-// biggest single win for chunks far from any village (most of them).
-function groundHeightFast(x, z, villages) {
-  const f = villageFlatFactorFromList(x, z, villages);
-  if (f === 0) return 0;
-  const b = biomeAt(x, z);
-  let h = noiseHeightAt(x, z) * b.amp + b.offset;
-  const seaStrength = smoothstep01(
-    SEA_THRESHOLD_LOW,
-    SEA_THRESHOLD_HIGH,
-    seaMaskAt(x, z)
-  );
-  h -= seaStrength * SEA_DEPTH;
-  if (b.type !== 'lake' && seaStrength < 0.3) {
-    const LAND_FLOOR = WATER_LEVEL + 2;
-    if (h < LAND_FLOOR) {
-      h = LAND_FLOOR - 3 * (1 - Math.exp((h - LAND_FLOOR) / 20));
+// Shared, reused index buffer. Every terrain mesh has the same topology
+// (RES×RES grid), so we compute the pattern once and every BufferGeometry
+// references it — saves allocating + uploading a fresh index buffer per
+// chunk and keeps GPU VBO count down.
+let SHARED_TERRAIN_INDEX = null;
+function getSharedIndex() {
+  if (SHARED_TERRAIN_INDEX) return SHARED_TERRAIN_INDEX;
+  const RES = CHUNK_RESOLUTION;
+  const tris = (RES - 1) * (RES - 1) * 2;
+  const arr = new Uint32Array(tris * 3);
+  let p = 0;
+  for (let iy = 0; iy < RES - 1; iy++) {
+    for (let ix = 0; ix < RES - 1; ix++) {
+      const a = iy * RES + ix;
+      const b = iy * RES + ix + 1;
+      const c = (iy + 1) * RES + ix;
+      const d = (iy + 1) * RES + ix + 1;
+      // Winding chosen so the face normal points +Y (up) for flat terrain.
+      arr[p++] = a; arr[p++] = c; arr[p++] = b;
+      arr[p++] = b; arr[p++] = c; arr[p++] = d;
     }
   }
-  return h * f;
+  SHARED_TERRAIN_INDEX = new BufferAttribute(arr, 1);
+  return SHARED_TERRAIN_INDEX;
 }
 
-export function buildChunk(cx, cz) {
-  const _t0 = profiler.timeBegin();
-  const geo = new PlaneGeometry(
-    CHUNK_SIZE,
-    CHUNK_SIZE,
-    CHUNK_RESOLUTION - 1,
-    CHUNK_RESOLUTION - 1
-  );
-  geo.rotateX(-Math.PI / 2);
-
-  const positions = geo.attributes.position;
+// Wrap raw buffers (from sync compute OR worker result) in a Three.js
+// Mesh. Cheap — a few BufferAttributes + a Mesh; all the heavy math
+// already happened inside computeTerrainData.
+export function finalizeTerrainMesh(data, cx, cz, shadowTerrain) {
   const chunkOriginX = cx * CHUNK_SIZE + CHUNK_SIZE / 2;
   const chunkOriginZ = cz * CHUNK_SIZE + CHUNK_SIZE / 2;
 
-  // Precompute villages that actually touch this chunk's area. Usually 0;
-  // sometimes 1–2 near a settlement. Saves 9 × 1089 = ~10k wasted cell
-  // lookups per chunk when we're out in open terrain.
-  const minX = chunkOriginX - CHUNK_SIZE / 2;
-  const maxX = chunkOriginX + CHUNK_SIZE / 2;
-  const minZ = chunkOriginZ - CHUNK_SIZE / 2;
-  const maxZ = chunkOriginZ + CHUNK_SIZE / 2;
-  const villages = villagesAffectingArea(minX, maxX, minZ, maxZ);
-
-  for (let i = 0; i < positions.count; i++) {
-    const worldX = chunkOriginX + positions.getX(i);
-    const worldZ = chunkOriginZ + positions.getZ(i);
-    positions.setY(i, groundHeightFast(worldX, worldZ, villages));
-  }
-
-  geo.computeVertexNormals();
-  // Three.js caches the bounding sphere from the initial flat plane. After
-  // we displace vertices by heightAt (up to ~60 m in mountains, -18 m under
-  // water), the stale sphere is too small — frustum culling skips chunks
-  // whose mesh extends outside the old, flat disk. That caused the "wall"
-  // pop-in at chunk boundaries near the runway (where height changes fast
-  // across the blend zone). Recomputing after setY keeps culling accurate.
-  geo.computeBoundingSphere();
-
-  const detail = !!gfx.settings.terrainDetail;
-  const normals = geo.attributes.normal;
-  const colors = new Float32Array(positions.count * 3);
-  for (let i = 0; i < positions.count; i++) {
-    const x = positions.getX(i);
-    const z = positions.getZ(i);
-    const y = positions.getY(i);
-    const ny = normals.getY(i);
-    let rgb;
-    if (ny < SLOPE_ROCK_THRESHOLD && y > 0.5) {
-      rgb = ROCK;
-    } else {
-      rgb = colorByHeight(y);
-    }
-    let r = rgb[0], g = rgb[1], b = rgb[2];
-    if (detail) {
-      // Two hashes per vertex for slightly anisotropic jitter — breaks up
-      // per-triangle banding. Kept small (~±5%) so the biome palette still
-      // reads clearly.
-      const h1 = vertexHash(chunkOriginX + x, chunkOriginZ + z) - 0.5;
-      const h2 = vertexHash(chunkOriginX + x + 17.3, chunkOriginZ + z - 9.7) - 0.5;
-      const jitter = h1 * 0.09 + h2 * 0.05;
-      r = Math.max(0, Math.min(1, r + jitter * 0.6));
-      g = Math.max(0, Math.min(1, g + jitter));
-      b = Math.max(0, Math.min(1, b + jitter * 0.5));
-    }
-    colors[i * 3] = r;
-    colors[i * 3 + 1] = g;
-    colors[i * 3 + 2] = b;
-  }
-  geo.setAttribute('color', new BufferAttribute(colors, 3));
+  const geo = new BufferGeometry();
+  geo.setIndex(getSharedIndex());
+  geo.setAttribute('position', new BufferAttribute(data.positions, 3));
+  geo.setAttribute('normal', new BufferAttribute(data.normals, 3));
+  geo.setAttribute('color', new BufferAttribute(data.colors, 3));
+  const [sx, sy, sz] = data.boundingSphereCenter;
+  geo.boundingSphere = new Sphere(new Vector3(sx, sy, sz), data.boundingSphereRadius);
 
   const mesh = new Mesh(geo, SHARED_TERRAIN_MAT);
   mesh.position.set(chunkOriginX, 0, chunkOriginZ);
   mesh.receiveShadow = true;
-  // Terrain casts shadows on Medium/High. Skip on Low to keep the shadow
-  // pass triangle count manageable on weak GPUs.
-  mesh.castShadow = !!gfx.settings.shadowTerrain;
+  mesh.castShadow = !!shadowTerrain;
+  return mesh;
+}
+
+// Extract the lightweight villages-data array for a chunk. Called from
+// both the sync path (here) and the main thread before dispatching a
+// worker build request — the worker can't query the village cache itself
+// (it's per-thread), so main always does villagesAffectingArea first.
+export function villagesForChunk(cx, cz) {
+  const chunkOriginX = cx * CHUNK_SIZE + CHUNK_SIZE / 2;
+  const chunkOriginZ = cz * CHUNK_SIZE + CHUNK_SIZE / 2;
+  const minX = chunkOriginX - CHUNK_SIZE / 2;
+  const maxX = chunkOriginX + CHUNK_SIZE / 2;
+  const minZ = chunkOriginZ - CHUNK_SIZE / 2;
+  const maxZ = chunkOriginZ + CHUNK_SIZE / 2;
+  return villagesToWorkerData(villagesAffectingArea(minX, maxX, minZ, maxZ));
+}
+
+// Synchronous compose — used by primeAll (blocks the first ~300 ms of the
+// session) and as a fallback if the worker pool isn't ready.
+export function buildChunk(cx, cz) {
+  const _t0 = profiler.timeBegin();
+  const villages = villagesForChunk(cx, cz);
+  const data = computeTerrainData(cx, cz, villages, !!gfx.settings.terrainDetail);
+  const mesh = finalizeTerrainMesh(data, cx, cz, !!gfx.settings.shadowTerrain);
   profiler.timeEnd('terrain', _t0);
   return mesh;
 }
