@@ -24,17 +24,25 @@ import { profiler } from '../debug/Profiler.js';
 const MAX_IN_FLIGHT = 8;
 
 // Cap how many worker results get finalized into Three.js meshes per
-// frame. Without this, when several workers return near-simultaneously
-// (common after a boundary crossing), main thread finalizes all of them
-// in one frame: 6–8 × BufferGeometry + scene.add + GPU VBO upload +
-// shadow-map regeneration = 15–25 ms frame. CAP=2 spreads the work
-// evenly — any backlog drains over a few imperceptible frames at
-// ~11 ms each instead of one 20 ms spike.
-const MAX_TERRAIN_INSTALLS_PER_FRAME = 2;
+// frame. CAP=4 keeps single-frame GPU upload under 2 ms (terrain
+// finalize ~0.3 ms each, each creating a ~40 KB BufferGeometry) while
+// draining the backlog fast enough to keep up with workers that can
+// produce ~500 chunks/s. At 2/frame main was the bottleneck: at long-
+// distance sustained flight, workers built chunks faster than install
+// could run them, so visible ground lagged several seconds behind and
+// the plane flew over "emptiness" that was actually chunks still in
+// the result queue.
+const MAX_TERRAIN_INSTALLS_PER_FRAME = 4;
+// Backpressure — stop dispatching new work to the pool once this many
+// results are already buffered waiting to install. Keeps the result
+// queue bounded even when the plane flies faster than 4 installs/frame
+// can absorb, and stops workers spinning on stale chunks (which would
+// then get pruned anyway when the plane moves further).
+const MAX_BUFFERED_RESULTS = 12;
 // Matching cap for scatter. 0.2 ms CPU per scatter × many → mostly
 // cheap but still bulks up a single frame's GPU upload when several
 // fresh InstancedMesh instance buffers arrive at once.
-const MAX_SCATTER_INSTALLS_PER_FRAME = 2;
+const MAX_SCATTER_INSTALLS_PER_FRAME = 3;
 
 export class ChunkManager {
   // `pool` (optional ChunkWorkerPool): when provided, terrain is built
@@ -74,6 +82,15 @@ export class ChunkManager {
   // .visible on the chunk Group skips all of that for free.
   update(planePos, viewDistance, visibilityRadius) {
     const _tMgr = profiler.timeBegin();
+    // NaN guard — if physics ever produces a non-finite position (rare,
+    // but division-by-zero or sqrt(-x) in the plane physics could do it),
+    // Math.floor returns NaN, visibility compares false for everything,
+    // and the player sees every chunk go invisible. Better to no-op the
+    // streaming update than to blank the world.
+    if (!Number.isFinite(planePos.x) || !Number.isFinite(planePos.z)) {
+      profiler.timeEnd('chunkMgr', _tMgr);
+      return;
+    }
     const pcx = Math.floor(planePos.x / CHUNK_SIZE);
     const pcz = Math.floor(planePos.z / CHUNK_SIZE);
     const vd = viewDistance ?? VIEW_DISTANCE_CHUNKS;
@@ -194,11 +211,17 @@ export class ChunkManager {
     const sorted = this._pendingSorted;
 
     if (this.pool) {
-      // Async path: dispatch up to MAX_IN_FLIGHT chunks per frame. Each
+      // Backpressure: if the result buffer is already full, don't spawn
+      // more work. Workers would produce results that sit in memory
+      // growing backlog while main can only install a few per frame.
+      // Pausing dispatch gives install time to drain the buffer.
+      if (this._terrainResults.length >= MAX_BUFFERED_RESULTS) return;
+      const budget = MAX_BUFFERED_RESULTS - this._terrainResults.length;
+      // Async path: dispatch up to min(slots, budget) chunks. Each
       // dispatch is cheap (~20 μs: extract villages, postMessage). The
       // worker does the 3 ms of pure math off the main thread and the
       // result arrives later via _onTerrainReady.
-      const slots = MAX_IN_FLIGHT - this._inFlight.size;
+      const slots = Math.min(MAX_IN_FLIGHT - this._inFlight.size, budget);
       if (slots <= 0) return;
       let dispatched = 0;
       while (
