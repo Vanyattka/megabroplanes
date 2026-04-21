@@ -237,6 +237,10 @@ function setPhotoMode(on) {
     plane._prevPosition.copy(plane.position);
     plane._prevQuaternion.copy(plane.quaternion);
     plane.syncMesh();
+    // Flush the jet plume — any live particle carries plane.velocity as its
+    // base and would drift forward ahead of the frozen plane for the rest
+    // of its lifetime otherwise.
+    jetExhaust.clear();
     // Aim orbit at the plane and seed the camera on the current chase-cam
     // position so there's no visual jump.
     orbitControls.target.copy(plane.position);
@@ -467,8 +471,16 @@ function renderStep(alpha) {
   );
   if (!plane.crashed) planeShadow.update(plane, getPhysicsFloor);
   else planeShadow.mesh.visible = false;
-  explosion.update(renderDt);
-  jetExhaust.update(renderDt, plane);
+  // Freeze particle systems in photo mode. Jet exhaust in particular was
+  // shooting forward ahead of the frozen plane — each spawned particle
+  // inherits plane.velocity, which is still large (flight speed) even
+  // though physics is paused, so they'd jet forward then stop. Skipping
+  // update() keeps currently-rendered particles in place; entry clears
+  // the existing plume so there's no stale trail.
+  if (!photoMode) {
+    explosion.update(renderDt);
+    jetExhaust.update(renderDt, plane);
+  }
   remotes.update(renderDt);
   mp.sendState(plane);
 
