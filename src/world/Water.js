@@ -15,10 +15,10 @@ import {
   WATER_OPACITY,
   HORIZON_COLOR,
 } from '../config.js';
+import { worldTime } from './WorldTime.js';
 
-// Vertex: pass world position + view direction straight through. The water
-// plane is flat — ripples are done in the fragment with analytic wave
-// functions so we don't pay for a heavy normal map sample.
+// Vertex passes world-space + view direction through. The water plane is
+// flat — all the wave shapes are produced analytically in the fragment.
 const VERT = /* glsl */ `
   varying vec3 vWorldPos;
   varying vec3 vViewDir;
@@ -30,20 +30,22 @@ const VERT = /* glsl */ `
   }
 `;
 
-// Fragment: animated ripples (two crossed sine fields advected by uTime),
-// Fresnel blend between shallow and deep colors, plus a sky-color reflection
-// term. We intentionally skip Three's fog chunks here — a ShaderMaterial
-// that uses them has to merge UniformsLib.fog itself, and getting that
-// wrong throws during compile and kills the render loop. The water edge is
-// well past `camera.far` on the horizon anyway, so fog isn't needed to hide
-// it; we fade manually toward the horizon tint at grazing view angles.
+// Fragment: analytic ripples → perturbed normal → Fresnel mix between water
+// tones and reflected sky, plus a sun-glint specular term so sunsets produce
+// the classic golden path across the water. Colors are time-of-day-aware
+// (dark water at night, blue during the day) via uDayFactor.
 const FRAG = /* glsl */ `
   uniform float uTime;
   uniform vec3  uShallow;
   uniform vec3  uDeep;
   uniform vec3  uSkyColor;
+  uniform vec3  uDeepSkyColor; // overhead sky — reflected when looking straight down
   uniform float uOpacity;
   uniform float uRippleAmp;
+  uniform float uDayFactor;    // 1 = full day, 0 = full night: scales base water tones
+  uniform vec3  uSunDir;
+  uniform vec3  uSunColor;
+  uniform float uSunIntensity;
   varying vec3 vWorldPos;
   varying vec3 vViewDir;
 
@@ -65,8 +67,30 @@ const FRAG = /* glsl */ `
     float ndv = max(dot(viewDir, n), 0.0);
     float fresnel = pow(1.0 - ndv, 3.5);
 
+    // Base water — shallow blended to deep based on view angle, darkened
+    // according to time of day so night water reads black-blue, not the
+    // daytime tropical blue.
     vec3 baseCol = mix(uShallow, uDeep, clamp((1.0 - ndv) * 0.5, 0.0, 1.0));
-    vec3 col = mix(baseCol, uSkyColor, fresnel);
+    baseCol *= mix(0.12, 1.0, uDayFactor);
+
+    // Reflected sky — horizon color at grazing view, zenith-ish when
+    // looking straight down. The water surface gets the same sky tint as
+    // the rest of the scene, so lakes at dusk turn orange automatically.
+    vec3 reflected = mix(uDeepSkyColor, uSkyColor, fresnel);
+
+    vec3 col = mix(baseCol, reflected, fresnel);
+
+    // Sun glint — Blinn-Phong specular using the half vector between view
+    // and sun directions against the perturbed normal. Tight highlight that
+    // smears across the rippled surface, producing the golden sunset path.
+    // HDR multiplier pushes the brightest parts past the bloom threshold.
+    if (uSunIntensity > 0.02) {
+      vec3 halfVec = normalize(viewDir + uSunDir);
+      float specBase = max(dot(n, halfVec), 0.0);
+      float spec = pow(specBase, 180.0);
+      float glow = pow(specBase, 14.0);
+      col += uSunColor * (spec * 4.5 + glow * 0.35) * uSunIntensity;
+    }
 
     gl_FragColor = vec4(col, uOpacity);
   }
@@ -87,8 +111,13 @@ export class Water {
         uShallow: { value: new Color(WATER_COLOR_SHALLOW) },
         uDeep: { value: new Color(WATER_COLOR_DEEP) },
         uSkyColor: { value: new Color(HORIZON_COLOR) },
+        uDeepSkyColor: { value: new Color(0x2a62b4) },
         uOpacity: { value: WATER_OPACITY },
         uRippleAmp: { value: 1.0 },
+        uDayFactor: { value: 1.0 },
+        uSunDir: { value: new Vector3(0, 1, 0) },
+        uSunColor: { value: new Color(0xffffff) },
+        uSunIntensity: { value: 1.0 },
       },
       vertexShader: VERT,
       fragmentShader: FRAG,
@@ -105,25 +134,30 @@ export class Water {
     scene.add(this.mesh);
 
     this._time = 0;
-    this._tint = new Color();
   }
 
-  // planePos: Vector3-like — the water plane centers itself under the player
-  // each frame so the finite mesh always fills the visible area.
-  // worldTint (optional): current sky horizon tint for reflections; passed by
-  // DayNight in main.js so reflections follow the time of day.
+  // planePos: Vector3-like — water tracks under the player every frame.
+  // worldTint: horizon color. Overhead / sun info come from worldTime so the
+  // reflections match the same day/night cycle every other system uses.
   update(dt, planePos, worldTint) {
     this._time += dt * WATER_NORMAL_SCROLL_SPEED;
-    this.material.uniforms.uTime.value = this._time;
+    const u = this.material.uniforms;
+    u.uTime.value = this._time;
 
     if (planePos) {
       this.mesh.position.x = planePos.x;
       this.mesh.position.z = planePos.z;
     }
 
-    if (worldTint) {
-      this.material.uniforms.uSkyColor.value.copy(worldTint);
-    }
+    if (worldTint) u.uSkyColor.value.copy(worldTint);
+    u.uDeepSkyColor.value.copy(worldTime.skyColor);
+    // Day factor — invert the nightFactor so 1.0 at noon, ~0.0 at midnight.
+    // Adds a small floor so mid-dusk water isn't pitch black.
+    const df = 1.0 - (worldTime.nightFactor ?? 0);
+    u.uDayFactor.value = Math.max(0.05, df);
+    u.uSunDir.value.copy(worldTime.sunDir);
+    u.uSunColor.value.copy(worldTime.sunColor);
+    u.uSunIntensity.value = worldTime.sunIntensity;
   }
 
   dispose() {

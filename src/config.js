@@ -477,20 +477,25 @@ export const DAY_TIME_MULT = 1.0;
 export const DAY_NIGHT_KEYFRAMES = [
   // midnight
   { t: 0.00, skyColor: 0x0a1530, horizonColor: 0x182940, fogColor: 0x182940, sunColor: 0x6e80a0, sunIntensity: 0.22, ambientColor: 0x4a5878, ambientIntensity: 0.40, starsOpacity: 1.0 },
-  // pre-dawn
-  { t: 0.18, skyColor: 0x232a48, horizonColor: 0x5a4456, fogColor: 0x3a3646, sunColor: 0x9c78b8, sunIntensity: 0.30, ambientColor: 0x5a5866, ambientIntensity: 0.45, starsOpacity: 0.55 },
-  // dawn
-  { t: 0.25, skyColor: 0x3e5c90, horizonColor: 0xc78358, fogColor: 0xa37b62, sunColor: 0xffb070, sunIntensity: 0.65, ambientColor: 0x9a7a70, ambientIntensity: 0.60, starsOpacity: 0.15 },
-  // noon — sun & ambient trimmed so the overhead scene isn't uniformly
-  // near-white. Previous 0.85/1.20 values made every lit surface sit at
-  // ~0.87 luminance; after ACES that compressed the whole image into a
-  // narrow bright band. Slightly darker noon = crisper contrast and no
-  // more "everything glowing" bloom feel.
+  // deep pre-dawn — cool blues with a hint of violet
+  { t: 0.17, skyColor: 0x1d234a, horizonColor: 0x413055, fogColor: 0x2e2542, sunColor: 0x6a6aa8, sunIntensity: 0.24, ambientColor: 0x4a4a6e, ambientIntensity: 0.42, starsOpacity: 0.70 },
+  // twilight — magenta tint starting to burn through
+  { t: 0.21, skyColor: 0x2b335a, horizonColor: 0x7c4a64, fogColor: 0x543a50, sunColor: 0xd07a70, sunIntensity: 0.38, ambientColor: 0x685866, ambientIntensity: 0.48, starsOpacity: 0.30 },
+  // sunrise — sun on the horizon, burning red-orange band
+  { t: 0.25, skyColor: 0x3e5a92, horizonColor: 0xee7850, fogColor: 0xcb6a48, sunColor: 0xff7a3c, sunIntensity: 0.85, ambientColor: 0xb07864, ambientIntensity: 0.62, starsOpacity: 0.05 },
+  // golden hour morning — warm gold
+  { t: 0.32, skyColor: 0x4e7cb4, horizonColor: 0xf0b080, fogColor: 0xc8a080, sunColor: 0xffcf90, sunIntensity: 0.95, ambientColor: 0xd8bfa6, ambientIntensity: 0.62, starsOpacity: 0.0 },
+  // noon — cool blue sky; sun + ambient trimmed so the overhead scene
+  // isn't uniformly near-white (crisper contrast, no bloom whiteout).
   { t: 0.5,  skyColor: 0x2a62b4, horizonColor: 0x7aa5c9, fogColor: 0x7da0be, sunColor: 0xfff4d0, sunIntensity: 1.00, ambientColor: 0xffffff, ambientIntensity: 0.55, starsOpacity: 0.0 },
-  // dusk
-  { t: 0.75, skyColor: 0x243868, horizonColor: 0xcb6b3c, fogColor: 0xa85d40, sunColor: 0xff6a2a, sunIntensity: 0.65, ambientColor: 0x8a5030, ambientIntensity: 0.60, starsOpacity: 0.15 },
-  // post-dusk
-  { t: 0.82, skyColor: 0x232a48, horizonColor: 0x5a4456, fogColor: 0x3a3646, sunColor: 0x9c78b8, sunIntensity: 0.30, ambientColor: 0x5a5866, ambientIntensity: 0.45, starsOpacity: 0.55 },
+  // golden hour afternoon
+  { t: 0.68, skyColor: 0x4870aa, horizonColor: 0xf0a870, fogColor: 0xc89070, sunColor: 0xffc880, sunIntensity: 0.95, ambientColor: 0xd4b296, ambientIntensity: 0.62, starsOpacity: 0.0 },
+  // sunset — burning red-orange at horizon, deep teal above
+  { t: 0.75, skyColor: 0x1f3576, horizonColor: 0xf0561c, fogColor: 0xa04028, sunColor: 0xff4a18, sunIntensity: 0.82, ambientColor: 0x8e4a30, ambientIntensity: 0.58, starsOpacity: 0.10 },
+  // after-sunset — magenta / hot-pink band
+  { t: 0.78, skyColor: 0x2a2d64, horizonColor: 0x94355c, fogColor: 0x6a2e4a, sunColor: 0xd44c80, sunIntensity: 0.45, ambientColor: 0x705666, ambientIntensity: 0.52, starsOpacity: 0.30 },
+  // civil twilight — violet settling to night
+  { t: 0.82, skyColor: 0x181f46, horizonColor: 0x3c2b4e, fogColor: 0x282240, sunColor: 0x6a6aa8, sunIntensity: 0.24, ambientColor: 0x4a4868, ambientIntensity: 0.44, starsOpacity: 0.70 },
   // midnight (loop close)
   { t: 1.00, skyColor: 0x0a1530, horizonColor: 0x182940, fogColor: 0x182940, sunColor: 0x6e80a0, sunIntensity: 0.22, ambientColor: 0x4a5878, ambientIntensity: 0.40, starsOpacity: 1.0 },
 ];

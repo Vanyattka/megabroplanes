@@ -46,12 +46,16 @@ const FRAG = /* glsl */ `
     // Base sky (horizon + zenith) kept in LDR range so it never blooms.
     vec3 col = clamp(mix(uHorizon, uZenith, t), 0.0, 0.95);
     float sd = max(dot(dir, uSunDir), 0.0);
-    // Sun contribution is added AFTER the clamp so the tight disc can go
-    // fully HDR — that's what we want bloom to capture. Multiplier kept
-    // just above the bloom threshold so only the tight disc halos, not
-    // the entire upper sky.
-    col += uSunColor * pow(sd, 1400.0) * 3.0 * uSunIntensity;
-    col += uSunColor * pow(sd, 12.0) * 0.22 * uSunIntensity;
+
+    // A three-layer sun: a wide ambient glow, a halo, and a tight HDR
+    // disc. The disc is wider than before (power 500 instead of 1400) so
+    // the sun reads as an actual orb on the horizon at sunrise/sunset —
+    // not a pinpoint that vanishes. The wide glow uses the sun color so
+    // the whole western (or eastern) sky takes on the sun's tint.
+    col += uSunColor * pow(sd, 3.0) * 0.18 * uSunIntensity;   // wide glow
+    col += uSunColor * pow(sd, 10.0) * 0.28 * uSunIntensity;  // halo
+    col += uSunColor * pow(sd, 500.0) * 3.2 * uSunIntensity;  // disc (HDR → blooms)
+
     gl_FragColor = vec4(col, 1.0);
   }
 `;
