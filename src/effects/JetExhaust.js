@@ -136,7 +136,9 @@ export class JetExhaust {
       p.vel.y += 1.8 * dt;
 
       const t = Math.min(1, p.life / p.maxLife);
-      const size = 0.4 + (1 - t) * 1.4;
+      // Smaller peak size so the particle's world-space AABB doesn't poke
+      // into the fuselage near the cockpit on hard turns.
+      const size = 0.35 + (1 - t) * 0.9;
       _scale.set(size, size, size);
       _m.compose(p.pos, _q.identity(), _scale);
       this.mesh.setMatrixAt(i, _m);

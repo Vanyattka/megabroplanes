@@ -1,4 +1,5 @@
 import { Vector3 } from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Renderer } from './core/Renderer.js';
 import { Clock } from './core/Clock.js';
 import { Input } from './core/Input.js';
@@ -44,6 +45,18 @@ const renderer = new Renderer();
 // Scratch Vector3 reused by the per-frame jet reflection query so we
 // don't allocate one a frame.
 const _tmpVec3 = new Vector3();
+
+// Photo mode state. When on, plane physics and day-night clock pause and
+// OrbitControls takes over so the player can frame a shot freely.
+let photoMode = false;
+const orbitControls = new OrbitControls(renderer.camera, renderer.renderer.domElement);
+orbitControls.enabled = false;
+orbitControls.enableDamping = true;
+orbitControls.dampingFactor = 0.08;
+orbitControls.minDistance = 4;
+orbitControls.maxDistance = 450;
+orbitControls.target.set(0, 0, 0);
+const photoBannerEl = document.getElementById('photo-banner');
 const clock = new Clock();
 const input = new Input();
 
@@ -193,6 +206,7 @@ const backToMenuBtn = document.getElementById('btn-menu');
 if (backToMenuBtn) {
   backToMenuBtn.addEventListener('click', () => {
     if (gameState !== 'playing') return;
+    if (photoMode) setPhotoMode(false);
     explosion.clear();
     jetExhaust.clear();
     if (crashBannerEl) crashBannerEl.style.display = 'none';
@@ -206,7 +220,32 @@ if (backToMenuBtn) {
   });
 }
 
-// M key toggles audio mute. L key toggles the landing light.
+// Enter/exit photo mode. Freezes plane physics + day/night so the player can
+// orbit the camera freely and take a screenshot. On exit, re-hands control to
+// the chase camera, which will re-lock onto the plane within one render frame.
+function setPhotoMode(on) {
+  if (on === photoMode) return;
+  photoMode = on;
+  if (on) {
+    _prevDayPaused = dayNight.paused;
+    dayNight.paused = true;
+    // Aim orbit at the plane and seed the camera on the current chase-cam
+    // position so there's no visual jump.
+    orbitControls.target.copy(plane.position);
+    orbitControls.enabled = true;
+    orbitControls.update();
+    document.body.classList.add('photo');
+    if (photoBannerEl) photoBannerEl.style.display = 'block';
+  } else {
+    orbitControls.enabled = false;
+    dayNight.paused = _prevDayPaused;
+    document.body.classList.remove('photo');
+    if (photoBannerEl) photoBannerEl.style.display = 'none';
+  }
+}
+let _prevDayPaused = false;
+
+// M key toggles audio mute. L key toggles the landing light. P toggles photo mode.
 window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyM' && audio.isStarted()) {
     audio.toggleMute();
@@ -214,6 +253,9 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.code === 'KeyL' && gameState === 'playing') {
     plane.toggleLandingLight();
+  }
+  if (e.code === 'KeyP' && gameState === 'playing') {
+    setPhotoMode(!photoMode);
   }
 });
 
@@ -299,6 +341,10 @@ function physicsStep(dt) {
   if (gameState === 'menu') {
     return;
   }
+  // Photo mode freezes the world — skip plane physics entirely. Day/night
+  // is already paused via dayNight.paused; streaming still runs from
+  // renderStep so loaded chunks stay fresh around the frozen plane.
+  if (photoMode) return;
 
   const resetKey = input.isPressed('KeyR');
   const resetBtn = touch.consumeReset();
@@ -379,7 +425,15 @@ function renderStep(alpha) {
     return;
   }
 
-  chaseCamera.update(plane, input, renderDt);
+  if (photoMode) {
+    // Player drives the camera directly via OrbitControls; keep the focus
+    // tracking plane.position in case it drifts (it shouldn't — physics is
+    // paused — but this is cheap insurance).
+    orbitControls.target.copy(plane.position);
+    orbitControls.update();
+  } else {
+    chaseCamera.update(plane, input, renderDt);
+  }
   if (renderer.scene.fog) {
     renderer.scene.fog.near = fogNearFor(plane);
     renderer.scene.fog.far = fogFarFor(plane);

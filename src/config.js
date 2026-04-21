@@ -302,7 +302,11 @@ export const JET_EXHAUST_RATE = 110;   // particles/sec at full throttle
 export const JET_EXHAUST_LIFE = 0.55;  // seconds per particle
 export const JET_EXHAUST_SPEED = 22;   // backward speed relative to plane
 export const JET_EXHAUST_SPREAD = 2.0; // velocity jitter
-export const JET_EXHAUST_OFFSET_Z = 5.5; // local +Z distance behind plane
+// Local +Z distance behind the plane. Engine block spans z ≈ 4.25–5.75 on
+// the jet variant; offset 6.4 puts the spawn point clearly past the tail.
+// Particles grow to ~0.5 m at peak so this offset keeps them from visually
+// sneaking into the fuselage near the cockpit during tight turns.
+export const JET_EXHAUST_OFFSET_Z = 6.4;
 
 // Jet exhaust illuminates nearby geometry. PointLight attached behind the
 // plane; intensity scales with throttle. Water shader reads the same values

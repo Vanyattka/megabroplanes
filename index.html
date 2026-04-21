@@ -337,6 +337,17 @@
       <div id="audio-indicator" title="M to mute" style="margin-top: 2px; opacity: 0.85;">🔈 off</div>
     </div>
     <div id="crash-banner">CRASHED — press R to respawn</div>
+    <div id="photo-banner" style="display:none;position:absolute;top:14px;left:50%;transform:translateX(-50%);color:#fff;background:rgba(0,0,0,0.5);padding:8px 16px;border-radius:6px;font-family:monospace;font-size:12px;letter-spacing:2px;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,0.7);">PHOTO MODE — P to exit · drag to orbit · scroll to zoom</div>
+    <style>
+      body.photo #hud,
+      body.photo #hint,
+      body.photo #settings,
+      body.photo #horizon,
+      body.photo #minimap,
+      body.photo #touch-ui,
+      body.photo #audio-indicator,
+      body.photo #mp-status { display: none !important; }
+    </style>
     <div id="menu">
       <h1 id="menu-title">MBPlanes</h1>
       <p id="menu-subtitle">fly · drift · explode · vibes</p>
