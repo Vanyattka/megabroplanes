@@ -9,17 +9,19 @@ const biomeNoise2D = createNoise2D(prng);
 // Biome reference palette. `amp` scales the noise (so mountains are taller,
 // forests flatter), `offset` shifts the whole terrain vertically (lakes sink
 // below water, mountains rise above).
-// Lake center pushed further toward the noise extreme + narrower bandwidth
-// so "pure lake" areas become rarer. Non-lake biomes get higher base offsets
-// so noise dips rarely cross below water level — isolated ponds instead of
-// every forest being marshy.
+// Five biome bands. `highmountain` sits at the extreme of the noise range
+// and is both rarer AND significantly taller than regular mountain — its
+// peaks punch well into the snowline (see Terrain.colorByHeight). Centers
+// are slightly re-spaced so all five biomes get similar coverage despite
+// the bell-shaped noise distribution.
 const BIOMES = [
-  { type: 'lake',     center: 0.02, amp: 0.35, offset: -12, trees: 0.0, rocks: 0.2 },
-  { type: 'forest',   center: 0.35, amp: 0.55, offset:  14, trees: 2.8, rocks: 0.4 },
-  { type: 'hills',    center: 0.62, amp: 1.00, offset:  16, trees: 1.0, rocks: 1.0 },
-  { type: 'mountain', center: 0.92, amp: 2.00, offset:  22, trees: 0.3, rocks: 2.5 },
+  { type: 'lake',         center: 0.02, amp: 0.35, offset: -12, trees: 0.0, rocks: 0.2 },
+  { type: 'forest',       center: 0.32, amp: 0.55, offset:  14, trees: 2.8, rocks: 0.4 },
+  { type: 'hills',        center: 0.58, amp: 1.00, offset:  16, trees: 1.0, rocks: 1.0 },
+  { type: 'mountain',     center: 0.82, amp: 2.00, offset:  22, trees: 0.3, rocks: 2.5 },
+  { type: 'highmountain', center: 0.98, amp: 3.4, offset:  55, trees: 0.05, rocks: 4.0 },
 ];
-const BANDWIDTH = 0.26;
+const BANDWIDTH = 0.22;
 
 // Return blended biome params at (x, z). Every field (amp/offset/trees/rocks)
 // smoothly interpolates between the 4 named biomes based on a low-frequency

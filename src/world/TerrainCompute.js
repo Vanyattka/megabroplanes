@@ -33,8 +33,10 @@ function colorByHeight(y) {
   if (y < 1) return [0.85, 0.80, 0.60];       // sand
   if (y < 10) return [0.35, 0.55, 0.25];      // grass
   if (y < 25) return [0.40, 0.48, 0.30];      // darker grass
-  if (y < 40) return [0.55, 0.52, 0.45];      // scrub
-  return [0.96, 0.96, 0.96];                  // snow
+  if (y < 45) return [0.55, 0.52, 0.45];      // scrub / exposed rock
+  if (y < 75) return [0.62, 0.58, 0.55];      // alpine stone
+  if (y < 110) return [0.88, 0.90, 0.94];     // packed snow (slight blue tint)
+  return [0.98, 0.98, 1.00];                  // summit snow
 }
 
 // Deterministic per-vertex hash in [0, 1). Used to perturb vertex colors

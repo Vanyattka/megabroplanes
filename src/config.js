@@ -479,23 +479,27 @@ export const DAY_NIGHT_KEYFRAMES = [
   { t: 0.00, skyColor: 0x0a1530, horizonColor: 0x182940, fogColor: 0x182940, sunColor: 0x6e80a0, sunIntensity: 0.22, ambientColor: 0x4a5878, ambientIntensity: 0.40, starsOpacity: 1.0 },
   // deep pre-dawn — cool blues with a hint of violet
   { t: 0.17, skyColor: 0x1d234a, horizonColor: 0x413055, fogColor: 0x2e2542, sunColor: 0x6a6aa8, sunIntensity: 0.24, ambientColor: 0x4a4a6e, ambientIntensity: 0.42, starsOpacity: 0.70 },
-  // twilight — magenta tint starting to burn through
-  { t: 0.21, skyColor: 0x2b335a, horizonColor: 0x7c4a64, fogColor: 0x543a50, sunColor: 0xd07a70, sunIntensity: 0.38, ambientColor: 0x685866, ambientIntensity: 0.48, starsOpacity: 0.30 },
-  // sunrise — sun on the horizon, burning red-orange band
-  { t: 0.25, skyColor: 0x3e5a92, horizonColor: 0xee7850, fogColor: 0xcb6a48, sunColor: 0xff7a3c, sunIntensity: 0.85, ambientColor: 0xb07864, ambientIntensity: 0.62, starsOpacity: 0.05 },
-  // golden hour morning — warm gold
-  { t: 0.32, skyColor: 0x4e7cb4, horizonColor: 0xf0b080, fogColor: 0xc8a080, sunColor: 0xffcf90, sunIntensity: 0.95, ambientColor: 0xd8bfa6, ambientIntensity: 0.62, starsOpacity: 0.0 },
+  // twilight — magenta zenith, pink horizon catching first light
+  { t: 0.21, skyColor: 0x463566, horizonColor: 0xa0506a, fogColor: 0x6c3e58, sunColor: 0xe08278, sunIntensity: 0.42, ambientColor: 0x7a5c6e, ambientIntensity: 0.50, starsOpacity: 0.25 },
+  // sunrise — the whole sky blushes pink, burning coral at the horizon
+  { t: 0.25, skyColor: 0x6f4a8e, horizonColor: 0xff8058, fogColor: 0xd97050, sunColor: 0xff7a3c, sunIntensity: 0.90, ambientColor: 0xc07c78, ambientIntensity: 0.64, starsOpacity: 0.0 },
+  // post-sunrise — pink thinning, sky warming toward blue
+  { t: 0.29, skyColor: 0x6a78b2, horizonColor: 0xf4a888, fogColor: 0xcea088, sunColor: 0xffba80, sunIntensity: 0.95, ambientColor: 0xd4b29c, ambientIntensity: 0.62, starsOpacity: 0.0 },
+  // golden hour morning — warm gold, sky settled into blue
+  { t: 0.34, skyColor: 0x4e7cb4, horizonColor: 0xf0b080, fogColor: 0xc8a080, sunColor: 0xffcf90, sunIntensity: 0.98, ambientColor: 0xd8bfa6, ambientIntensity: 0.62, starsOpacity: 0.0 },
   // noon — cool blue sky; sun + ambient trimmed so the overhead scene
   // isn't uniformly near-white (crisper contrast, no bloom whiteout).
   { t: 0.5,  skyColor: 0x2a62b4, horizonColor: 0x7aa5c9, fogColor: 0x7da0be, sunColor: 0xfff4d0, sunIntensity: 1.00, ambientColor: 0xffffff, ambientIntensity: 0.55, starsOpacity: 0.0 },
-  // golden hour afternoon
-  { t: 0.68, skyColor: 0x4870aa, horizonColor: 0xf0a870, fogColor: 0xc89070, sunColor: 0xffc880, sunIntensity: 0.95, ambientColor: 0xd4b296, ambientIntensity: 0.62, starsOpacity: 0.0 },
-  // sunset — burning red-orange at horizon, deep teal above
-  { t: 0.75, skyColor: 0x1f3576, horizonColor: 0xf0561c, fogColor: 0xa04028, sunColor: 0xff4a18, sunIntensity: 0.82, ambientColor: 0x8e4a30, ambientIntensity: 0.58, starsOpacity: 0.10 },
-  // after-sunset — magenta / hot-pink band
-  { t: 0.78, skyColor: 0x2a2d64, horizonColor: 0x94355c, fogColor: 0x6a2e4a, sunColor: 0xd44c80, sunIntensity: 0.45, ambientColor: 0x705666, ambientIntensity: 0.52, starsOpacity: 0.30 },
-  // civil twilight — violet settling to night
-  { t: 0.82, skyColor: 0x181f46, horizonColor: 0x3c2b4e, fogColor: 0x282240, sunColor: 0x6a6aa8, sunIntensity: 0.24, ambientColor: 0x4a4868, ambientIntensity: 0.44, starsOpacity: 0.70 },
+  // golden hour afternoon — warm gold
+  { t: 0.66, skyColor: 0x4870aa, horizonColor: 0xf0a870, fogColor: 0xc89070, sunColor: 0xffc880, sunIntensity: 0.98, ambientColor: 0xd4b296, ambientIntensity: 0.62, starsOpacity: 0.0 },
+  // pre-sunset — pink creeping into the zenith
+  { t: 0.72, skyColor: 0x6a5c98, horizonColor: 0xf48a50, fogColor: 0xc87048, sunColor: 0xff7a30, sunIntensity: 0.90, ambientColor: 0xc08470, ambientIntensity: 0.60, starsOpacity: 0.0 },
+  // sunset — whole sky pink-magenta, burning orange-red at the horizon
+  { t: 0.75, skyColor: 0x7a3a86, horizonColor: 0xff5430, fogColor: 0xb0402e, sunColor: 0xff3c10, sunIntensity: 0.85, ambientColor: 0x9a4838, ambientIntensity: 0.60, starsOpacity: 0.05 },
+  // after-sunset — hot pink band against a deepening purple sky
+  { t: 0.78, skyColor: 0x4a2868, horizonColor: 0xc03868, fogColor: 0x822e52, sunColor: 0xdd4880, sunIntensity: 0.50, ambientColor: 0x7a5068, ambientIntensity: 0.52, starsOpacity: 0.25 },
+  // civil twilight — violet fading into night
+  { t: 0.82, skyColor: 0x1e1f4a, horizonColor: 0x4a2d5a, fogColor: 0x2e2442, sunColor: 0x7070b4, sunIntensity: 0.26, ambientColor: 0x4e486c, ambientIntensity: 0.44, starsOpacity: 0.65 },
   // midnight (loop close)
   { t: 1.00, skyColor: 0x0a1530, horizonColor: 0x182940, fogColor: 0x182940, sunColor: 0x6e80a0, sunIntensity: 0.22, ambientColor: 0x4a5878, ambientIntensity: 0.40, starsOpacity: 1.0 },
 ];
