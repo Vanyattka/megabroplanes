@@ -229,6 +229,14 @@ function setPhotoMode(on) {
   if (on) {
     _prevDayPaused = dayNight.paused;
     dayNight.paused = true;
+    // Collapse the 60 Hz render-interpolation snapshots so updateRender(alpha)
+    // lerps from position → position every frame. Without this, _prevPosition
+    // still holds the position from one physics step ago, and the mesh visibly
+    // jitters/"drags" between that stale snapshot and the live one as alpha
+    // oscillates, even though physics is frozen.
+    plane._prevPosition.copy(plane.position);
+    plane._prevQuaternion.copy(plane.quaternion);
+    plane.syncMesh();
     // Aim orbit at the plane and seed the camera on the current chase-cam
     // position so there's no visual jump.
     orbitControls.target.copy(plane.position);
