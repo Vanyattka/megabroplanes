@@ -241,6 +241,17 @@ export const MAX_ROCK_FACTOR = 2.5;             // mountain peak rock-density mu
 export const FOG_NEAR_FRAC = 0.45;
 export const FOG_FAR_FRAC = 0.92;
 
+// Aerial perspective — the Rayleigh-haze depth cue for distant terrain.
+// A little (desaturation + horizon-tint) starts much earlier than fog and
+// is much weaker, giving mid-distance mountains a subtle blue/pink shift
+// well before fog fully takes over. Without this, mid-range mountains
+// read as flat saturated colour and the world looks like a cardboard
+// cutout; with it you get the depth you'd see from a real cockpit.
+export const AERIAL_NEAR = 250;           // m: effect starts here
+export const AERIAL_FAR = 1800;           // m: full strength at/past here
+export const AERIAL_STRENGTH = 0.55;      // 0..1 mix toward horizon colour
+export const AERIAL_DESATURATION = 0.65;  // 0..1 mix toward grayscale
+
 // Water — shader-based reflective surface. Follows the camera horizontally,
 // sized to outlast fog on all sides.
 export const WATER_LEVEL = -4;
@@ -307,6 +318,21 @@ export const JET_EXHAUST_SPREAD = 2.0; // velocity jitter
 // Particles grow to ~0.5 m at peak so this offset keeps them from visually
 // sneaking into the fuselage near the cockpit during tight turns.
 export const JET_EXHAUST_OFFSET_Z = 6.4;
+
+// Contrails — long-lived white condensation streaks behind a jet at
+// altitude. Gated on both altitude and throttle so low-altitude passes
+// stay clean and the effect only appears in true "cruise" situations.
+// Pool is shared between the left/right trails; at 4/s spawn rate per side
+// × 28 s life × 2 sides = 224 max live — pool of 240 leaves headroom.
+export const CONTRAIL_MAX = 240;
+export const CONTRAIL_RATE = 8;           // TOTAL spawns/sec (split evenly L/R)
+export const CONTRAIL_LIFE = 28;          // seconds per particle
+export const CONTRAIL_MIN_ALT = 400;      // below this, no contrails at all
+export const CONTRAIL_FULL_ALT = 700;     // full-strength at/above
+export const CONTRAIL_MIN_THROTTLE = 0.4; // throttle below this, no emission
+export const CONTRAIL_SIDE_OFFSET = 2.2;  // meters from plane centerline
+export const CONTRAIL_BACK_OFFSET = 5.8;  // local +Z behind cockpit
+export const CONTRAIL_PEAK_SIZE = 4.5;    // puff diameter at mid-life (m)
 
 // Jet exhaust illuminates nearby geometry. PointLight attached behind the
 // plane; intensity scales with throttle. Water shader reads the same values
@@ -424,6 +450,7 @@ export const GRAPHICS_PRESETS = {
     atmoSky: false,
     contactShadows: false,
     terrainDetail: false,
+    godrays: false,
     pixelRatio: 1.0,
     toneMappingExposure: 1.0,
   },
@@ -439,6 +466,7 @@ export const GRAPHICS_PRESETS = {
     atmoSky: false,
     contactShadows: true,
     terrainDetail: true,
+    godrays: true,
     pixelRatio: 1.0,
     toneMappingExposure: 1.0,
   },
@@ -454,6 +482,7 @@ export const GRAPHICS_PRESETS = {
     atmoSky: true,
     contactShadows: true,
     terrainDetail: true,
+    godrays: true,
     pixelRatio: Math.min(
       typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1,
       1.75
@@ -481,6 +510,23 @@ export const BLOOM_RADIUS = 0.35;
 export const BLOOM_THRESHOLD = 2.0;
 // Vignette strength (0 = off, ~0.35 is subtle).
 export const VIGNETTE_STRENGTH = 0.32;
+
+// Volumetric god-rays (screen-space radial blur of bright pixels) and
+// lens flare — combined post-fx pass. SAMPLES is a shader `#define` so
+// it needs to be a literal integer; don't wire this to settings live.
+// DENSITY controls ray length (bigger = longer streaks). DECAY makes
+// each sample darker than the last — < 1 means "rays taper off".
+// STRENGTH is the overall output multiplier; main.js fades it to zero
+// when the sun is off-screen / below horizon so the pass effectively
+// disables itself without a JS toggle.
+export const GODRAYS_SAMPLES = 60;
+export const GODRAYS_DENSITY = 0.75;
+export const GODRAYS_WEIGHT = 0.22;
+export const GODRAYS_DECAY = 0.955;
+export const GODRAYS_EXPOSURE = 0.9;
+export const GODRAYS_STRENGTH = 0.7;     // overall multiplier when sun visible
+export const LENS_FLARE_STRENGTH = 0.55; // ghost disc brightness
+export const LENS_FLARE_STREAK_STRENGTH = 0.9; // anamorphic horizontal streak
 // Run-time multiplier — allows speed-of-day tweaking without code edits.
 export const DAY_TIME_MULT = 1.0;
 // Keyframes interpolated (in t order) to colour the sky, fog, and lights.

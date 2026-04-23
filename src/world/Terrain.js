@@ -1,12 +1,21 @@
 import {
   BufferAttribute,
   BufferGeometry,
+  Color,
   Mesh,
   MeshStandardMaterial,
   Sphere,
   Vector3,
 } from 'three';
-import { CHUNK_SIZE, CHUNK_RESOLUTION } from '../config.js';
+import {
+  CHUNK_SIZE,
+  CHUNK_RESOLUTION,
+  AERIAL_NEAR,
+  AERIAL_FAR,
+  AERIAL_STRENGTH,
+  AERIAL_DESATURATION,
+  HORIZON_COLOR,
+} from '../config.js';
 import { villagesAffectingArea } from './Villages.js';
 import { villagesToWorkerData } from './VillageData.js';
 import { computeTerrainData } from './TerrainCompute.js';
@@ -25,8 +34,60 @@ const SHARED_TERRAIN_MAT = new MeshStandardMaterial({
   roughness: 1.0,
   metalness: 0.0,
 });
+
+// Shared aerial-perspective uniforms. A single reference kept here so
+// DayNight can update uHorizonColor per frame and the shader sees the
+// current sky tint (pale blue at noon, pink at sunset, dark at night).
+// Inject into the shader via onBeforeCompile so we don't have to re-
+// implement every standard lighting chunk. Distant fragments are both
+// desaturated (haze washes out color) AND tinted toward the horizon
+// colour (scattered sky light painting the ray path) — together that
+// gives mountains visible 1–2 km out the proper "hazy" depth cue on
+// top of what fog alone does.
+const AERIAL_UNIFORMS = {
+  uAerialColor: { value: new Color(HORIZON_COLOR) },
+  uAerialNear: { value: AERIAL_NEAR },
+  uAerialFar: { value: AERIAL_FAR },
+  uAerialStrength: { value: AERIAL_STRENGTH },
+  uAerialDesat: { value: AERIAL_DESATURATION },
+};
+SHARED_TERRAIN_MAT.onBeforeCompile = (shader) => {
+  Object.assign(shader.uniforms, AERIAL_UNIFORMS);
+  shader.fragmentShader = shader.fragmentShader
+    .replace(
+      '#include <common>',
+      `#include <common>
+      uniform vec3 uAerialColor;
+      uniform float uAerialNear;
+      uniform float uAerialFar;
+      uniform float uAerialStrength;
+      uniform float uAerialDesat;`
+    )
+    // Inject right before the final tonemap/color-space so lighting has
+    // already been applied. We mix toward desaturated-then-tinted to simulate
+    // Rayleigh haze (the real reason distant mountains look pale-blue).
+    .replace(
+      '#include <fog_fragment>',
+      `#include <fog_fragment>
+      {
+        float _aDist = length(vViewPosition);
+        float _aerial = smoothstep(uAerialNear, uAerialFar, _aDist);
+        float _lum = dot(gl_FragColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+        vec3 _desat = mix(gl_FragColor.rgb, vec3(_lum), _aerial * uAerialDesat);
+        gl_FragColor.rgb = mix(_desat, uAerialColor, _aerial * uAerialStrength);
+      }`
+    );
+  SHARED_TERRAIN_MAT.userData.shader = shader;
+};
+
 export function getSharedTerrainMaterial() {
   return SHARED_TERRAIN_MAT;
+}
+
+// Called by DayNight each frame so distant terrain picks up the current
+// sky colour (pink at sunset, dark blue at night, pale blue at noon).
+export function updateAerialPerspective(horizonColor) {
+  AERIAL_UNIFORMS.uAerialColor.value.copy(horizonColor);
 }
 
 // Shared, reused index buffer. Every terrain mesh has the same topology

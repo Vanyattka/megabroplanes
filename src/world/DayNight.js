@@ -9,6 +9,7 @@ import {
 } from '../config.js';
 import { worldTime } from './WorldTime.js';
 import { updateLights } from './NightLights.js';
+import { updateAerialPerspective } from './Terrain.js';
 
 // Linear interpolate two hex colors by an amount t∈[0,1], writing into `out`.
 function lerpColor(a, b, t, out) {
@@ -134,6 +135,10 @@ export class DayNight {
     const nf = 1 - (sunI - NIGHT_SUN_FULL_NIGHT) / range;
     worldTime.nightFactor = Math.max(0, Math.min(1, nf));
     updateLights();
+    // Terrain aerial-perspective shader uniform tracks horizon colour so
+    // distant mountains tint pink at sunset / dark-blue at night, not always
+    // noon-pale-blue.
+    updateAerialPerspective(this._c2);
 
     // Apply to scene / lights / sky shader.
     if (this.fog) this.fog.color.copy(this._c3);
@@ -158,6 +163,15 @@ export class DayNight {
       if (u_.uSunDir) u_.uSunDir.value.copy(this._sunDir);
       if (u_.uSunColor) u_.uSunColor.value.copy(this._c4);
       if (u_.uSunIntensity) u_.uSunIntensity.value = sunI;
+    }
+    // Moon dome — separate mesh so it works under atmospheric sky too.
+    if (this.sky && this.sky.moonMaterial) {
+      const mu = this.sky.moonMaterial.uniforms;
+      // When sun is below horizon (night), moon (= -sunDir) is above — which
+      // is exactly when we want it visible. nightFactor also gates it so it
+      // cross-fades instead of popping in at dusk.
+      mu.uMoonDir.value.copy(this._sunDir).negate();
+      mu.uNightFactor.value = worldTime.nightFactor;
     }
   }
 }

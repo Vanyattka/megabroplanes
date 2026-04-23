@@ -14,6 +14,7 @@ import { Clouds } from './world/Clouds.js';
 import { PlaneShadow, makeShadowTexture } from './world/Shadow.js';
 import { Explosion } from './effects/Explosion.js';
 import { JetExhaust } from './effects/JetExhaust.js';
+import { Contrails } from './effects/Contrails.js';
 import { DayNight } from './world/DayNight.js';
 import { Stars } from './world/Stars.js';
 import { Roads } from './world/Roads.js';
@@ -28,6 +29,9 @@ import {
   FOG_FAR_FRAC,
   TIME_PRESETS,
   PRIME_RADIUS_CHUNKS,
+  GODRAYS_STRENGTH,
+  LENS_FLARE_STRENGTH,
+  LENS_FLARE_STREAK_STRENGTH,
 } from './config.js';
 import { MultiplayerClient } from './net/Client.js';
 import { RemotePlaneManager } from './net/RemotePlaneManager.js';
@@ -45,6 +49,9 @@ const renderer = new Renderer();
 // Scratch Vector3 reused by the per-frame jet reflection query so we
 // don't allocate one a frame.
 const _tmpVec3 = new Vector3();
+// Scratch vector for projecting the sun into screen space each frame
+// (god rays + lens flare). Reused to avoid per-frame allocation.
+const _sunScreen = new Vector3();
 
 // Photo mode state. When on, plane physics and day-night clock pause and
 // OrbitControls takes over so the player can frame a shot freely.
@@ -105,6 +112,7 @@ function applyGfx(settings) {
   postfx.setBloomEnabled(settings.bloom);
   postfx.setBloomStrength(settings.bloomStrength);
   postfx.setVignetteEnabled(settings.vignette);
+  postfx.setGodraysEnabled(!!settings.godrays);
 }
 applyGfx(gfx.settings);
 gfx.onChange(applyGfx);
@@ -113,6 +121,7 @@ const sharedShadowTex = makeShadowTexture();
 const planeShadow = new PlaneShadow(renderer.scene, sharedShadowTex);
 const explosion = new Explosion(renderer.scene);
 const jetExhaust = new JetExhaust(renderer.scene);
+const contrails = new Contrails(renderer.scene);
 
 const crashToggleEl = document.getElementById('crashes-enabled');
 if (crashToggleEl) crashToggleEl.checked = CRASH_ENABLED_DEFAULT;
@@ -189,6 +198,7 @@ menu.onStart = ({ type, color, timePreset }) => {
   plane.reset();
   plane.mesh.visible = true;
   jetExhaust.clear();
+  contrails.clear();
   explosion.clear();
   if (crashBannerEl) crashBannerEl.style.display = 'none';
   gameState = 'playing';
@@ -209,6 +219,7 @@ if (backToMenuBtn) {
     if (photoMode) setPhotoMode(false);
     explosion.clear();
     jetExhaust.clear();
+    contrails.clear();
     if (crashBannerEl) crashBannerEl.style.display = 'none';
     plane.mesh.visible = false;
     gameState = 'menu';
@@ -278,6 +289,44 @@ const hud = new Hud();
 
 const getGroundHeight = groundHeight;
 const getPhysicsFloor = physicsFloor;
+
+// Project the sun's world direction into screen UV space and hand the
+// result to postfx for the god-rays + lens-flare pass. Returns nothing —
+// the result is purely side-effect (postfx uniforms). When the sun is
+// behind the camera, below the horizon, or off-screen, strength is set
+// to 0 and the shader early-outs to a cheap passthrough.
+function updateSunPostFx() {
+  const camera = renderer.camera;
+  // Place a proxy sun 10 km away in worldTime.sunDir, then project into
+  // normalized-device coordinates (-1..+1) and convert to UV (0..1).
+  _sunScreen.copy(worldTime.sunDir).multiplyScalar(10000).add(camera.position);
+  _sunScreen.project(camera);
+  const ndcZ = _sunScreen.z;              // > 1 or < -1 = clipped
+  const inFront = ndcZ < 1 && ndcZ > -1;
+  const ux = _sunScreen.x * 0.5 + 0.5;
+  const uy = _sunScreen.y * 0.5 + 0.5;
+  // Sun must be above the world horizon (positive Y component) AND in
+  // front of the camera. Also fade out smoothly near screen edges so
+  // the streak doesn't pop when the sun crosses the viewport boundary.
+  const sunAboveHorizon = Math.max(0, Math.min(1, worldTime.sunDir.y * 4));
+  // Soft screen-edge falloff — fully on in the middle third of each axis,
+  // fading to zero outside a generous margin. Without this, flare/rays
+  // snap off the instant the sun UV goes < 0 or > 1.
+  const ex = Math.max(0, 1 - Math.max(0, Math.max(-0.15 - ux, ux - 1.15)) / 0.15);
+  const ey = Math.max(0, 1 - Math.max(0, Math.max(-0.15 - uy, uy - 1.15)) / 0.15);
+  const onScreen = ex * ey;
+  const visibility =
+    inFront && worldTime.sunIntensity > 0
+      ? sunAboveHorizon * onScreen * worldTime.sunIntensity
+      : 0;
+  postfx.setSunScreenPos(
+    ux,
+    uy,
+    GODRAYS_STRENGTH * visibility,
+    LENS_FLARE_STRENGTH * visibility,
+    LENS_FLARE_STREAK_STRENGTH * visibility
+  );
+}
 
 function altitudeT(y) {
   return Math.max(0, Math.min(1, y / VIEW_ALT_SCALE));
@@ -429,6 +478,7 @@ function renderStep(alpha) {
       renderer.camera,
       worldTime.horizonColor
     );
+    updateSunPostFx();
     postfx.render();
     return;
   }
@@ -476,6 +526,7 @@ function renderStep(alpha) {
   if (!photoMode) {
     explosion.update(renderDt);
     jetExhaust.update(renderDt, plane);
+    contrails.update(renderDt, plane);
   }
   remotes.update(renderDt);
   mp.sendState(plane);
@@ -486,6 +537,7 @@ function renderStep(alpha) {
     airspeed: plane.velocity.length(),
   });
 
+  updateSunPostFx();
   postfx.render();
   hud.update(plane);
   minimap.update(plane);

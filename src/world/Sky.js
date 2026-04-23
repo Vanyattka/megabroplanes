@@ -1,4 +1,5 @@
 import {
+  AdditiveBlending,
   AmbientLight,
   BackSide,
   Color,
@@ -60,6 +61,28 @@ const FRAG = /* glsl */ `
   }
 `;
 
+// Separate additive moon dome — rendered as a second mesh so it shows
+// through BOTH sky modes (gradient + Preetham). At day uNightFactor is 0
+// and the dome contributes nothing; at night the disc + halo add on top.
+const MOON_FRAG = /* glsl */ `
+  uniform vec3 uMoonDir;
+  uniform float uNightFactor;
+  varying vec3 vDir;
+  void main() {
+    vec3 dir = normalize(vDir);
+    float md = max(dot(dir, uMoonDir), 0.0);
+    // Tight disc so the moon reads as a small coin. Slightly-HDR disc term
+    // (> 1) crosses the bloom threshold, giving it a gentle halo via the
+    // bloom pass — no custom halo layer needed here (though we add a soft
+    // wide glow so the sky around the moon reads "lit by moonlight").
+    float halo = pow(md, 32.0) * 0.28;
+    float disc = pow(md, 1800.0) * 2.4;
+    vec3 tint = vec3(0.92, 0.95, 1.05);
+    vec3 c = tint * (halo + disc) * uNightFactor;
+    gl_FragColor = vec4(c, 1.0);
+  }
+`;
+
 // Sky owns the sky dome + the scene's directional & ambient lights. DayNight
 // mutates these each frame. Exposing the lights directly (instead of letting
 // DayNight create them) keeps everything attached to the same scene graph
@@ -91,6 +114,32 @@ export class Sky {
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = -1;
     scene.add(this.mesh);
+
+    // Moon dome — always visible so it works with either sky mode. Additive
+    // so at day (uNightFactor=0) it contributes nothing, and at night the
+    // disc+halo lay on top of whatever the primary sky drew.
+    this.moonMaterial = new ShaderMaterial({
+      uniforms: {
+        // Moon orbits opposite the sun — DayNight writes -sunDir each
+        // frame so the moon rises as the sun sets.
+        uMoonDir: { value: sunDir.clone().negate() },
+        uNightFactor: { value: 0.0 },
+      },
+      vertexShader: VERT,
+      fragmentShader: MOON_FRAG,
+      side: BackSide,
+      depthWrite: false,
+      transparent: true,
+      blending: AdditiveBlending,
+      fog: false,
+    });
+    // Slightly smaller radius than the main dome so Z ordering is
+    // unambiguous and it always sits in front.
+    this.moonGeometry = new SphereGeometry(radius * 0.98, 32, 16);
+    this.moonMesh = new Mesh(this.moonGeometry, this.moonMaterial);
+    this.moonMesh.frustumCulled = false;
+    this.moonMesh.renderOrder = -1;
+    scene.add(this.moonMesh);
 
     // Use AmbientLight instead of HemisphereLight so DayNight's keyframe
     // interpolation has a simple color/intensity to drive. Hemi's sky/ground
@@ -166,6 +215,7 @@ export class Sky {
   // crisp near the player without needing CSMs.
   update(camera, planePos) {
     this.mesh.position.copy(camera.position);
+    this.moonMesh.position.copy(camera.position);
     if (this._atmoEnabled) {
       this.atmospheric.update(camera, worldTime.sunDir);
     }
@@ -185,9 +235,12 @@ export class Sky {
 
   dispose() {
     this.scene.remove(this.mesh);
+    this.scene.remove(this.moonMesh);
     this.scene.remove(this.ambient);
     this.scene.remove(this.sun);
     this.geometry.dispose();
+    this.moonGeometry.dispose();
     this.material.dispose();
+    this.moonMaterial.dispose();
   }
 }
