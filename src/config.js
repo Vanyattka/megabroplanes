@@ -263,7 +263,13 @@ export const SEA_SCALE = 0.00016;          // feature size ~6000m
 export const SEA_THRESHOLD_LOW = 0.58;     // no sea below this mask value
 export const SEA_THRESHOLD_HIGH = 0.80;    // fully deep sea at or above
 export const SEA_DEPTH = 45;               // max extra depth in meters
-export const WATER_SIZE = 2 * VIEW_DISTANCE_CHUNKS * CHUNK_SIZE * 1.8; // roomier than the minimum so fog hides the edge
+// Water plane diameter. Must exceed 2 × fog_far at the LARGEST view-distance
+// preset so its edge is always hidden inside full fog — otherwise a hard
+// "water ends here" line is visible at low altitude as the player flies. The
+// old formula used the legacy VIEW_DISTANCE_CHUNKS=4 default and produced
+// only 1843 m, well below the ~2 km fog_far on Ultra. 6000 m gives 3000 m
+// radius, comfortably outside fog at every preset.
+export const WATER_SIZE = 6000;
 export const WATER_COLOR_SHALLOW = 0x77c5e5;
 export const WATER_COLOR_DEEP = 0x123a5a;
 export const WATER_NORMAL_SCROLL_SPEED = 0.25; // animated ripple time scale
@@ -580,8 +586,11 @@ export const NAV_LIGHT_COLOR_RIGHT = 0x22ff22;
 export const NAV_LIGHT_COLOR_TAIL = 0xffffff;
 export const NAV_TAIL_BLINK_HZ = 1.2;
 // Landing light — a SpotLight attached to the player's plane nose, toggled by L.
-export const LANDING_LIGHT_INTENSITY = 4.0;
-export const LANDING_LIGHT_RANGE = 180;
+// Intensity bumped: at 4 the cone barely lit the runway threshold and was
+// invisible past ~80 m; at 12 it actually does its job — a clear bright
+// pool ahead of the plane during night approaches.
+export const LANDING_LIGHT_INTENSITY = 12.0;
+export const LANDING_LIGHT_RANGE = 260;
 export const LANDING_LIGHT_ANGLE = Math.PI / 6;  // half-cone
 export const LANDING_LIGHT_PENUMBRA = 0.35;
 export const LANDING_LIGHT_COLOR = 0xfff8cc;

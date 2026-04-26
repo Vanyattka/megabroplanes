@@ -1,5 +1,7 @@
 import { Color, Quaternion, Vector3 } from 'three';
 import { buildPlaneMesh, disposePlaneMesh } from '../plane/PlaneMesh.js';
+import { JetExhaust } from '../effects/JetExhaust.js';
+import { Contrails } from '../effects/Contrails.js';
 import { DEFAULT_PLANE_TYPE, DEFAULT_BODY_COLOR } from '../config.js';
 
 const LERP = 0.22;
@@ -31,6 +33,27 @@ export class RemotePlaneManager {
     this.scene.add(v.mesh);
     v.type = type;
     v.color = color;
+    // Type changed → exhaust applicability may have changed too. Clear so
+    // a piper-turned-jet doesn't carry a stale empty plume, and a jet-turned-
+    // piper has its plume fade out instead of staying on.
+    if (v.exhaust) v.exhaust.clear();
+    if (v.contrails) v.contrails.clear();
+  }
+
+  // Build the synthetic plane object the JetExhaust + Contrails update
+  // functions expect. We don't have authoritative velocity over the wire,
+  // so we estimate it from successive position deltas — close enough for
+  // the exhaust spawn velocity, and the trail will look correct at any
+  // typical airspeed.
+  _syntheticPlane(v) {
+    return {
+      type: v.type,
+      crashed: v.crashed,
+      throttle: v.throttle,
+      position: v.mesh.position,
+      quaternion: v.mesh.quaternion,
+      velocity: v.estVel,
+    };
   }
 
   update(dt) {
@@ -58,6 +81,14 @@ export class RemotePlaneManager {
           crashed: !!r.crashed,
           type: wantedType,
           color: wantedColor,
+          // Velocity estimate, refreshed each frame from position deltas.
+          // Used by JetExhaust to seed particle velocity at spawn.
+          prevPos: new Vector3().fromArray(r.pos),
+          estVel: new Vector3(),
+          // Lazily-created jet effects — only allocated for jet remotes,
+          // and reused even if the local frame doesn't include this remote.
+          exhaust: null,
+          contrails: null,
         };
         this.visuals.set(id, v);
       } else if (v.type !== wantedType || v.color !== wantedColor) {
@@ -69,17 +100,64 @@ export class RemotePlaneManager {
       v.throttle = r.throttle || 0;
       v.crashed = !!r.crashed;
 
+      // Track previous-frame position so we can derive a velocity for the
+      // jet exhaust spawn. Use the smoothed mesh position (after lerp) so
+      // the velocity estimate matches what the visual mesh is doing — not
+      // the raw network target which can jitter at 20 Hz.
+      v.prevPos.copy(v.mesh.position);
+
       v.mesh.position.lerp(v.targetPos, LERP);
       v.mesh.quaternion.slerp(v.targetQuat, SLERP);
       v.mesh.visible = !v.crashed;
 
+      // Velocity ≈ (newPos - prevPos) / dt. dt can be 0 on the very first
+      // frame; clamp to avoid an Infinity that the exhaust shader would
+      // dutifully amplify into a 1-frame plume across the world.
+      if (dt > 0) {
+        v.estVel.subVectors(v.mesh.position, v.prevPos).divideScalar(dt);
+      }
+
       const prop = v.mesh.getObjectByName('propeller');
       if (prop) prop.rotation.z += v.throttle * 30 * dt;
+
+      // Jet-only effects: lazily allocate and update the exhaust + contrail
+      // for remote jets. Other plane types skip this entirely. JetExhaust's
+      // own update() handles the "wrong type / crashed → clear" case, but
+      // we early-out here too so we don't allocate a 160-particle pool for
+      // a Cessna remote.
+      if (wantedType === 'jet') {
+        if (!v.exhaust) v.exhaust = new JetExhaust(this.scene);
+        if (!v.contrails) v.contrails = new Contrails(this.scene);
+        const synth = this._syntheticPlane(v);
+        v.exhaust.update(dt, synth);
+        v.contrails.update(dt, synth);
+      } else if (v.exhaust || v.contrails) {
+        // Player switched from jet to a non-jet — let any live particles
+        // fade naturally by passing a non-jet object so the systems clear
+        // themselves on next tick.
+        const synth = this._syntheticPlane(v);
+        if (v.exhaust) v.exhaust.update(dt, synth);
+        if (v.contrails) v.contrails.update(dt, synth);
+      }
     }
     for (const [id, v] of this.visuals) {
       if (!seen.has(id)) {
         this.scene.remove(v.mesh);
         disposePlaneMesh(v.mesh);
+        // JetExhaust / Contrails own their meshes — release them so the
+        // remote's plume doesn't linger after they disconnect.
+        if (v.exhaust) {
+          v.exhaust.clear();
+          this.scene.remove(v.exhaust.mesh);
+          v.exhaust.mesh.geometry.dispose();
+          v.exhaust.mesh.material.dispose();
+        }
+        if (v.contrails) {
+          v.contrails.clear();
+          this.scene.remove(v.contrails.mesh);
+          v.contrails.mesh.geometry.dispose();
+          v.contrails.mesh.material.dispose();
+        }
         this.visuals.delete(id);
       }
     }

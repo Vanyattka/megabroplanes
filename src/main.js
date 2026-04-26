@@ -32,6 +32,7 @@ import {
   GODRAYS_STRENGTH,
   LENS_FLARE_STRENGTH,
   LENS_FLARE_STREAK_STRENGTH,
+  DAY_LENGTH_SECONDS,
 } from './config.js';
 import { MultiplayerClient } from './net/Client.js';
 import { RemotePlaneManager } from './net/RemotePlaneManager.js';
@@ -179,22 +180,57 @@ const minimap = new Minimap(mp);
 
 // Game state
 let gameState = 'menu';
+// 'singleplayer' | 'multiplayer' — defaults to whatever the menu has
+// loaded from localStorage. In MP mode, time of day comes from the wall
+// clock so all clients see the same sky; in SP, the player's chosen
+// time preset applies.
+let currentMode = 'singleplayer';
 const menu = new Menu();
 
 // Apply a time-of-day preset to the DayNight cycle (or resume auto mode).
+// Only called in singleplayer — multiplayer overrides every frame from
+// the wall clock via applyGlobalTime() below.
 function applyTimePreset(key) {
   const p = TIME_PRESETS[key];
   if (!p || p.t == null) dayNight.setAuto();
   else dayNight.setFrozenTime(p.t);
 }
 
+// Wall-clock-derived time-of-day, deterministic across every client. All
+// players agree on the cycle phase because Date.now() is the same global
+// source. Run every frame BEFORE dayNight.update() so the keyframe interp
+// sees the right t. paused=true keeps DayNight from advancing on its own.
+function applyGlobalTime() {
+  const seconds = Date.now() / 1000;
+  dayNight.t = ((seconds / DAY_LENGTH_SECONDS) % 1 + 1) % 1;
+  dayNight.paused = true;
+}
+
+// Apply the right time policy when entering or resuming a flight.
+function applyModeTime(timePreset) {
+  if (currentMode === 'multiplayer') {
+    applyGlobalTime();
+  } else {
+    applyTimePreset(timePreset);
+  }
+}
+
+// Wire mp.setEnabled and remote clearing to the current mode. Called
+// whenever the player flips the mode toggle in the main menu, AND on
+// each Start/Continue so the multiplayer client matches the chosen mode.
+function applyMode(mode) {
+  currentMode = mode === 'multiplayer' ? 'multiplayer' : 'singleplayer';
+  mp.setEnabled(currentMode === 'multiplayer');
+}
+
 menu.onChange = ({ type, color }) => {
   plane.setLoadout(type, color);
   plane.mesh.visible = true;
 };
-menu.onStart = ({ type, color, timePreset }) => {
+menu.onStart = ({ type, color, timePreset, mode }) => {
   plane.setLoadout(type, color);
-  applyTimePreset(timePreset);
+  applyMode(mode);
+  applyModeTime(timePreset);
   plane.reset();
   plane.mesh.visible = true;
   jetExhaust.clear();
@@ -210,7 +246,22 @@ menu.onContinue = () => {
   gameState = 'playing';
   audio.setSuspended(false);
 };
-menu.onTimeChange = (preset) => applyTimePreset(preset);
+menu.onTimeChange = (preset) => {
+  // In MP mode the picker is greyed out; ignore stray taps that might
+  // still fire (e.g. from cached event listeners).
+  if (currentMode === 'multiplayer') return;
+  applyTimePreset(preset);
+};
+// Mode toggle in the main menu — disconnect/connect MP and switch the
+// time policy. Doesn't kick the player out of a running flight.
+menu.onModeChange = (mode) => {
+  applyMode(mode);
+  // If the player is currently in flight, re-apply the right time policy
+  // so the swap takes effect immediately rather than at the next Start.
+  if (gameState === 'playing') {
+    applyModeTime(menu.getSelection().timePreset);
+  }
+};
 
 const backToMenuBtn = document.getElementById('btn-menu');
 if (backToMenuBtn) {
@@ -281,7 +332,8 @@ window.addEventListener('keydown', (e) => {
 {
   const sel = menu.getSelection();
   plane.setLoadout(sel.type, sel.color);
-  applyTimePreset(sel.timePreset);
+  applyMode(sel.mode);
+  applyModeTime(sel.timePreset);
 }
 
 const chaseCamera = new ChaseCamera(renderer.camera);
@@ -449,6 +501,13 @@ function renderStep(alpha) {
   // frames. Plane physics still gets its proper N physics sub-steps.
   streamUpdate();
 
+  // In multiplayer mode we re-derive `t` from the wall clock every frame
+  // so all clients see the same sky. paused=true tells DayNight not to
+  // advance on its own — we set t directly. Skip while photo mode is on
+  // so the player's shot stays frozen.
+  if (currentMode === 'multiplayer' && !photoMode) {
+    applyGlobalTime();
+  }
   // Day/night advances regardless of menu state — the sky keeps changing
   // behind the menu, which looks nice.
   dayNight.update(renderDt);
@@ -507,7 +566,12 @@ function renderStep(alpha) {
           intensity: plane._jetLight.intensity / 18, // normalize to 0..1
         }
       : null;
-  water.update(renderDt, plane.position, worldTime.horizonColor, jetInfo);
+  // Use the render-interpolated position so water tracks under the camera
+  // exactly. plane.position is the post-physics value, which can lag the
+  // render frame by up to one physics step (~17 ms) — at jet speeds that's
+  // a few metres of offset between camera and water-mesh centre, enough to
+  // make the water edge visibly "wobble" at the horizon.
+  water.update(renderDt, plane.renderPosition || plane.position, worldTime.horizonColor, jetInfo);
   clouds.update(
     renderDt,
     plane.position,

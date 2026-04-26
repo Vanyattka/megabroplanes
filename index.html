@@ -214,6 +214,37 @@
       .menu-btn:hover { background: rgba(255, 204, 64, 0.18); border-color: #ffcc40; }
       .menu-btn:active { transform: scale(0.97); }
       .menu-btn.primary { background: rgba(255, 204, 64, 0.25); border-color: #ffcc40; }
+      #mode-toggle {
+        display: flex;
+        gap: 0;
+        background: rgba(0, 0, 0, 0.4);
+        border: 2px solid rgba(255, 255, 255, 0.4);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .mode-btn {
+        background: transparent;
+        border: none;
+        color: rgba(255, 255, 255, 0.65);
+        padding: 8px 22px;
+        font-size: 13px;
+        font-family: monospace;
+        font-weight: bold;
+        letter-spacing: 2px;
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s;
+      }
+      .mode-btn:hover { color: #ffe0a0; }
+      .mode-btn.selected {
+        background: rgba(255, 204, 64, 0.28);
+        color: #fff;
+      }
+      #time-mp-note {
+        font-size: 12px;
+        opacity: 0.7;
+        font-style: italic;
+        text-align: center;
+      }
       #menu-planes.hidden, #menu-settings.hidden { display: none; }
       #menu-planes h2, #menu-settings h2 { margin: 0; font-size: 20px; letter-spacing: 3px; }
       #menu-planes h3, #menu-settings h3 { margin: 0; font-size: 14px; letter-spacing: 2px; opacity: 0.85; }
@@ -352,6 +383,10 @@
       <h1 id="menu-title">MBPlanes</h1>
       <p id="menu-subtitle">fly · drift · explode · vibes</p>
       <div id="menu-main">
+        <div id="mode-toggle">
+          <button class="mode-btn" data-mode="singleplayer">SINGLEPLAYER</button>
+          <button class="mode-btn" data-mode="multiplayer">MULTIPLAYER</button>
+        </div>
         <button class="menu-btn primary" id="btn-start">START GAME</button>
         <button class="menu-btn" id="btn-continue" hidden>CONTINUE</button>
         <button class="menu-btn" id="btn-planes">PLANES</button>
@@ -368,6 +403,7 @@
         <h2>SETTINGS</h2>
         <h3>TIME OF DAY</h3>
         <div id="time-list"></div>
+        <div id="time-mp-note" style="display:none;">Time of day is synchronized across all players in multiplayer.</div>
         <h3>GRAPHICS</h3>
         <div id="gfx-list"></div>
         <h3>VIEW DISTANCE</h3>

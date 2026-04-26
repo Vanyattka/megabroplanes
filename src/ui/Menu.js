@@ -12,6 +12,8 @@ import { PlanePreview } from './PlanePreview.js';
 import { gfx, view } from './GraphicsSettings.js';
 
 const STORAGE_KEY = 'mbp:loadout';
+const MODES = ['singleplayer', 'multiplayer'];
+const DEFAULT_MODE = 'singleplayer';
 
 function loadSaved() {
   try {
@@ -20,7 +22,8 @@ function loadSaved() {
     const j = JSON.parse(raw);
     if (!PLANE_TYPES[j.type]) return null;
     const timePreset = TIME_PRESETS[j.timePreset] ? j.timePreset : DEFAULT_TIME_PRESET;
-    return { type: j.type, color: j.color, timePreset };
+    const mode = MODES.includes(j.mode) ? j.mode : DEFAULT_MODE;
+    return { type: j.type, color: j.color, timePreset, mode };
   } catch {
     return null;
   }
@@ -51,6 +54,9 @@ export class Menu {
     this.selectedType = saved?.type || DEFAULT_PLANE_TYPE;
     this.selectedColor = saved?.color ?? DEFAULT_BODY_COLOR;
     this.selectedTimePreset = saved?.timePreset || DEFAULT_TIME_PRESET;
+    this.selectedMode = saved?.mode || DEFAULT_MODE;
+    this.modeToggle = document.getElementById('mode-toggle');
+    this.timeMpNote = document.getElementById('time-mp-note');
 
     this.previews = [];
     this._previewsInitialized = false;
@@ -64,10 +70,13 @@ export class Menu {
     this._renderGfxPresets();
     this._renderViewPresets();
     this._wireButtons();
+    this._wireModeToggle();
+    this._refreshModeUI();
     this.onStart = null;
     this.onContinue = null;
     this.onChange = null;
     this.onTimeChange = null;
+    this.onModeChange = null;
 
     document.body.classList.add('menu-open');
     this._refreshMainButtons();
@@ -78,6 +87,7 @@ export class Menu {
       type: this.selectedType,
       color: this.selectedColor,
       timePreset: this.selectedTimePreset,
+      mode: this.selectedMode,
     };
   }
 
@@ -245,6 +255,7 @@ export class Menu {
           type: this.selectedType,
           color: this.selectedColor,
           timePreset: this.selectedTimePreset,
+          mode: this.selectedMode,
         });
         if (this.onTimeChange) this.onTimeChange(key);
       });
@@ -311,9 +322,51 @@ export class Menu {
       type: this.selectedType,
       color: this.selectedColor,
       timePreset: this.selectedTimePreset,
+      mode: this.selectedMode,
     });
     for (const { preview } of this.previews) preview.setColor(this.selectedColor);
     if (this.onChange) this.onChange(this.getSelection());
+  }
+
+  // Mode toggle: SINGLEPLAYER vs MULTIPLAYER. In MP the time-of-day picker
+  // is disabled (time syncs across all clients off the wall clock) and a
+  // note appears in the settings screen.
+  _wireModeToggle() {
+    if (!this.modeToggle) return;
+    for (const btn of this.modeToggle.querySelectorAll('.mode-btn')) {
+      btn.addEventListener('click', () => {
+        const m = btn.dataset.mode;
+        if (!MODES.includes(m) || m === this.selectedMode) return;
+        this.selectedMode = m;
+        this._refreshModeUI();
+        save({
+          type: this.selectedType,
+          color: this.selectedColor,
+          timePreset: this.selectedTimePreset,
+          mode: this.selectedMode,
+        });
+        if (this.onModeChange) this.onModeChange(m);
+      });
+    }
+  }
+
+  _refreshModeUI() {
+    if (this.modeToggle) {
+      for (const b of this.modeToggle.querySelectorAll('.mode-btn')) {
+        b.classList.toggle('selected', b.dataset.mode === this.selectedMode);
+      }
+    }
+    // When MP, disable the time picker (visually grey and ignore clicks)
+    // and reveal the explanatory note. Time picker stays in the DOM so the
+    // settings layout doesn't reflow when switching modes.
+    const mp = this.selectedMode === 'multiplayer';
+    if (this.timeList) {
+      this.timeList.style.opacity = mp ? '0.4' : '1';
+      this.timeList.style.pointerEvents = mp ? 'none' : 'auto';
+    }
+    if (this.timeMpNote) {
+      this.timeMpNote.style.display = mp ? 'block' : 'none';
+    }
   }
 
   _wireButtons() {
@@ -321,6 +374,7 @@ export class Menu {
       type: this.selectedType,
       color: this.selectedColor,
       timePreset: this.selectedTimePreset,
+      mode: this.selectedMode,
     });
     document.getElementById('btn-start').addEventListener('click', () => {
       persist();
