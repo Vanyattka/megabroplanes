@@ -1,4 +1,4 @@
-import { Vector3 } from 'three';
+import { Color, Vector3 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Renderer } from './core/Renderer.js';
 import { Clock } from './core/Clock.js';
@@ -33,6 +33,8 @@ import {
   LENS_FLARE_STRENGTH,
   LENS_FLARE_STREAK_STRENGTH,
   DAY_LENGTH_SECONDS,
+  WATER_LEVEL,
+  LANDING_LIGHT_INTENSITY,
 } from './config.js';
 import { MultiplayerClient } from './net/Client.js';
 import { RemotePlaneManager } from './net/RemotePlaneManager.js';
@@ -53,6 +55,18 @@ const _tmpVec3 = new Vector3();
 // Scratch vector for projecting the sun into screen space each frame
 // (god rays + lens flare). Reused to avoid per-frame allocation.
 const _sunScreen = new Vector3();
+// Scratch vectors for landing-light water-cone intersection + plane-glint
+// reflection. Allocated once and rewritten each frame.
+const _lightWorldPos = new Vector3();
+const _lightWorldDir = new Vector3();
+const _lightTargetPos = new Vector3();
+const _landingHitPos = new Vector3();
+const _planeReflPos = new Vector3();
+const _planeReflColor = new Color();
+// Scratch for jet position passed to water shader. Kept distinct from
+// _tmpVec3 so the per-frame computeWaterExtras() bundle doesn't alias
+// jet.position with landing.position (water.update reads both).
+const _jetReflPos = new Vector3();
 
 // Photo mode state. When on, plane physics and day-night clock pause and
 // OrbitControls takes over so the player can frame a shot freely.
@@ -380,6 +394,76 @@ function updateSunPostFx() {
   );
 }
 
+// Build the per-frame "extras" bundle for the water shader: jet engine
+// hotspot, landing-light cone-on-water, and plane body-color glint disc.
+// Each is null/zero when not applicable so the shader's branches early-out
+// for the cheap fast path.
+function computeWaterExtras() {
+  // Jet engine — already had this; preserved as a sub-bundle. Use a
+  // dedicated scratch so jet.position can't alias landing.position.
+  const jet =
+    plane.type === 'jet' && plane._jetLight
+      ? {
+          position: plane._jetLight.getWorldPosition(_jetReflPos),
+          intensity: plane._jetLight.intensity / 18,
+        }
+      : null;
+
+  // Landing light: trace the SpotLight's cone axis from its world position
+  // along its world direction toward y=WATER_LEVEL. If the cone points
+  // downward and the plane is overhead, light hits water at that point.
+  // Intensity falls off with cone height (close to water = bright pool;
+  // far above = nothing).
+  let landing = null;
+  if (plane._landingLight && plane._landingTarget && plane.landingLightOn) {
+    plane._landingLight.getWorldPosition(_lightWorldPos);
+    plane._landingTarget.getWorldPosition(_lightTargetPos);
+    _lightWorldDir.subVectors(_lightTargetPos, _lightWorldPos).normalize();
+    // Only intersect when cone is pointing down through the water plane.
+    if (_lightWorldDir.y < -0.05 && _lightWorldPos.y > WATER_LEVEL) {
+      const t = (WATER_LEVEL - _lightWorldPos.y) / _lightWorldDir.y;
+      if (t > 0 && t < 800) {
+        const hx = _lightWorldPos.x + _lightWorldDir.x * t;
+        const hz = _lightWorldPos.z + _lightWorldDir.z * t;
+        // Cone-to-water height fades intensity in 0..400 m. The light is
+        // useful as a real reflection in the 30–250 m AGL window.
+        const heightAboveWater = _lightWorldPos.y - WATER_LEVEL;
+        const heightAtten = 1 - Math.min(1, Math.max(0, heightAboveWater / 400));
+        const intensityNorm = plane._landingLight.intensity / LANDING_LIGHT_INTENSITY;
+        const intensity = intensityNorm * heightAtten;
+        if (intensity > 0.02) {
+          _landingHitPos.set(hx, WATER_LEVEL, hz);
+          landing = { position: _landingHitPos, intensity };
+        }
+      }
+    }
+  }
+
+  // Plane body-color glint disc — a stand-in for a real planar reflection
+  // visible only when low over water. Fades from 0..1 between 300 m and
+  // 30 m altitude over the water level. Uses the plane's chosen body
+  // color so the disc reads as the right hue.
+  let planeRefl = null;
+  if (!plane.crashed) {
+    const altOverWater = plane.position.y - WATER_LEVEL;
+    if (altOverWater > 0 && altOverWater < 300) {
+      const t = 1 - Math.min(1, Math.max(0, (altOverWater - 30) / 270));
+      if (t > 0.001) {
+        _planeReflPos.set(plane.position.x, WATER_LEVEL, plane.position.z);
+        _planeReflColor.setHex(plane.color != null ? plane.color : 0xffffff);
+        planeRefl = {
+          position: _planeReflPos,
+          color: _planeReflColor,
+          intensity: t,
+        };
+      }
+    }
+  }
+
+  if (!jet && !landing && !planeRefl) return null;
+  return { jet, landing, plane: planeRefl };
+}
+
 function altitudeT(y) {
   return Math.max(0, Math.min(1, y / VIEW_ALT_SCALE));
 }
@@ -557,21 +641,18 @@ function renderStep(alpha) {
   }
   sky.update(renderer.camera, plane.position);
   stars.update(renderer.camera);
-  // When the player flies a jet, pass the engine position + intensity so the
-  // water shader paints a hot orange reflection under it.
-  const jetInfo =
-    plane.type === 'jet' && plane._jetLight
-      ? {
-          position: plane._jetLight.getWorldPosition(_tmpVec3),
-          intensity: plane._jetLight.intensity / 18, // normalize to 0..1
-        }
-      : null;
+  const waterExtras = computeWaterExtras();
   // Use the render-interpolated position so water tracks under the camera
   // exactly. plane.position is the post-physics value, which can lag the
   // render frame by up to one physics step (~17 ms) — at jet speeds that's
   // a few metres of offset between camera and water-mesh centre, enough to
   // make the water edge visibly "wobble" at the horizon.
-  water.update(renderDt, plane.renderPosition || plane.position, worldTime.horizonColor, jetInfo);
+  water.update(
+    renderDt,
+    plane.renderPosition || plane.position,
+    worldTime.horizonColor,
+    waterExtras
+  );
   clouds.update(
     renderDt,
     plane.position,
