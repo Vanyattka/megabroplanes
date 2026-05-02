@@ -1,281 +1,295 @@
 # Architecture
 
+This is a snapshot of how the live code is wired up — not the original MVP plan. The MVP one lives in `ROADMAP.md` for historical reference.
+
 ## File tree
 
 ```
-plane-mvp/
-├── index.html
+megabroplanes/
+├── index.html              # canvas + DOM overlays (HUD, menu, touch UI, banners)
 ├── package.json
 ├── vite.config.js
-├── CLAUDE.md
+├── server/
+│   └── index.js            # Node WebSocket relay used by multiplayer
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   ├── PHYSICS.md
 │   ├── WORLD.md
 │   └── ROADMAP.md
+├── CLAUDE.md
+├── README.md
 └── src/
-    ├── main.js                # entry point, game loop
-    ├── config.js              # all tunable constants
+    ├── main.js                  # entry point, game loop, mode/photo state
+    ├── config.js                # every tunable, grouped by domain
     ├── core/
-    │   ├── Renderer.js        # Three.js scene/camera/renderer wrapper
-    │   ├── Input.js           # keyboard state
-    │   └── Clock.js           # fixed-timestep accumulator
-    ├── world/
-    │   ├── Noise.js           # seeded simplex noise, heightAt(x, z)
-    │   ├── Terrain.js         # builds one chunk mesh
-    │   ├── ChunkManager.js    # streams chunks around the plane
-    │   ├── Runway.js          # flat zone + visual runway mesh
-    │   └── Sky.js             # background color, fog, lighting
-    ├── plane/
-    │   ├── Plane.js           # state + visual group
-    │   ├── Physics.js         # pure force/torque functions, integration
-    │   └── Controls.js        # Input → plane controls with smoothing
+    │   ├── Renderer.js          # WebGLRenderer + Scene + PerspectiveCamera
+    │   ├── Clock.js             # fixed-timestep accumulator + render alpha
+    │   └── Input.js             # keyboard/mouse state + drag detection
     ├── camera/
-    │   └── ChaseCamera.js     # follows plane with lerp
-    └── ui/
-        └── Hud.js             # DOM overlay: speed, altitude, throttle
+    │   └── ChaseCamera.js       # exponential-smoothing chase + mouse-look
+    ├── plane/
+    │   ├── Plane.js             # state + landing/jet lights + render interp
+    │   ├── Physics.js           # pure force/torque step, ground interaction
+    │   ├── Controls.js          # input → angular velocity / throttle
+    │   └── PlaneMesh.js         # build a plane Group from primitives
+    ├── world/
+    │   ├── Noise.js             # seeded simplex (terrain + biome + sea)
+    │   ├── Biome.js             # 5-band weighted blend (lake → highmountain)
+    │   ├── SeaMask.js           # low-frequency ocean noise overlay
+    │   ├── TerrainCompute.js    # heavy per-chunk math (positions/colors/normals)
+    │   ├── Terrain.js           # Mesh assembly + shared MeshStandardMaterial
+    │   ├── ChunkManager.js      # streams chunks, owns roads per chunk
+    │   ├── ChunkWorker.js       # worker entry: TerrainCompute off the main thread
+    │   ├── ChunkWorkerPool.js   # round-robin pool of workers + result queue
+    │   ├── Ground.js            # heightAt sampler used by physics
+    │   ├── Runway.js            # home-airport flat zone + canvas-textured mesh
+    │   ├── VillageData.js       # deterministic village placement per cell
+    │   ├── Villages.js          # per-cell house/street layout
+    │   ├── VillageMeshes.js     # shared materials for village pieces
+    │   ├── VillageManager.js    # build/dispose village meshes per chunk
+    │   ├── Ruins.js             # mountain-peak ruin placement + shapes
+    │   ├── RuinMeshes.js        # shared stone materials
+    │   ├── RuinsManager.js      # build/dispose ruin meshes per chunk
+    │   ├── Roads.js             # ribbon meshes between nearby villages
+    │   ├── Scatter.js           # trees + rocks per chunk via biome filter
+    │   ├── Sky.js               # gradient sky dome + sun + ambient + moon
+    │   ├── AtmosphericSky.js    # Preetham sky (High preset only)
+    │   ├── DayNight.js          # keyframe interpolator → worldTime + lights
+    │   ├── WorldTime.js         # shared singleton read by water/clouds/sky
+    │   ├── NightLights.js       # shared HDR materials for nav / runway lamps
+    │   ├── Stars.js             # Points-based starfield, fades at night
+    │   ├── Water.js             # ShaderMaterial: ripples + reflections
+    │   └── Clouds.js            # InstancedMesh of camera-facing quads
+    ├── effects/
+    │   ├── Explosion.js         # crash particle burst (instanced cubes)
+    │   ├── JetExhaust.js        # throttle-scaled HDR particle plume
+    │   ├── Contrails.js         # long-lived white vapor at altitude
+    │   └── PostFx.js            # bloom + vignette + god-rays/lens-flare
+    ├── ui/
+    │   ├── Hud.js               # speed/altitude/throttle DOM
+    │   ├── Minimap.js           # 2D minimap
+    │   ├── Menu.js              # main + planes + settings screens, mode toggle
+    │   ├── PlanePreview.js      # spinning plane in the picker cards
+    │   ├── Touch.js             # joystick + throttle slider for mobile
+    │   └── GraphicsSettings.js  # gfx + view-distance preset singletons
+    ├── net/
+    │   ├── Client.js            # WebSocket client (auto-reconnect, setEnabled)
+    │   └── RemotePlaneManager.js # remote-plane visuals + jet effects
+    ├── audio/
+    │   └── Audio.js             # Web Audio engine + wind voice
+    └── debug/
+        └── Profiler.js          # opt-in counters/timers + long-frame tracer
 ```
+
+## Game loop (per frame)
+
+```
+Clock.tick(physicsStep, renderStep)
+├── physics step (fixed 1/60s, possibly 0–3 substeps per frame)
+│   ├── early-return if menu / photo mode
+│   ├── plane.update(dt, input, ground, isOnRunway, crashesEnabled, touch)
+│   └── crash detection → explosion.trigger
+└── render step (once per frame, with interpolation alpha)
+    ├── plane.updateRender(alpha)              # interp prev↔curr physics state
+    ├── streamUpdate()                         # chunks + villages + ruins
+    ├── (MP mode) applyGlobalTime()            # wall-clock derived t
+    ├── dayNight.update(renderDt)              # interpolate keyframes
+    ├── chaseCamera.update OR orbitControls.update (photo mode)
+    ├── sky.update + stars.update
+    ├── water.update(extras: jet/landing/plane)
+    ├── clouds.update
+    ├── jetExhaust + contrails + explosion (skipped in photo mode)
+    ├── remotes.update (no-op in SP mode)
+    ├── mp.sendState (no-op in SP mode)
+    ├── audio.update
+    ├── updateSunPostFx() → postfx godrays uniforms
+    ├── postfx.render()                        # bloom → godrays → vignette
+    ├── hud.update
+    └── minimap.update
+```
+
+`main.js` keeps three pieces of mutable runtime state:
+- `gameState` — `'menu' | 'playing'`
+- `currentMode` — `'singleplayer' | 'multiplayer'`
+- `photoMode` — boolean
+
+Both gates short-circuit specific pipeline stages rather than swapping render trees.
 
 ## Module responsibilities
 
 ### `main.js`
-
-Entry point. Responsible for:
-- Constructing all systems (Renderer, Input, Clock, Plane, ChunkManager, ChaseCamera, Hud).
-- Wiring them together.
-- Running the game loop via `Clock.tick(physicsCallback, renderCallback)`.
-
-No gameplay logic here. This file should be short (under 100 lines).
+Wires every subsystem together, owns the game loop and the cross-cutting state listed above. Builds the per-frame water "extras" bundle (`computeWaterExtras()`) and the sun's screen-space projection for god rays (`updateSunPostFx()`). Around 600 lines — the original "under 100 lines" goal didn't survive contact with multiplayer + photo mode + extras bundles + mode-switching, but the file remains pure orchestration, no gameplay logic.
 
 ### `config.js`
-
-Single source of truth for tunable values. Exports named constants, grouped by domain:
-
-```js
-// World
-export const CHUNK_SIZE = 128;
-export const CHUNK_RESOLUTION = 33;
-export const VIEW_DISTANCE_CHUNKS = 4;
-export const NOISE_SCALE = 0.005;
-export const HEIGHT_AMPLITUDE = 30;
-
-// Runway
-export const RUNWAY_LENGTH = 600;
-export const RUNWAY_WIDTH = 30;
-export const RUNWAY_CHUNK = { cx: 0, cz: 0 };
-
-// Physics
-export const GRAVITY = 9.81;
-export const MASS = 1000;
-export const MAX_THRUST = 15000;
-export const LIFT_COEFFICIENT = 2.0;
-export const DRAG_COEFFICIENT = 0.3;
-export const PITCH_RATE = 1.5;
-export const ROLL_RATE = 2.5;
-export const YAW_RATE = 0.8;
-export const CONTROL_RESPONSIVENESS = 0.1;
-export const ROLLING_FRICTION = 0.5;
-
-// Fog / lighting
-export const FOG_COLOR = 0x88bbee;
-export const FOG_NEAR = 150;
-export const FOG_FAR = 450;
-```
+Single source of truth. Constants are grouped: timing, world, runway, villages, ruins, physics, plane types, sky/fog, biomes, water, clouds, shadows, crashes, particles, jet exhaust + jet light, contrails, scatter, streaming budget, camera, mouse-look, day/night keyframes, night lights, roads, audio, post-FX (bloom + vignette + god rays + aerial perspective), graphics presets, view-distance presets, time-of-day presets. Every visual or gameplay knob has a comment explaining what range is sensible and why the current value was picked.
 
 ### `core/Renderer.js`
-
-Wraps `THREE.WebGLRenderer`, `THREE.Scene`, `THREE.PerspectiveCamera`.
-- Handles window resize.
-- Sets fog from config.
-- Exposes `scene`, `camera`, `render()`.
-- Camera `far` must be larger than `FOG_FAR` (e.g., `FOG_FAR * 1.5`).
-
-### `core/Input.js`
-
-Keyboard state tracked via `keydown` / `keyup`.
-
-API:
-- `isPressed(key)` → boolean
-- `getAxis(posKey, negKey)` → -1 / 0 / +1
-
-Controls mapping:
-| Key | Action |
-|---|---|
-| `W` / `S` | Pitch down / up |
-| `A` / `D` | Roll left / right |
-| `Q` / `E` | Yaw left / right |
-| `Shift` / `Ctrl` | Throttle up / down |
-| `Space` | Brake (when on ground) |
+Wraps `WebGLRenderer`, `Scene`, `PerspectiveCamera`. ACES tone mapping, SRGB output, soft PCF shadows. Camera far is sized to the largest view-distance preset (`14 × CHUNK_SIZE × 1.6`).
 
 ### `core/Clock.js`
+Fixed-timestep accumulator that calls `physicsStep(FIXED_STEP)` 0..3 times per render frame, then `renderStep(alpha)` once. `alpha ∈ [0,1]` is the fraction of a physics step elapsed since the last sub-step — passed to `Plane.updateRender(alpha)` so the rendered plane interpolates between two physics snapshots.
 
-Wraps `THREE.Clock`. Exposes:
-
-```js
-tick(physicsStep, renderStep) {
-  accumulator += min(clock.getDelta(), 0.1);   // clamp spiral-of-death
-  while (accumulator >= FIXED_STEP) {
-    physicsStep(FIXED_STEP);
-    accumulator -= FIXED_STEP;
-  }
-  renderStep();
-}
-```
-
-`FIXED_STEP = 1/60`.
-
-### `world/Noise.js`
-
-Wraps `simplex-noise`. Seeded deterministically (e.g., seed `1`).
-
-Exports `heightAt(worldX, worldZ)` which sums 2–3 octaves of noise. **Depends only on world coordinates, never on chunk coordinates.** This is what guarantees seamless chunk borders.
-
-### `world/Terrain.js`
-
-Builds a `THREE.Mesh` for one chunk at given `(cx, cz)`:
-1. `PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE, RES-1, RES-1)` rotated -90° around X.
-2. For each vertex, set Y from `Noise.heightAt(worldX, worldZ)`.
-3. If chunk is `RUNWAY_CHUNK`, force vertices in runway rectangle to Y=0 (with a margin).
-4. Assign vertex colors by height/slope.
-5. `computeVertexNormals()`.
-6. Material: `MeshStandardMaterial({ vertexColors: true, flatShading: true })` for low-poly look.
-
-### `world/ChunkManager.js`
-
-Maintains `Map<"cx,cz", Mesh>` of active chunks.
-
-Each frame (or every N frames):
-1. Compute plane's current chunk coords.
-2. Iterate `(2*VIEW_DISTANCE+1)²` grid around plane.
-3. Add missing chunks (call `Terrain.build(cx, cz)` and add to scene).
-4. Remove chunks outside range (scene.remove + `geometry.dispose()` + `material.dispose()`).
-
-### `world/Runway.js`
-
-Produces:
-- The visual runway mesh (thin plane at y=0.01 with `CanvasTexture` drawn programmatically).
-- `isOnRunway(x, z)` for physics ground check.
-- Starting spawn pose (position + orientation) for the plane.
-
-### `world/Sky.js`
-
-- Sets `scene.background` to sky color.
-- Adds `HemisphereLight` + `DirectionalLight` (no shadow maps for MVP).
-- Fog color must match sky color exactly.
-
-### `plane/Plane.js`
-
-State:
-
-```js
-{
-  position: Vector3,
-  velocity: Vector3,            // world-space m/s
-  quaternion: Quaternion,
-  angularVelocity: Vector3,     // local-space rad/s (pitch, yaw, roll)
-  throttle: 0..1,
-  onGround: boolean,
-  mesh: Group                   // built from primitives, see WORLD.md
-}
-```
-
-Exposes `update(dt)` which calls `Physics.step(this, dt, terrain)` and syncs mesh transform.
-
-### `plane/Physics.js`
-
-Pure functions. No class. See `docs/PHYSICS.md` for the full model.
-
-### `plane/Controls.js`
-
-Reads `Input`, writes smoothed target values to `plane.angularVelocity` and `plane.throttle`.
+### `core/Input.js`
+Tracks keyboard pressed-set, mouse delta with drag detection, and exposes `consumeMouseDelta()` (read-once accumulator). `getAxis(pos, neg)` helper.
 
 ### `camera/ChaseCamera.js`
+Reads `plane.renderPosition` / `plane.renderQuaternion` (the interpolated state). Mouse drag adds a temporary `yaw`/`pitch` that decays back to zero when the mouse releases. Camera position uses dt-aware exponential smoothing (`alpha = 1 - exp(-dt × CAMERA_FOLLOW_RATE)`) instead of raw lerp so the rate is frame-rate-independent.
 
-Every render frame:
-```
-desiredPos = plane.position + (offset in plane's local frame)
-camera.position.lerp(desiredPos, CAMERA_LERP)
-camera.lookAt(plane.position)
-```
+### `plane/Plane.js`
+State: `position`, `velocity`, `quaternion`, `angularVelocity`, `throttle`, `onGround`, `crashed`, plus the prev-physics snapshot (`_prevPosition`, `_prevQuaternion`) for render interpolation. Two attached lights — `_landingLight` (SpotLight on the nose, toggled by `L`) and `_jetLight` (orange PointLight at the engine, throttle-scaled). `setLoadout(type, color)` swaps the visible mesh when the player picks a different plane.
 
-Offset: roughly `(0, 3, 12)` in plane's local frame (behind and above).
+### `plane/Physics.js`
+Pure functions, see `PHYSICS.md`. Forces: thrust, lift (clamped to `LIFT_REFERENCE_SPEED²`), drag, gravity, velocity-aligns-with-nose torque (ramped by airspeed), stall pitch-down. Crash detection: speed × dive-angle × downward-velocity all above thresholds and not on a flat runway.
 
-### `world/Water.js` (added)
+### `plane/Controls.js`
+WASD/QE → angular-velocity targets, smoothed via `CONTROL_RESPONSIVENESS`. Throttle is integrated from Shift/Ctrl. Touch joystick + throttle slider feed in via the same axes. Roll-to-yaw coupling here.
 
-A `Water` class: one huge `PlaneGeometry` at `WATER_LEVEL` that follows the
-player horizontally. `ShaderMaterial` does analytic wave normals + Fresnel
-blend (shallow→deep) + sky reflection tinted by `worldTime.horizonColor`.
-`update(dt, planePos, worldTint)` advances the ripple clock, re-centers the
-mesh, and copies the current tint into the shader uniform. `dispose()` tears
-down geometry/material.
+### `plane/PlaneMesh.js`
+`buildPlaneMesh(type, color)` returns a `Group` of `BoxGeometry` parts: fuselage, wing, fin, stab, cockpit, propeller, control surfaces (named so animation code can find them), nav-light spheres, landing-light anchor, jet-engine block. Three silhouettes (cessna / piper / jet) share the same code with different sizes / accessories.
 
-### `world/Clouds.js` (refactored)
+### `world/Noise.js`
+Three independent noise fields: terrain height (`noise2D`), biome mask (in `Biome.js`), sea mask (in `SeaMask.js`). All seeded via `alea` with distinct seed strings so they don't correlate. Terrain noise sums multiple octaves; pure function of world coordinates only.
 
-Now uses one `InstancedMesh(PlaneGeometry, MeshBasicMaterial, CLOUD_MAX_INSTANCES)`
-instead of individual `Sprite`s. Positions are sampled deterministically per
-`CLOUD_CELL_SIZE` cell via `alea('cloud-cell:cx:cz')`, drift is applied as a
-uniform global offset (`CLOUD_DRIFT_DIR × CLOUD_DRIFT_SPEED × elapsed`).
-Billboarding is view-aligned — a single camera-quaternion is applied to every
-instance each frame. `update(dt, planePos, cameraPos, camera, tint)` tints
-the material with `worldTime.horizonColor` so clouds darken at dusk.
+### `world/Biome.js`
+Low-frequency `simplex-noise` over `BIOME_SCALE` selects between 5 named biomes (lake / forest / hills / mountain / highmountain). `biomeAt(x, z)` returns a smoothly weighted blend of `{ amp, offset, trees, rocks, type }` — the heaviest-weighted biome's `type` is reported for downstream switches (e.g. tree species selection).
 
-### `world/DayNight.js` (added) + `world/WorldTime.js` + `world/Stars.js`
+### `world/SeaMask.js`
+Even-lower-frequency simplex layer over `SEA_SCALE`. Where the mask is high, terrain height is pushed down by up to `SEA_DEPTH` so multi-kilometre oceans cut through whatever biome is locally selected. `seaMaskAt(x, z)` is also used to reject village placement in seas.
 
-`DayNight` owns `timeOfDay` and advances it at `1 / DAY_LENGTH_SECONDS`.
-Each frame it linearly interpolates the `DAY_NIGHT_KEYFRAMES` array to
-produce: sky / horizon / fog / sun / ambient colors + intensities, a sun
-direction, and `starsOpacity`. Outputs are published into the shared
-`worldTime` singleton (read by Water / Clouds / Stars), into the `Sky` shader
-uniforms, into the `AmbientLight` and `DirectionalLight` it was given at
-construction, and into `scene.fog.color`. `Stars` is a tiny `Points`-based
-starfield that fades in at night via `worldTime.starsOpacity`.
+### `world/TerrainCompute.js`
+The "heavy" per-chunk work, isolated so it can run on a worker thread. Returns transferable buffers: `positions`, `normals`, `colors`, plus a bounding-sphere centre/radius. Uses `Biome` + `SeaMask` to drive height, then `colorByHeight` with slope-based rock+snow tiers (sand, grass, dark grass, alpine stone, packed snow, summit snow). Honors village-flatten zones passed in as data.
 
-`Sky.js` was refactored to expose `sun` (DirectionalLight) and `ambient`
-(AmbientLight) publicly so `DayNight` can drive them without creating its
-own lights (avoids double-lighting and keeps the scene graph tidy).
+### `world/Terrain.js`
+Cheap Mesh assembly around the worker output. One shared `MeshStandardMaterial` and one shared index buffer across every chunk — without sharing, each new chunk triggered a 40–80 ms shader-program compile stall. The shared material's `onBeforeCompile` injects an aerial-perspective term: distant fragments are desaturated and tinted toward `worldTime.horizonColor`. `updateAerialPerspective(color)` is called from `DayNight` each frame so the tint tracks the sky.
 
-### `world/Roads.js` (added)
+### `world/ChunkManager.js`
+Time-budgeted, closest-first streaming. Owns a worker pool (`ChunkWorkerPool`), a result queue with backpressure, and per-chunk roads (`buildForChunk` / `disposeForChunk`). Adaptive build budget: the per-frame ms ceiling scales with backlog so initial load fills fast without stalling once cruise begins. `primeAll(planePos, radius)` does a synchronous fill for the inner ring before the first frame.
 
-Builds inter-village road ribbons. Owns per-chunk mesh lifetimes via
-`buildForChunk(cx, cz)` / `disposeForChunk(cx, cz)` — called by
-`ChunkManager`. A road is owned by the chunk containing the from-village's
-airport; canonical cell-key ordering dedupes A↔B pairs. Path viability is
-checked by sampling the center line every `ROAD_SAMPLE_STEP` m and rejecting
-on underwater or over-slope. The resulting ribbon is a `BufferGeometry`
-with shared `MeshStandardMaterial`.
+### `world/ChunkWorker.js` + `world/ChunkWorkerPool.js`
+Worker thread runs `TerrainCompute` and ships `ArrayBuffer`s back as transferables. Pool keeps `MAX_IN_FLIGHT` requests outstanding and a result queue capped at `MAX_BUFFERED_RESULTS`. `ChunkManager` finalizes meshes from results in `MAX_TERRAIN_INSTALLS_PER_FRAME` increments.
 
-### `audio/Audio.js` (added)
+### `world/Ground.js`
+`groundHeight(x, z)` and `physicsFloor(x, z)` — the two height samplers used by `Plane.update`. Don't go through `TerrainCompute` (that's per-vertex); they recompute the same height function in JS for fast point queries.
 
-Web Audio API wrapper. `start()` (called lazily from first user gesture)
-creates an `AudioContext` + two voices:
-- **Engine** — sawtooth oscillator → lowpass biquad → per-voice gain, with
-  frequency/gain/cutoff tracked to plane throttle.
-- **Wind** — 2-second pink-ish noise `AudioBuffer` on a looping
-  `AudioBufferSourceNode` → bandpass biquad → per-voice gain, with
-  frequency/gain tracked to airspeed.
+### `world/Runway.js`
+The home airport is hunted out of the origin cell by sampling for the flattest 600×30 m strip. `isInRunwayFlatZone(x, z)` and `isOnRunway(x, z)` for terrain-flatten + ground checks. The visual runway mesh uses a `CanvasTexture` painted at module load.
 
-Both voices feed a master gain → destination. `update(dt, { throttle,
-airspeed })` uses `setTargetAtTime` with `AUDIO_SMOOTHING_TIME` for
-zipper-free ramps. `toggleMute()` flips the master to 0/target. `M` key is
-wired in `main.js`. `dispose()` stops the oscillators / source nodes and
-closes the context.
+### `world/VillageData.js` + `world/Villages.js`
+Deterministic placement of 0–1 village per `VILLAGE_CELL_SIZE` × `VILLAGE_CELL_SIZE` cell. Size tier is chosen by weighted RNG (small / medium / large / city); city is rare. Villages are rejected if the cell centre is in a sea or sits on the home runway. `Villages.js` lays out streets + house slots; `VillageData.js` is the small structure passed to the worker so terrain knows where to flatten.
 
-### `ui/Hud.js`
+### `world/VillageManager.js`
+Builds village meshes per cell (lazily, gated on `chunkReady(cx, cz)` so houses don't spawn before terrain). Time-budgeted at `VILLAGE_BUILD_BUDGET_MS` per frame. `primeAll(planePos, radius, chunkReady)` for synchronous initial fill.
 
-Plain DOM `<div id="hud">` with inline styles, overlaid on canvas via `position: absolute`. Updated every render frame with speed (knots), altitude (feet), throttle percent.
+### `world/VillageMeshes.js`
+Shared materials for every village piece (house variants, khrushchevkas, doors, chimneys, terminal, hangar, tower) so first-render compile stalls don't multiply by house count. Window emissive material brightens at night via `NightLights.updateLights()`.
 
-## Data flow per frame
+### `world/Ruins.js` + `world/RuinMeshes.js` + `world/RuinsManager.js`
+Stone wall / tower / arch silhouettes spawned on mountain peaks (height > `RUIN_MIN_HEIGHT`). Same per-chunk placement + lazy-build pattern as villages. Three weathered grey shared materials.
 
-```
-Clock.tick
-├── physics step (fixed dt, possibly multiple iterations)
-│   ├── Controls.apply(plane, input)
-│   ├── Physics.step(plane, dt, getHeight)
-│   └── ChunkManager.update(plane.position)
-└── render step (once per frame)
-    ├── ChaseCamera.update(plane)
-    ├── Renderer.render(scene, camera)
-    └── Hud.update(plane)
-```
+### `world/Roads.js`
+Ribbon meshes between nearby village airports, sampled along a deterministic curved centerline. Per-chunk ownership keyed on the from-village cell so each road is built exactly once. Reject candidates whose path crosses sea or exceeds `ROAD_MAX_SLOPE`.
 
-Note `ChunkManager.update` is in the physics step here because it depends on plane position, but it's fine to run it less often (every 10 frames) as a perf optimization later.
+### `world/Scatter.js`
+Trees + rocks per chunk. Candidate count = `TREES_PER_CHUNK × biome.trees × …` then biome / slope / water rejection trims the list. Trees use a small set of variants; both materials are flat-shaded `MeshStandardMaterial`s shared across instances.
+
+### `world/Sky.js`
+Two domes, both centred on the camera every frame:
+1. **Gradient dome** — `ShaderMaterial` mixing `uHorizon → uZenith` with a three-layer sun (wide glow, halo, HDR disc). `DayNight` writes its uniforms.
+2. **Moon dome** — separate additive-blended dome that always renders. Cool-white disc + halo at `-uSunDir`, gated by `uNightFactor`. Works through both gradient and Preetham sky.
+
+Also owns the scene's `DirectionalLight` (sun, with a shadow-camera frustum that follows the plane) and `AmbientLight`. `setAtmospheric(on)` swaps in `AtmosphericSky` (Preetham) for the gradient dome on High preset.
+
+### `world/AtmosphericSky.js`
+Wraps Three's `objects/Sky.js` (Preetham model). Parameters are tuned low (`turbidity=1.0`, `rayleigh=0.35`) and an `onBeforeCompile` clamp keeps the output ≤ 1.9 so it can never cross the bloom threshold and whiteout the sky.
+
+### `world/DayNight.js`
+Keyframe interpolator. Frames in `DAY_NIGHT_KEYFRAMES` cover sky/horizon/fog/sun/ambient colours + intensities, plus `starsOpacity`. Each frame `update(dt)`:
+1. Advance `t` (or read it directly when paused / under wall-clock control).
+2. Find the surrounding keyframe pair, lerp every channel.
+3. Compute sun direction from `t` (sin/cos orbit, noon at top).
+4. Write everything to: the `worldTime` singleton, the gradient sky uniforms, the moon dome uniforms, scene fog, sun/ambient lights, and `updateAerialPerspective(horizonColor)` on the terrain shader, and `NightLights.updateLights()` for runway/nav lights.
+
+`paused` mode lets external code (photo mode, multiplayer global time) drive `t` directly.
+
+### `world/WorldTime.js`
+A trivial mutable singleton with `t`, `skyColor`, `horizonColor`, `fogColor`, `sunDir`, `sunColor`, `sunIntensity`, `ambientColor`, `ambientIntensity`, `starsOpacity`, `nightFactor`. Read by `Water`, `Clouds`, `Stars`, and the post-FX sun computation. Singleton is fine because there is exactly one day/night cycle.
+
+### `world/Stars.js`
+`Points` cloud on a fixed-radius dome around the camera. Material's opacity = `worldTime.starsOpacity` so they fade in at night.
+
+### `world/NightLights.js`
+Shared HDR materials for runway lamps, plane nav lights, and village windows. `updateLights()` is called once per frame from `DayNight` and writes a single `nightFactor`-scaled emissive to all of them.
+
+### `world/Water.js`
+Single huge `PlaneGeometry` (6 km × 6 km — bigger than fog far at every preset) at `y = WATER_LEVEL`, follows `plane.renderPosition` horizontally. Custom `ShaderMaterial` does:
+- Multi-octave analytic ripple normal (slow swell + mid wind chop + high-frequency sparkle, each with its own wind drift).
+- Fresnel mix between `WATER_COLOR_SHALLOW`/`WATER_COLOR_DEEP` and reflected sky.
+- Sun glint Blinn-Phong specular (HDR — golden sunset path blooms).
+- Jet-engine reflection pool (orange smear under low jets).
+- Landing-light reflection pool (where the SpotLight cone meets water).
+- Plane body-color glint disc that fades with altitude (stand-in for a true planar reflection).
+
+`update(dt, planePos, worldTint, extras)` builds these per-frame.
+
+### `world/Clouds.js`
+`InstancedMesh` of camera-facing quads, deterministic per `CLOUD_CELL_SIZE` cell. Wind drift is a global offset so cells stay deterministic but the world flows. Cloud texture is generated once at module load via canvas 2D. Tinted by `worldTime.horizonColor` so they take on dusk/dawn colours.
+
+### `effects/Explosion.js`
+Crash particle burst — one `InstancedMesh` of cubes with HDR fire colour, gravity + drag. Lives ~0.9–2 s.
+
+### `effects/JetExhaust.js`
+Throttle-scaled HDR particle plume from the engine nozzle, additively blended. Particles inherit plane velocity at spawn, decelerate via drag, drift up via buoyancy. Colour curve hot → orange → red → dark over particle lifetime; only the hottest core crosses the bloom threshold.
+
+### `effects/Contrails.js`
+Long-lived white vapor (≈28 s lifetime) above `CONTRAIL_MIN_ALT` with throttle gate. Particles spawn at zero velocity (relative to world, not plane) so they hang in the sky exactly where the plane was. Two parallel trails — one per engine offset.
+
+### `effects/PostFx.js`
+EffectComposer chain:
+1. `RenderPass` (scene → buffer)
+2. `UnrealBloomPass` (threshold 2.0 — only HDR pixels bloom)
+3. Custom god-rays + lens-flare `ShaderPass` (radial blur from sun's screen position + 4 ghost discs + anamorphic streak)
+4. Custom vignette `ShaderPass`
+5. `OutputPass`
+
+`setSunScreenPos(x, y, raysStrength, flareStrength, streakStrength)` lets `main.js` drive the third pass; strength is zero when sun is off-screen / behind camera so the pass is a passthrough most frames. Each pass is independently toggleable via the gfx preset.
+
+### `ui/Hud.js`, `ui/Minimap.js`
+DOM overlays for speed/altitude/throttle and a 2D minimap (other players also plot when MP is on).
+
+### `ui/Menu.js`
+Three screens: main (mode toggle, START / CONTINUE / PLANES / SETTINGS), planes (picker + colour swatches), settings (time of day + graphics + view distance). Selections persist in `localStorage`. Mode toggle is the SP/MP pill at the top of the main screen — when MP is selected, the time picker greys out and a synced-time note appears.
+
+### `ui/PlanePreview.js`
+Spinning preview rendered into each plane card's canvas via a small dedicated WebGLRenderer. Only animates while the planes screen is open.
+
+### `ui/Touch.js`
+On-screen joystick + throttle slider for mobile, exposed as the same axis values the keyboard would produce.
+
+### `ui/GraphicsSettings.js`
+Two singleton-style stores (`gfx`, `view`) with `set/preset/settings/onChange` and `localStorage` persistence. `main.js` registers an `onChange` that re-applies pixel ratio, shadow size, bloom strength, atmospheric sky, god rays, etc.
+
+### `net/Client.js`
+WebSocket client. Reconnects every `RECONNECT_MS` (3 s) when it disconnects. `setEnabled(false)` cleanly closes and stops reconnecting (used by SP mode). Sends state at 20 Hz. Snapshot messages populate `this.remotes` keyed by remote ID.
+
+### `net/RemotePlaneManager.js`
+Per-remote `{ mesh, lerp targets, throttle, crashed, type, color, jetExhaust, contrails }`. The mesh lerps toward the network target each frame. For jet remotes, lazily allocates `JetExhaust` + `Contrails` and feeds them a synthetic plane object (`position`, `quaternion`, `throttle`, plus a velocity estimate derived from successive position deltas). Cleaned up on disconnect or plane-type swap.
+
+### `audio/Audio.js`
+Web Audio API. Engine voice = sawtooth → lowpass → gain (frequency/cutoff/gain tracked to throttle). Wind voice = pink-ish noise buffer → bandpass → gain (tracked to airspeed). `setTargetAtTime` with `AUDIO_SMOOTHING_TIME` for zipper-free ramps. Started lazily on first user gesture.
+
+### `debug/Profiler.js`
+Opt-in via `DEBUG_PROFILER` in `config.js`. Per-frame counters and named timers, with a long-frame tracer that logs the breakdown when a frame exceeds `DEBUG_PROFILER_LONG_FRAME_MS`. Zero runtime cost when disabled.
+
+### `server/index.js` (Node)
+Tiny WebSocket relay. On connect: assign an ID + hue, broadcast a welcome. Maintains an in-memory map of last state per client. Every `BROADCAST_INTERVAL_MS`, sends a snapshot of all states to every client. No persistence.
+
+## Key invariants
+
+- **`config.js` is the only place magic numbers live.** Logic files import constants by name.
+- **Noise is a pure function of world coordinates.** Chunk index is never an input. Without this, chunk borders seam.
+- **One physics tick = `1/60 s` exactly.** `Clock` clamps the absorbed wall delta to `MAX_FRAME_DT` (50 ms) so a paused tab can't accumulate spiral-of-death.
+- **`plane.renderPosition` is what you read for visuals**, not `plane.position`. The latter is post-physics; the former is alpha-interpolated for smooth display at 120 fps.
+- **Quaternion normalize every step.** Drift is real over long flights.
+- **Dispose geometries and materials on chunk unload.** GPU memory leaks otherwise.
+- **One shared material per object class** wherever possible. Per-instance materials trigger fresh shader-program compiles on first render.
+- **HDR colour values > 2.0 bloom; everything else doesn't.** Bloom threshold is set so accidental self-blooming of lit `MeshStandardMaterial`s can't happen. To make something bloom, give it an emissive color that exceeds 2.0 in linear space.

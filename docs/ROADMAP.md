@@ -1,113 +1,98 @@
-# Implementation roadmap
+# Roadmap (historical)
 
-**Follow this order strictly.** Each phase has a concrete checkpoint — do not proceed until it passes. If something breaks in a later phase, the bug is almost always in whatever changed last.
+The MVP roadmap below is preserved as a record of how the project was bootstrapped. Phase 1–8 are all complete; the project shipped, then a long tail of post-MVP work landed on top. The shipped post-MVP additions are listed at the bottom.
 
-Rationale: physics and world rendering are independently hard. Getting them tangled together makes both impossible to debug. By staging the work, each phase tests one thing.
+For where the code is *now*, read `ARCHITECTURE.md`, `WORLD.md`, and `PHYSICS.md` — those reflect the live tree.
 
-## Phase 1 — Foundation
+## MVP (shipped) — Phases 1–8
 
-- [ ] **1.1** Initialize project: `npm init`, install `three`, `simplex-noise`, `alea`, `vite`.
-- [ ] **1.2** `index.html` with a canvas and a module-type script tag loading `src/main.js`.
-- [ ] **1.3** `vite.config.js` with default settings.
-- [ ] **1.4** `src/config.js` with all constants from `docs/ARCHITECTURE.md`.
-- [ ] **1.5** `core/Renderer.js` creates scene, perspective camera at (0, 5, 15), blue background, one visible cube at origin, hemisphere + directional light. Handles window resize.
-- [ ] **1.6** `core/Clock.js` with fixed-timestep accumulator (clamp dt ≤ 0.1).
-- [ ] **1.7** `core/Input.js` tracks keyboard, exposes `isPressed`, `getAxis`.
-- [ ] **1.8** `main.js` wires them together, runs loop. The cube rotates on each frame to prove the loop runs.
+These phases were followed in order, each gated on a concrete checkpoint. Lessons learned along the way are captured in the relevant doc.
 
-**Checkpoint 1:** Spinning cube on blue background. `npm run dev` opens the page. Pressing W logs `true` to console.
+### Phase 1 — Foundation ✅
+Vite project, `Renderer` / `Clock` / `Input` skeleton, spinning cube.
 
-## Phase 2 — Flight physics on a cube
+### Phase 2 — Flight physics on a cube ✅
+Physics built force-by-force on a debug cube. Tuning came out of `PHYSICS.md` plus a lot of empirical play.
 
-Build physics against a `THREE.Mesh` cube. Do NOT load a plane model until physics is correct.
+### Phase 3 — Chase camera ✅
+Local-frame offset, lerp toward desired position. Later upgraded to dt-aware exponential smoothing + mouse-look on top.
 
-- [ ] **2.1** Give the cube a state object: `{ position, velocity, quaternion, angularVelocity, throttle, onGround: false }`.
-- [ ] **2.2** `plane/Physics.js` — implement ONE force at a time and verify each:
-  - [ ] **2.2.a** Thrust only. Holding Shift accelerates the cube forward indefinitely (no drag yet).
-  - [ ] **2.2.b** Add drag. Cube reaches terminal speed.
-  - [ ] **2.2.c** Add gravity. Cube falls when throttle is 0.
-  - [ ] **2.2.d** Add lift. At high forward speed, cube stays level or climbs.
-- [ ] **2.3** `plane/Controls.js` — angular velocity from WASD + Q/E with smoothing and damping.
-- [ ] **2.4** Test: WASD pitches and rolls smoothly. Banking turns because of roll-to-yaw coupling.
-- [ ] **2.5** Tune `config.js` until flight *feels* right. Expect this to take a while — it's the hardest step. Focus on: can you take off by accelerating from rest? Can you level off? Does banking cause a turn?
+### Phase 4 — Single terrain chunk ✅
+`Noise.js` + `Terrain.js` building one chunk with vertex-coloured flat shading.
 
-**Checkpoint 2:** Cube flies like a plane on an infinite flat plane (use a big `PlaneGeometry` at y=0 as ground). Takeoff works. Controls feel natural.
+### Phase 5 — Chunk streaming ✅
+`ChunkManager` with `Map<key, Mesh>`, dispose on unload, fog hiding the edge.
 
-## Phase 3 — Chase camera
+### Phase 6 — Runway + ground interaction ✅
+Flat-zone in chunk (0,0), `CanvasTexture` on the visual mesh, `physicsFloor` ground sample + rolling friction + onGround state.
 
-- [ ] **3.1** `camera/ChaseCamera.js`. Compute desired camera position as `plane.position + offset` where offset is in the plane's local frame (behind and above).
-- [ ] **3.2** `camera.position.lerp(desiredPos, 0.1)` each render frame.
-- [ ] **3.3** `camera.lookAt(plane.position)`.
+### Phase 7 — Plane model ✅
+`PlaneMesh.buildPlaneMesh` with primitives. Propeller + control surfaces named for animation.
 
-**Checkpoint 3:** Camera smoothly trails the cube. No jitter. Banking looks good from behind.
+### Phase 8 — Polish ✅
+HUD, fog/colour tuning, end-to-end loop test.
 
-## Phase 4 — Single terrain chunk
+## Post-MVP (shipped)
 
-- [ ] **4.1** `world/Noise.js` with seeded simplex, `heightAt(x, z)` returning 2-octave sum.
-- [ ] **4.2** `world/Terrain.js` — `buildChunk(0, 0)` returns a mesh with heights applied.
-- [ ] **4.3** Vertex colors by height.
-- [ ] **4.4** `flatShading: true` for the low-poly look.
+Ordered roughly by when they landed. Every one of these was originally listed in CLAUDE.md as "do not start without approval" — they shipped after the user asked for them.
 
-**Checkpoint 4:** A single 128×128 terrain chunk at origin, colored by height. Cube flies over it (physics still checks against flat y=0 — that's OK for now).
+### World expansion
+- **Three plane types** (Cessna / Piper / Jet) with per-type physics multipliers and silhouettes.
+- **Body colour picker.**
+- **Five biomes** with a low-frequency noise mask blending lake / forest / hills / mountain / highmountain.
+- **Sea mask** noise layer carving multi-kilometre oceans across whatever biome is locally selected.
+- **Villages** — deterministic per-cell, four size tiers from hamlet to city, khrushchevka apartments in cities.
+- **Roads** between nearby villages, deterministically curved, slope/water rejected.
+- **Ruins** on mountain peaks above 32 m.
+- **Scatter** — trees + rocks per chunk, biome-and-slope filtered.
 
-## Phase 5 — Chunk streaming
+### Streaming + perf
+- **Worker pool** for `TerrainCompute` so chunk math is off the main thread.
+- **Time-budgeted streaming** with adaptive ms ceiling.
+- **Shared materials + shared index buffer** to avoid per-chunk shader-program compiles.
+- **Profiler** infrastructure (`debug/Profiler.js`) for long-frame tracing.
 
-- [ ] **5.1** `world/ChunkManager.js` with `update(planePos)`.
-- [ ] **5.2** Chunks appear as you fly, disappear when far.
-- [ ] **5.3** `geometry.dispose()` and `material.dispose()` on removed chunks.
-- [ ] **5.4** Fly around and verify: no seams between chunks, no chunks missing, devtools memory stays stable.
-- [ ] **5.5** Add fog matching background. Tune `FOG_NEAR` / `FOG_FAR` to hide chunk boundaries.
-- [ ] **5.6** Verify camera `far > FOG_FAR`.
+### Visuals
+- **Day/night cycle** with keyframe interpolation, pink sunrises/sunsets, dawn pink → daytime blue → dusk pink → midnight indigo.
+- **Atmospheric Preetham sky** on High preset.
+- **Moon** — separate additive dome, cool-white disc + halo opposite the sun, gated by night factor.
+- **Stars** — `Points`-based starfield fading in at night.
+- **Water shader** — multi-octave ripples (slow swell + wind chop + sparkle), Fresnel mix, sun glint, jet engine reflection, landing-light pool, plane-color glint disc.
+- **Aerial perspective** on terrain — desaturate + horizon-tint distant fragments.
+- **Volumetric god rays + lens flare** post-FX pass driven by sun screen-space position.
+- **Bloom + vignette** post-FX (HDR threshold 2.0).
+- **Clouds** — instanced billboards, deterministic per cell, global wind drift.
+- **Night lights** — runway lamps + plane nav lights (red/green wingtip + tail strobe) + village windows, all gated by `nightFactor`.
+- **Landing light** (SpotLight on the nose, toggled by `L`).
+- **Jet engine PointLight** — orange light at the engine, throttle-scaled, lights nearby terrain + paints the water.
+- **Jet exhaust particles** — HDR additive plume from the engine nozzle.
+- **Contrails** — long-lived white vapor at altitude > 400 m on the Jet.
+- **Crash explosion** particles.
+- **Plane shadow** under low-altitude flight.
 
-**Checkpoint 5:** Infinite procedural world. Fly in any direction for minutes, memory doesn't grow, no visible seams, fog blends the distance cleanly.
+### Camera + UI
+- **Mouse look** on the chase camera (drag to look, releases back).
+- **Photo mode** (`P`) — orbit camera with mouse + scroll, freezes physics + day/night, hides HUD.
+- **Settings menu** with three screens (main / planes / settings), graphics preset (Low / Medium / High), view distance preset (Short → Ultra), time-of-day picker.
+- **Touch controls** — joystick + throttle slider for mobile.
+- **Minimap.**
+- **Audio** — Web Audio engine + wind voices.
 
-## Phase 6 — Runway & ground interaction
+### Multiplayer
+- **WebSocket relay** server (`server/index.js`).
+- **Client** with auto-reconnect and `setEnabled(false)` for clean disconnect.
+- **Remote plane manager** — per-remote mesh, lerp targets, jet exhaust + contrails reconstructed from broadcast state.
+- **SP / MP mode toggle** on the main menu, persisted in localStorage.
+- **Global synchronized time** in MP mode — every client derives `t` from `Date.now()` so the sky stays consistent across all players.
 
-- [ ] **6.1** `world/Runway.js` — `isInRunwayFlatZone`, `isOnRunway`.
-- [ ] **6.2** In `Terrain.buildChunk`, flatten vertices inside the flat zone.
-- [ ] **6.3** Visual runway mesh with `CanvasTexture`, placed at y=0.02.
-- [ ] **6.4** Physics ground check: sample `heightAt(plane.x, plane.z)`, clamp Y, handle onGround state.
-- [ ] **6.5** Rolling friction when on ground.
-- [ ] **6.6** Spawn cube on runway at start, throttle 0, velocity 0, facing +X.
+### Deploy
+- **Production VPS** at `91.186.209.67` running nginx + systemd-managed WS server. The default WS URL in code points at `wss://<host>/ws` for the prod box.
 
-**Checkpoint 6:** Cube spawns stopped on runway. Throttle up → cube rolls. At ~40 m/s → lifts off. Approach runway level and slow → lands softly. Approach terrain elsewhere fast → "rough landing" logged.
+## Working rules (still in force)
 
-## Phase 7 — Plane model
-
-- [ ] **7.1** `buildPlaneMesh()` returns a Group of BoxGeometries (fuselage, wing, fin, stab, cockpit, prop).
-- [ ] **7.2** Replace the debug cube with this group in `Plane.js`.
-- [ ] **7.3** Verify orientation: nose points -Z locally, so it flies toward its nose.
-- [ ] **7.4** Propeller spins each frame proportional to throttle.
-
-**Checkpoint 7:** A recognizable low-poly plane flies the same way the cube did.
-
-## Phase 8 — Polish
-
-- [ ] **8.1** `ui/Hud.js` — DOM overlay with speed (knots), altitude (feet), throttle (%).
-- [ ] **8.2** Tune fog and light colors. Consider warmer tones for "magic hour" feel.
-- [ ] **8.3** Slight camera FOV tweaks (70° is a good start).
-- [ ] **8.4** Add a second, finer noise octave for ground detail if terrain feels too smooth.
-- [ ] **8.5** Test full loop: spawn → takeoff → fly around for 2 min → return → land.
-
-**Checkpoint 8 / Done:** Complete MVP. Ship it.
-
-## Post-MVP ideas (do not start without approval)
-
-- Sound (engine, wind) — Web Audio API.
-- Gradient sky shader / sun disc.
-- Volumetric clouds (raymarched) — big project.
-- Multiple biomes (desert, forest, snow) by blending noise layers.
-- Better plane model from Kenney / Poly Pizza.
-- Shadows (needs optimization for streaming chunks).
-- Water / lakes (shader, reflective).
-- Mobile touch controls.
-- Replays / screenshot mode.
-
-## Rules
-
-1. **Physics first, visuals last.** Never debug physics through a loaded `.glb`.
-2. **One change at a time.** After each change, fly for 30 seconds to verify nothing broke.
-3. **Config-driven.** Every tunable number lives in `src/config.js`.
-4. **No premature optimization.** `ChunkManager.update` every frame is fine for MVP.
+1. **Physics first, visuals last.** Adding a new force? Test it on a cube before any visual surgery.
+2. **One change at a time.** After each change, fly for 30 s.
+3. **Config-driven.** Every tunable lives in `src/config.js`.
+4. **No premature optimization.** Worker pool, time-budgeting, shared materials all landed *after* profiling pointed at them — not preemptively.
 5. **Test in isolation.** If chunks seam, remove the plane and orbit-camera the world. If physics feels wrong, replace chunks with a flat ground.
-6. **Stay inside the MVP scope** in `CLAUDE.md`. Do not add features without request.
+6. **MVP scope drift requires approval.** New features land when the user asks — not because they'd be cool.
