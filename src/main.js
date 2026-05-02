@@ -440,14 +440,19 @@ function computeWaterExtras() {
   }
 
   // Plane body-color glint disc — a stand-in for a real planar reflection
-  // visible only when low over water. Fades from 0..1 between 300 m and
-  // 30 m altitude over the water level. Uses the plane's chosen body
-  // color so the disc reads as the right hue.
+  // visible only when *skimming* the water. The previous range (30–300 m)
+  // was way too generous: the disc was visible from 200 m up, which read
+  // as a giant coloured halo following the plane around rather than a
+  // reflection. Tightened to: full at 0–15 m, fades to nothing by 60 m.
+  // A real plane's reflection on water would be a recognisable silhouette
+  // at low altitude and an indistinct dot/sparkle from any real height —
+  // for the simple disc stand-in, "off above 60 m" reads better than a
+  // long faint trail.
   let planeRefl = null;
   if (!plane.crashed) {
     const altOverWater = plane.position.y - WATER_LEVEL;
-    if (altOverWater > 0 && altOverWater < 300) {
-      const t = 1 - Math.min(1, Math.max(0, (altOverWater - 30) / 270));
+    if (altOverWater > 0 && altOverWater < 60) {
+      const t = 1 - Math.min(1, Math.max(0, (altOverWater - 15) / 45));
       if (t > 0.001) {
         _planeReflPos.set(plane.position.x, WATER_LEVEL, plane.position.z);
         _planeReflColor.setHex(plane.color != null ? plane.color : 0xffffff);

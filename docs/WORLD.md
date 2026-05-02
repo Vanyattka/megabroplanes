@@ -175,7 +175,7 @@ The fragment shader does:
 - **Sun glint** Blinn-Phong specular — golden sunset path, HDR so it blooms.
 - **Jet engine reflection** — orange smear under low-flying jets (driven by `_jetLight.intensity`).
 - **Landing light pool** — wide soft Blinn-Phong centred on where the SpotLight cone meets water (cone-axis ↔ y=WATER_LEVEL intersection computed in `main.js`).
-- **Plane body-color glint disc** — fades in from 300 m altitude down to 30 m, tinted to the plane's chosen body colour. A stand-in for true planar reflection (which would require a mirrored render pass).
+- **Plane body-color glint disc** — only visible when skimming the water (full 0–15 m AGL, fades to nothing by 60 m). Tinted to the plane's chosen body colour. A stand-in for true planar reflection (which would require a mirrored render pass).
 
 `Water.update(dt, planePos, worldTint, extras)` takes an optional `extras = { jet, landing, plane }` bundle. Each sub-uniform self-disables when its intensity is 0, and the shader has explicit early-outs.
 
