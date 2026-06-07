@@ -6,7 +6,6 @@ import {
   RUIN_CHANCE,
   RUIN_MIN_HEIGHT,
 } from '../config.js';
-import { biomeAt } from './Biome.js';
 import { groundHeight } from './Ground.js';
 
 // Terrain mesh vertices sit on this grid. Snapping ruin spawn points to the
@@ -40,8 +39,6 @@ export function getRuin(rcx, rcz) {
       const z = snapToGrid(
         rcz * RUIN_CELL_SIZE + 300 + prng() * (RUIN_CELL_SIZE - 600)
       );
-      const b = biomeAt(x, z);
-      if (b.type !== 'mountain') continue;
       const h = groundHeight(x, z);
       if (h < RUIN_MIN_HEIGHT) continue;
       if (!best || h > best.h) best = { x, z, h };

@@ -39,11 +39,12 @@ Ordered roughly by when they landed. Every one of these was originally listed in
 ### World expansion
 - **Three plane types** (Cessna / Piper / Jet) with per-type physics multipliers and silhouettes.
 - **Body colour picker.**
-- **Five biomes** with a low-frequency noise mask blending lake / forest / hills / mountain / highmountain.
-- **Sea mask** noise layer carving multi-kilometre oceans across whatever biome is locally selected.
+- **Realistic terrain** (`TerrainShape.js`, 2026 overhaul) — domain-warped landforms: flat plains, broad uplands/plateaus, and ridged-multifractal mountain ranges. Replaced the old "one noise × biome.amp" model that made everywhere look like the same hills.
+- **Climate biomes** — desert / savanna / plains / forest / taiga / tundra / alpine, chosen by elevation × temperature × moisture, with beaches, a climate-dependent snow line, and rock strata on cliffs. Spawn area kept flat so takeoff is over plains.
+- **Sea mask** noise layer carving multi-kilometre oceans.
 - **Villages** — deterministic per-cell, four size tiers from hamlet to city, khrushchevka apartments in cities.
 - **Roads** between nearby villages, deterministically curved, slope/water rejected.
-- **Ruins** on mountain peaks above 32 m.
+- **Ruins** on high mountain peaks above 95 m.
 - **Scatter** — trees + rocks per chunk, biome-and-slope filtered.
 
 ### Streaming + perf
@@ -60,7 +61,9 @@ Ordered roughly by when they landed. Every one of these was originally listed in
 - **Water shader** — multi-octave ripples (slow swell + wind chop + sparkle), Fresnel mix, sun glint, jet engine reflection, landing-light pool, plane-color glint disc.
 - **Aerial perspective** on terrain — desaturate + horizon-tint distant fragments.
 - **Volumetric god rays + lens flare** post-FX pass driven by sun screen-space position.
-- **Bloom + vignette** post-FX (HDR threshold 2.0).
+- **Bloom + vignette** post-FX, with an **adaptive bloom threshold** that drops toward dawn/dusk so low-sun skies glow more.
+- **Cinematic color grade** post-FX (contrast + saturation + filmic toe + subtle warmth) in display space.
+- **FXAA** anti-aliasing pass (the scene runs through the composer, so MSAA wouldn't apply).
 - **Clouds** — instanced billboards, deterministic per cell, global wind drift.
 - **Night lights** — runway lamps + plane nav lights (red/green wingtip + tail strobe) + village windows, all gated by `nightFactor`.
 - **Landing light** (SpotLight on the nose, toggled by `L`).
@@ -79,11 +82,12 @@ Ordered roughly by when they landed. Every one of these was originally listed in
 - **Audio** — Web Audio engine + wind voices.
 
 ### Multiplayer
-- **WebSocket relay** server (`server/index.js`).
+- **WebSocket relay** server (`server/server.js`).
 - **Client** with auto-reconnect and `setEnabled(false)` for clean disconnect.
 - **Remote plane manager** — per-remote mesh, lerp targets, jet exhaust + contrails reconstructed from broadcast state.
 - **SP / MP mode toggle** on the main menu, persisted in localStorage.
 - **Global synchronized time** in MP mode — every client derives `t` from `Date.now()` so the sky stays consistent across all players.
+- **Race mode** (2026) — server-authoritative checkpoint races. The server generates a gate course, runs a countdown, validates gate ordering, and tracks live standings + finish times. Client `RaceManager` renders the gate rings + beacon, detects local gate passes, and drives the countdown / race HUD / live leaderboard / results board. Minimap shows the course. Wire additions: `race_start` + `cp` (client→server), `race` (server→client).
 
 ### Deploy
 - **Production VPS** at `91.186.209.67` running nginx + systemd-managed WS server. The default WS URL in code points at `wss://<host>/ws` for the prod box.

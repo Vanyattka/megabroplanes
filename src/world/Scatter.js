@@ -29,8 +29,7 @@ import {
   RUNWAY_MARGIN,
   VILLAGE_CELL_SIZE,
 } from '../config.js';
-import { heightAt as noiseHeightAt } from './Noise.js';
-import { biomeAt } from './Biome.js';
+import { landElevation, biomeAt } from './TerrainShape.js';
 import { seaMaskAt } from './SeaMask.js';
 import {
   villagesAffectingArea,
@@ -67,11 +66,10 @@ function smoothstep01(edge0, edge1, x) {
 function groundHeightFast(x, z, villages) {
   const f = villageFlatFactorFromList(x, z, villages);
   if (f === 0) return 0;
-  const b = biomeAt(x, z);
-  let h = noiseHeightAt(x, z) * b.amp + b.offset;
+  let h = landElevation(x, z);
   const seaStrength = smoothstep01(SEA_THRESHOLD_LOW, SEA_THRESHOLD_HIGH, seaMaskAt(x, z));
   h -= seaStrength * SEA_DEPTH;
-  if (b.type !== 'lake' && seaStrength < 0.3) {
+  if (seaStrength < 0.3) {
     const LAND_FLOOR = WATER_LEVEL + 2;
     if (h < LAND_FLOOR) {
       h = LAND_FLOOR - 3 * (1 - Math.exp((h - LAND_FLOOR) / 20));

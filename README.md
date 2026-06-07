@@ -32,12 +32,12 @@ Joystick on the left for pitch/roll, throttle slider on the right, plus on-scree
 ## Features
 
 - Three planes — Cessna (forgiving), Piper (balanced), Jet (sharp + afterburner exhaust + contrails at altitude). Body color is configurable.
-- Five biomes (lake, forest, hills, mountain, snowy alpine peaks) blended via low-frequency noise, with dedicated sea-mask noise carving multi-kilometre oceans across them.
+- Realistic procedural terrain — domain-warped landforms with genuinely flat plains, broad uplands/plateaus, and ridged mountain ranges (real ridgelines, not scaled hills). Climate biomes (desert / savanna / plains / forest / taiga / tundra / alpine) chosen by elevation × temperature × moisture, with sandy beaches, a climate-dependent snow line, and rock strata on cliffs. Sea-mask noise carves multi-kilometre oceans. Takeoff is always over open plains, with ranges in the distance.
 - Day/night cycle with pink sunrises/sunsets, a moon opposite the sun, runway lamps + plane nav lights at night.
-- Procedurally placed villages (small hamlets → khrushchevkas in cities) and stone ruins on mountain peaks. Roads connect nearby villages.
+- Procedurally placed villages (small hamlets → khrushchevkas in cities) and stone ruins on high mountain peaks. Roads connect nearby villages.
 - Procedural water with multi-octave ripples, sun glint, jet exhaust reflection, landing-light pool, and a plane-color glint disc when you skim low.
-- Volumetric god rays + lens flare on the sun, atmospheric Preetham sky on High preset, aerial perspective tinting distant terrain toward the horizon colour.
-- Multiplayer (see below).
+- Volumetric god rays + lens flare, atmospheric Preetham sky on High preset, aerial perspective, a cinematic color-grade pass, FXAA, and adaptive bloom that glows more at dawn/dusk. All preset-gated.
+- Multiplayer with a **race mode** (see below).
 - Photo mode (`P`): freeze the world, orbit camera freely with the mouse + scroll wheel, HUD hides itself.
 - Settings menu: graphics preset (Low / Medium / High), view distance, time-of-day preset, plane picker.
 
@@ -55,6 +55,10 @@ Then open the URL Vite prints (usually http://localhost:5173).
 Pick **MULTIPLAYER** on the main menu (top of the start screen). The toggle is persisted, so you only do this once.
 
 In MP mode the WebSocket client connects, every other player you see is real, and the time of day is synchronized across all clients (derived from `Date.now()`). The TIME OF DAY picker is greyed out — global time wins. Switch back to **SINGLEPLAYER** to disconnect, hide other players, and use your own time-of-day preset.
+
+### Race mode 🏁
+
+While flying in multiplayer, a **🏁 START RACE** button appears in the bottom-right settings box. Anyone can start a race when none is running; everyone connected is entered. The server generates a checkpoint course (a loop of glowing gate rings around the spawn area), runs a countdown, then times everyone through the gates. Fly through each gate in order — the one you're chasing glows gold with a light beacon over it and is highlighted on the minimap. A live leaderboard shows everyone's progress; finishing pops a results board with medal placements and times. The race is server-authoritative (course, ordering, and finish times all come from the server). New messages on the wire: `race_start`, `cp` (gate cleared) client→server; `race` (phase / countdown / course / standings) server→client.
 
 ### Hosting
 
@@ -80,6 +84,7 @@ The MP relay state is `{ position, quaternion, throttle, crashed, plane-type, bo
 - `src/camera/` — chase camera
 - `src/ui/` — HUD, menu, minimap, touch controls, graphics settings
 - `src/net/` — WebSocket client + remote plane manager
+- `src/race/` — multiplayer race mode (gates, checkpoint detection, race HUD)
 - `src/audio/` — Web Audio engine + wind voices
 - `server/` — Node WebSocket relay (run with `npm run server`)
 - `docs/` — ARCHITECTURE / PHYSICS / WORLD / ROADMAP

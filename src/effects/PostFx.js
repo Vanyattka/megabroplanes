@@ -1,9 +1,10 @@
-import { Vector2 } from 'three';
+import { Vector2, Vector3 } from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import {
   BLOOM_STRENGTH,
   BLOOM_RADIUS,
@@ -17,6 +18,10 @@ import {
   GODRAYS_STRENGTH,
   LENS_FLARE_STRENGTH,
   LENS_FLARE_STREAK_STRENGTH,
+  GRADE_CONTRAST,
+  GRADE_SATURATION,
+  GRADE_LIFT,
+  GRADE_TINT,
 } from '../config.js';
 
 // Volumetric god-rays + lens-flare combined pass. Operates on the
@@ -177,9 +182,51 @@ const VIGNETTE_SHADER = {
   `,
 };
 
+// Cinematic color grade — runs in display space (after OutputPass tonemaps +
+// encodes to sRGB). Lifts blacks slightly for a filmic toe, boosts contrast
+// and saturation, and applies a subtle warm tint. Cheap; on for every preset.
+const COLOR_GRADE_SHADER = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uContrast: { value: GRADE_CONTRAST },
+    uSaturation: { value: GRADE_SATURATION },
+    uLift: { value: GRADE_LIFT },
+    uTintColor: { value: new Vector3(GRADE_TINT[0], GRADE_TINT[1], GRADE_TINT[2]) },
+  },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform float uContrast;
+    uniform float uSaturation;
+    uniform float uLift;
+    uniform vec3 uTintColor;
+    varying vec2 vUv;
+    void main() {
+      vec4 tex = texture2D(tDiffuse, vUv);
+      vec3 c = tex.rgb;
+      // Lift blacks (filmic toe) then re-normalize so whites stay put.
+      c = uLift + c * (1.0 - uLift);
+      // Contrast around mid-grey.
+      c = (c - 0.5) * uContrast + 0.5;
+      // Saturation around perceptual luma.
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      c = mix(vec3(l), c, uSaturation);
+      // Subtle warm tint.
+      c *= uTintColor;
+      gl_FragColor = vec4(clamp(c, 0.0, 1.0), tex.a);
+    }
+  `,
+};
+
 // Wraps EffectComposer so main.js can flip bloom/vignette on the fly from
-// the graphics settings. Falls through to a plain renderer.render() call
-// when all post effects are disabled, to save the composer's extra blit.
+// the graphics settings. The composer is always used (the color grade + FXAA
+// passes run on every preset), so there's no plain-render fast path anymore.
 export class PostFx {
   constructor(renderer, scene, camera) {
     this.renderer = renderer;
@@ -187,10 +234,11 @@ export class PostFx {
     this.camera = camera;
 
     this.composer = new EffectComposer(renderer);
+    const size = renderer.getSize(new Vector2());
+
     this.renderPass = new RenderPass(scene, camera);
     this.composer.addPass(this.renderPass);
 
-    const size = renderer.getSize(new Vector2());
     this.bloomPass = new UnrealBloomPass(
       size,
       BLOOM_STRENGTH,
@@ -207,8 +255,18 @@ export class PostFx {
     this.vignettePass = new ShaderPass(VIGNETTE_SHADER);
     this.composer.addPass(this.vignettePass);
 
+    // Tone-map + sRGB encode. Everything after this runs in display space.
     this.outputPass = new OutputPass();
     this.composer.addPass(this.outputPass);
+
+    // Cinematic grade (display space).
+    this.gradePass = new ShaderPass(COLOR_GRADE_SHADER);
+    this.composer.addPass(this.gradePass);
+
+    // FXAA last — anti-aliases the final graded image. Always enabled so the
+    // composer always has an enabled final pass to render to screen.
+    this.fxaaPass = new ShaderPass(FXAAShader);
+    this.composer.addPass(this.fxaaPass);
 
     this.bloomEnabled = true;
     this.vignetteEnabled = true;
@@ -217,14 +275,23 @@ export class PostFx {
 
     // Aspect uniform starts correct — ShaderPass doesn't get resize events
     // so we sync here and in setSize().
-    const s = renderer.getSize(new Vector2());
-    this.godraysPass.uniforms.uAspect.value = s.x / Math.max(1, s.y);
+    this.godraysPass.uniforms.uAspect.value = size.x / Math.max(1, size.y);
+    this._setFxaaResolution(size.x, size.y);
+  }
+
+  _setFxaaResolution(w, h) {
+    const pr = this.renderer.getPixelRatio();
+    this.fxaaPass.material.uniforms.resolution.value.set(
+      1 / (w * pr),
+      1 / (h * pr)
+    );
   }
 
   setSize(w, h) {
     this.composer.setSize(w, h);
     this.bloomPass.setSize(w, h);
     this.godraysPass.uniforms.uAspect.value = w / Math.max(1, h);
+    this._setFxaaResolution(w, h);
   }
 
   setBloomEnabled(on) {
@@ -249,6 +316,24 @@ export class PostFx {
     this._refreshAnyOn();
   }
 
+  setColorGradeEnabled(on) {
+    this.gradePass.enabled = !!on;
+  }
+
+  setFxaaEnabled(on) {
+    // FXAA is the last pass (the composer's render-to-screen target), so it
+    // must stay enabled to have a final pass. It's cheap, so every preset
+    // keeps it on; the flag exists for API symmetry.
+    this.fxaaPass.enabled = true;
+    void on;
+  }
+
+  // Adaptive bloom threshold — main.js drives this from sun intensity so the
+  // sky/sun bloom more at dawn/dusk and less at harsh noon.
+  setBloomThreshold(t) {
+    this.bloomPass.threshold = t;
+  }
+
   // Drive god-rays + lens-flare per frame. main.js computes the sun's
   // screen-space position from the camera and sunDir, plus an intensity
   // that fades out when the sun is below the horizon / behind the camera
@@ -262,16 +347,13 @@ export class PostFx {
   }
 
   _refreshAnyOn() {
-    this._enabled =
-      this.bloomEnabled || this.vignetteEnabled || this.godraysEnabled;
+    // The composer is always used now (color grade + FXAA run on every
+    // preset), so there's no all-off fast path to track.
+    this._enabled = true;
   }
 
   render() {
-    if (this._enabled) {
-      this.composer.render();
-    } else {
-      this.renderer.render(this.scene, this.camera);
-    }
+    this.composer.render();
   }
 
   dispose() {

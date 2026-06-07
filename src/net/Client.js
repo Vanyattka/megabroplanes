@@ -10,12 +10,16 @@ export class MultiplayerClient {
     this.remotes = new Map(); // id -> { hue, pos, quat, throttle, crashed }
     this._lastSend = 0;
     this._statusListener = null;
+    this._raceListener = null;
+    // Latest race state from the server (null until first 'race' message).
+    this.race = null;
     this._enabled = true;
     this._reconnectTimer = null;
     this._connect();
   }
 
   onStatusChange(fn) { this._statusListener = fn; }
+  onRace(fn) { this._raceListener = fn; }
 
   // Toggle the multiplayer system. When off, close the socket, drop
   // remotes, and stop the reconnect loop. Used by the singleplayer mode:
@@ -38,6 +42,8 @@ export class MultiplayerClient {
       this.connected = false;
       this.id = null;
       this.remotes.clear();
+      this.race = null;
+      if (this._raceListener) this._raceListener(null);
       this._notify();
     }
   }
@@ -111,6 +117,23 @@ export class MultiplayerClient {
         if (!seen.has(id)) this.remotes.delete(id);
       }
       this._notify();
+    } else if (msg.type === 'race') {
+      this.race = msg;
+      if (this._raceListener) this._raceListener(msg);
+    }
+  }
+
+  // Ask the server to start a race (no-op server-side unless idle/finished).
+  sendRaceStart() {
+    if (this.connected && this.ws && this.ws.readyState === 1) {
+      this.ws.send(JSON.stringify({ type: 'race_start' }));
+    }
+  }
+
+  // Report clearing the next checkpoint. The server validates ordering.
+  sendCheckpoint(idx) {
+    if (this.connected && this.ws && this.ws.readyState === 1) {
+      this.ws.send(JSON.stringify({ type: 'cp', idx }));
     }
   }
 

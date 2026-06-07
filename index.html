@@ -177,7 +177,11 @@
       body.menu-open #settings,
       body.menu-open #horizon,
       body.menu-open #minimap,
-      body.menu-open #touch-ui { display: none; }
+      body.menu-open #touch-ui,
+      body.menu-open #race-status,
+      body.menu-open #race-countdown,
+      body.menu-open #race-leaderboard,
+      body.menu-open #race-results { display: none !important; }
       #menu-title {
         font-size: 72px;
         letter-spacing: 6px;
@@ -352,6 +356,91 @@
         display: none;
         pointer-events: none;
       }
+      /* ---- Race mode HUD ---- */
+      #btn-race {
+        display: none;
+        background: rgba(255, 204, 64, 0.18);
+        border: 1px solid #ffcc40;
+        color: #fff;
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 11px;
+        font-weight: bold;
+        letter-spacing: 1px;
+        cursor: pointer;
+        margin-bottom: 6px;
+        width: 100%;
+      }
+      #btn-race:hover:not(:disabled) { background: rgba(255, 204, 64, 0.34); }
+      #btn-race:disabled { opacity: 0.55; cursor: default; border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.08); }
+      #race-status {
+        position: absolute;
+        top: 12px; left: 50%; transform: translateX(-50%);
+        color: #fff;
+        background: rgba(0, 0, 0, 0.42);
+        padding: 8px 18px;
+        border-radius: 8px;
+        font-family: monospace;
+        font-size: 15px;
+        letter-spacing: 1px;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+        display: none;
+        pointer-events: none;
+        border: 1px solid rgba(255, 204, 64, 0.5);
+      }
+      #race-status b { color: #ffd23a; }
+      #race-status .rs-fin { color: #39ff8a; font-weight: bold; }
+      #race-countdown {
+        position: absolute;
+        top: 38%; left: 50%; transform: translate(-50%, -50%);
+        color: #ffd23a;
+        font-family: monospace;
+        font-size: 120px;
+        font-weight: 900;
+        text-shadow: 0 4px 24px rgba(0,0,0,0.7), 0 0 40px rgba(255,210,58,0.6);
+        display: none;
+        pointer-events: none;
+      }
+      #race-leaderboard {
+        position: absolute;
+        top: 280px; left: 12px;
+        width: 160px;
+        color: #fff;
+        background: rgba(0, 0, 0, 0.42);
+        padding: 8px 10px;
+        border-radius: 6px;
+        font-family: monospace;
+        font-size: 12px;
+        line-height: 1.5;
+        display: none;
+        pointer-events: none;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+      }
+      #race-leaderboard .lb-title { font-weight: bold; letter-spacing: 2px; color: #ffd23a; margin-bottom: 4px; }
+      #race-leaderboard .lb-row { display: flex; justify-content: space-between; gap: 8px; }
+      #race-leaderboard .lb-row.me { color: #ffd23a; }
+      #race-results {
+        position: absolute;
+        top: 50%; left: 50%; transform: translate(-50%, -50%);
+        min-width: 280px;
+        color: #fff;
+        background: rgba(8, 16, 30, 0.82);
+        padding: 18px 26px;
+        border-radius: 10px;
+        font-family: monospace;
+        font-size: 16px;
+        line-height: 1.7;
+        display: none;
+        pointer-events: none;
+        text-align: center;
+        border: 1px solid rgba(255, 204, 64, 0.6);
+        box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+      }
+      #race-results .res-title { font-size: 22px; font-weight: bold; letter-spacing: 2px; margin-bottom: 10px; }
+      #race-results .res-row.me { color: #ffd23a; font-weight: bold; }
+      #race-results .res-foot { margin-top: 10px; font-size: 11px; opacity: 0.6; }
+      body.touch #race-leaderboard { top: 250px; }
     </style>
   </head>
   <body>
@@ -363,10 +452,15 @@
     <div id="hint">S/W nose down/up · A/D roll · Q/E yaw · Shift/Ctrl throttle · Space brake · R reset · L lights · M mute · drag mouse to look</div>
     <div id="settings">
       <button id="btn-menu">&larr; MENU</button>
+      <button id="btn-race">🏁 START RACE</button>
       <label><input type="checkbox" id="crashes-enabled" checked /> crashes</label>
       <div id="mp-status" style="margin-top: 4px; opacity: 0.85;">mp: offline</div>
       <div id="audio-indicator" title="M to mute" style="margin-top: 2px; opacity: 0.85;">🔈 off</div>
     </div>
+    <div id="race-status"></div>
+    <div id="race-countdown"></div>
+    <div id="race-leaderboard"></div>
+    <div id="race-results"></div>
     <div id="crash-banner">CRASHED — press R to respawn</div>
     <div id="photo-banner" style="display:none;position:absolute;top:14px;left:50%;transform:translateX(-50%);color:#fff;background:rgba(0,0,0,0.5);padding:8px 16px;border-radius:6px;font-family:monospace;font-size:12px;letter-spacing:2px;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,0.7);">PHOTO MODE — P to exit · drag to orbit · scroll to zoom</div>
     <style>
@@ -377,7 +471,11 @@
       body.photo #minimap,
       body.photo #touch-ui,
       body.photo #audio-indicator,
-      body.photo #mp-status { display: none !important; }
+      body.photo #mp-status,
+      body.photo #race-status,
+      body.photo #race-countdown,
+      body.photo #race-leaderboard,
+      body.photo #race-results { display: none !important; }
     </style>
     <div id="menu">
       <h1 id="menu-title">MBPlanes</h1>

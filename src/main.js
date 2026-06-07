@@ -35,9 +35,12 @@ import {
   DAY_LENGTH_SECONDS,
   WATER_LEVEL,
   LANDING_LIGHT_INTENSITY,
+  BLOOM_THRESHOLD_DAY,
+  BLOOM_THRESHOLD_DUSK,
 } from './config.js';
 import { MultiplayerClient } from './net/Client.js';
 import { RemotePlaneManager } from './net/RemotePlaneManager.js';
+import { RaceManager } from './race/RaceManager.js';
 import { TouchControls } from './ui/Touch.js';
 import { Minimap } from './ui/Minimap.js';
 import { Menu } from './ui/Menu.js';
@@ -128,6 +131,8 @@ function applyGfx(settings) {
   postfx.setBloomStrength(settings.bloomStrength);
   postfx.setVignetteEnabled(settings.vignette);
   postfx.setGodraysEnabled(!!settings.godrays);
+  postfx.setColorGradeEnabled(settings.colorGrade !== false);
+  postfx.setFxaaEnabled(settings.fxaa !== false);
 }
 applyGfx(gfx.settings);
 gfx.onChange(applyGfx);
@@ -189,6 +194,7 @@ mp.onStatusChange(({ connected, count, id }) => {
   else mpStatusEl.textContent = `mp: P${id ?? '?'} · ${count} other${count === 1 ? '' : 's'}`;
 });
 const remotes = new RemotePlaneManager(renderer.scene, mp);
+const raceManager = new RaceManager(renderer.scene, mp, () => plane);
 const touch = new TouchControls();
 const minimap = new Minimap(mp);
 
@@ -235,6 +241,16 @@ function applyModeTime(timePreset) {
 function applyMode(mode) {
   currentMode = mode === 'multiplayer' ? 'multiplayer' : 'singleplayer';
   mp.setEnabled(currentMode === 'multiplayer');
+  syncRaceActive();
+}
+
+// Race mode (gates, HUD, checkpoint reporting) is live only while flying in
+// multiplayer and not framing a photo. Call after any change to mode / game
+// state / photo mode.
+function syncRaceActive() {
+  raceManager.setActive(
+    currentMode === 'multiplayer' && gameState === 'playing' && !photoMode
+  );
 }
 
 menu.onChange = ({ type, color }) => {
@@ -252,12 +268,14 @@ menu.onStart = ({ type, color, timePreset, mode }) => {
   explosion.clear();
   if (crashBannerEl) crashBannerEl.style.display = 'none';
   gameState = 'playing';
+  syncRaceActive();
   audio.setSuspended(false);
 };
 // Continue = resume the existing flight without resetting the plane.
 menu.onContinue = () => {
   plane.mesh.visible = !plane.crashed;
   gameState = 'playing';
+  syncRaceActive();
   audio.setSuspended(false);
 };
 menu.onTimeChange = (preset) => {
@@ -288,6 +306,7 @@ if (backToMenuBtn) {
     if (crashBannerEl) crashBannerEl.style.display = 'none';
     plane.mesh.visible = false;
     gameState = 'menu';
+    syncRaceActive();
     audio.setSuspended(true);
     // The player already has a flight in progress — show CONTINUE on the
     // main menu so they can pick up where they left off.
@@ -326,6 +345,7 @@ function setPhotoMode(on) {
     document.body.classList.remove('photo');
     if (photoBannerEl) photoBannerEl.style.display = 'none';
   }
+  syncRaceActive();
 }
 let _prevDayPaused = false;
 
@@ -601,6 +621,15 @@ function renderStep(alpha) {
   // behind the menu, which looks nice.
   dayNight.update(renderDt);
 
+  // Adaptive bloom threshold: lower it toward dawn/dusk/night so warm low-sun
+  // skies and night lights glow more; raise it at noon to keep the day crisp.
+  {
+    const sf = Math.max(0, Math.min(1, (worldTime.sunIntensity - 0.3) / 0.7));
+    postfx.setBloomThreshold(
+      BLOOM_THRESHOLD_DUSK + (BLOOM_THRESHOLD_DAY - BLOOM_THRESHOLD_DUSK) * sf
+    );
+  }
+
   if (gameState === 'menu') {
     const t = now / 6000;
     const radius = 180;
@@ -679,6 +708,7 @@ function renderStep(alpha) {
     contrails.update(renderDt, plane);
   }
   remotes.update(renderDt);
+  raceManager.update(renderDt);
   mp.sendState(plane);
 
   // Audio tracks plane state each frame.

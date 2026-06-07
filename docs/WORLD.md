@@ -2,35 +2,65 @@
 
 What the world is made of, and how it streams. The MVP-era examples in this file have been replaced — actual implementation is what's described below.
 
-## Layered noise
+## Terrain shape (`TerrainShape.js`)
 
-Three independent simplex-noise fields are seeded with distinct strings (`alea(...)`) so they don't correlate:
+The old model — one uniform noise field scaled by a per-biome `amp`/`offset` — made
+everywhere look like the same rolling hills, just taller or shorter. It's been
+replaced by `world/TerrainShape.js`, an analytic, layered landform model. It is
+pure-JS and three-free, so the Web Worker and the main thread both import it and
+produce **bit-identical** terrain. All seeds are module-init `alea(...)` constants;
+there is no per-chunk state (which would break seam continuity).
 
-1. **Terrain height** — `Noise.js`. 2–3 octaves summed, scaled by the local biome's `amp` and offset by the local biome's `offset`. Pure function of world coordinates.
-2. **Biome mask** — `Biome.js`. Single low-frequency simplex over `BIOME_SCALE` (≈ 1700 m features). Maps to one of five named biomes via weighted overlap.
-3. **Sea mask** — `SeaMask.js`. Even lower frequency over `SEA_SCALE` (≈ 6000 m features). Where the mask is high, terrain is pushed down by up to `SEA_DEPTH` (45 m).
+`landElevation(x, z)` composes genuinely different landform classes instead of one
+scaled field:
 
-Together these decide the height at any `(x, z)`:
+1. **Domain warp** — sample coordinates are displaced by a low-frequency vector
+   field (`warpA`/`warpB`) so ranges and coastlines meander rather than sitting on
+   the noise grid.
+2. **Plains** — gentle low-amplitude fBm everywhere (`PLAINS_AMP ≈ 7 m`). This is
+   what real flatland looks like, and it dominates most of the map.
+3. **Uplands** — a broad continental swell (`continentSwell`, up to `UPLAND_HEIGHT`)
+   raises plateaus where "continentalness" is high.
+4. **Mountains** — a mask noise (`MOUNTAIN_MASK_*`) localizes ranges; inside them a
+   **ridged multifractal** (`ridged()`, `1 − |noise|` octaves) builds sharp
+   ridgelines on a lifted massif (`MOUNTAIN_BASE_RISE + ridge·MOUNTAIN_HEIGHT`),
+   so peaks form real ranges with crests, not round blobs.
+
+Mountains are suppressed within `SPAWN_FLAT_RADIUS` of the world origin, so the
+first takeoff from the home runway is always over open plains with ranges in the
+distance.
+
+The full ground height at `(x, z)` is then:
 ```
-biome = biomeAt(x, z)
-height = (terrainNoise(x, z) * biome.amp) + biome.offset - seaDepth(x, z)
+h = landElevation(x, z) - seaDepth(x, z)     // sea mask carves multi-km oceans
+h = max(h, ~landFloor) outside the sea       // soft floor: no fake ponds on land
+h *= villageFlatFactor(x, z)                  // runway/village flat zones
 ```
 
-The biome blend is *weighted*, not categorical — five biomes contribute proportionally to their nearness in noise-space, so transitions are smooth rather than stair-stepped.
+### Climate biomes
 
-### Biomes
+Biome is no longer a 1-D band along a single noise value — it's a 2-D climate
+classification over **elevation × temperature × moisture** (`biomeAt`/`biomeType`
+in `TerrainShape.js`; temperature & moisture from two warped low-frequency fields):
 
-In `Biome.js`, the bands are placed across the noise distribution:
+| Type | Where | Tree density | Rock density |
+|---|---|---|---|
+| `desert` | hot + dry lowland | 0.04 | 1.1 |
+| `savanna` | warm + semi-dry | 0.55 | 0.6 |
+| `plains` | temperate grassland | 0.32 | 0.4 |
+| `forest` | temperate + wet | 2.7 | 0.5 |
+| `taiga` | cold + wet / higher | 1.9 | 0.9 |
+| `tundra` | cold + dry | 0.12 | 1.5 |
+| `alpine` | above `ALPINE_ELEV` | 0.05 | 3.4 |
 
-| Type | Centre | Amp | Offset | Tree density | Rock density |
-|---|---|---|---|---|---|
-| `lake` | 0.02 | 0.35 | -12 | 0.0 | 0.2 |
-| `forest` | 0.32 | 0.55 | 14 | 2.8 | 0.4 |
-| `hills` | 0.62 | 1.00 | 16 | 1.0 | 1.0 |
-| `mountain` | 0.92 | 2.00 | 22 | 0.3 | 2.5 |
-| `highmountain` | 1.04 | 3.40 | 55 | 0.05 | 4.0 |
+Each biome has its own base palette (`BIOME_DEFS` in `config.js`). Per-vertex
+coloring (`surfaceColor`) layers on top: sandy **beaches** along the shoreline, a
+wobbling climate-dependent **snow line** (cold biomes snow lower; steep faces shed
+snow), and **rock strata** on steep slopes (dark talus low → pale bedrock high).
 
-`highmountain` sits at the extreme of the noise distribution — rare, very tall, snow-capped. `BANDWIDTH = 0.22` controls the smoothing kernel between bands.
+`biomeAt` returns `{ type, trees, rocks }` — consumed by `Scatter`, `Minimap`,
+`Villages`, `Ruins`. `Biome.js` is now just a re-export of `biomeAt` from
+`TerrainShape.js` so existing imports keep working.
 
 ## Chunks
 
@@ -45,7 +75,7 @@ A chunk `(cx, cz)` covers `[cx·128, (cx+1)·128] × [cz·128, (cz+1)·128]` and
 `world/TerrainCompute.js` does the heavy work and is the only thing that needs to run inside a worker:
 1. For each vertex, compute biome + sea + height.
 2. Apply runway and village flatten zones (vertices inside a flat region are clamped to that region's height with smoothstep edges).
-3. Build positions, normals, and per-vertex colours via `colorByHeight(y, slope, biome)` with multi-tier rules: sand → grass → dark grass → alpine stone → packed snow → summit snow, with slope-based rock override above `SLOPE_ROCK_THRESHOLD`.
+3. Build positions, normals, and per-vertex colours via `TerrainShape.surfaceColor(x, z, y, slopeNy)`: climate-biome base palette + shoreline sand + climate-dependent snow line + slope-based rock strata (above `SLOPE_ROCK_THRESHOLD`).
 
 `world/Terrain.js` wraps the resulting `ArrayBuffer`s in a `BufferGeometry` + a single shared `MeshStandardMaterial`. **Sharing the material is critical** — without it every new chunk triggered a 40–80 ms shader-program compile stall the first time it appeared. The shared index buffer is also cached.
 
@@ -106,7 +136,7 @@ The visual runway mesh is a thin `PlaneGeometry` with a `CanvasTexture` painted 
 
 ## Ruins
 
-`Ruins.js` places stone wall / arch / tower silhouettes on mountain peaks where `groundHeight > RUIN_MIN_HEIGHT` (32 m). Per-cell pattern matches villages but with `RUIN_CELL_SIZE` (2400 m) and `RUIN_CHANCE` (0.55). `RuinsManager.js` builds them with the same per-chunk budget gate.
+`Ruins.js` places stone wall / arch / tower silhouettes on high peaks where `groundHeight > RUIN_MIN_HEIGHT` (95 m — raised to match the taller mountain ranges). Per-cell pattern matches villages but with `RUIN_CELL_SIZE` (2400 m) and `RUIN_CHANCE` (0.55). `RuinsManager.js` builds them with the same per-chunk budget gate.
 
 ## Roads
 
@@ -120,7 +150,7 @@ Surviving paths are extruded into a triangle-strip ribbon of `ROAD_WIDTH` (8 m),
 
 `world/Scatter.js` per chunk:
 1. Sample `TREES_PER_CHUNK` (160) random positions inside the chunk.
-2. Multiply by `biomeAt(p).trees` to get an acceptance probability — 2.8 in pure forest, ~0 in lakes / mountain peaks, drops to 0 over sea.
+2. Multiply by `biomeAt(p).trees` to get an acceptance probability — high in forest/taiga, near-0 in desert/tundra/alpine, drops to 0 over sea.
 3. Reject on slope > `TREE_MAX_SLOPE` and on water below `WATER_LEVEL`.
 4. Same flow for rocks with `ROCKS_PER_CHUNK` and `biome.rocks`.
 
@@ -203,7 +233,7 @@ The propeller spins each frame proportional to `throttle` × 30 rad/s. Control s
 
 ## Pitfalls
 
-- **Chunk seam on borders** = `heightAt` differs at shared vertices. Verify noise depends purely on world coords and identical biome/sea blends are produced for the same `(x, z)` regardless of which chunk asks.
+- **Chunk seam on borders** = `landElevation` differs at shared vertices. `TerrainShape` is purely analytic (no per-chunk state) and its seeds are module constants, so the same `(x, z)` always yields the same height/biome/colour regardless of which chunk — or which thread — asks. Don't add stateful passes (erosion, blur) that read neighbours, or borders will disagree.
 - **Camera far < fog far** = chunks pop before fog hides them. Camera far is sized for the largest view-distance preset.
 - **Fog colour mismatch** = visible "edge of world" line. Both the scene background and `Fog.color` are written from the same keyframe in `DayNight.update`.
 - **Forgetting to dispose** geometry/material on chunk removal = memory leak. `ChunkManager.dropChunk()` does both, plus `roads.disposeForChunk()`.

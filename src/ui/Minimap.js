@@ -15,15 +15,18 @@ const WORLD_RADIUS = 900;
 const GRID = 80;
 const UPDATE_INTERVAL = 120; // ms between full refreshes
 
-// Biome → base color on the map. Sea mask overrides lake for the distinct
-// deeper-blue colour so big seas read differently from little ponds.
+// Biome → base color on the map. Sea mask overrides everything for the
+// distinct deeper-blue so big seas read clearly.
 const TERRAIN_COLORS = {
-  lake: [58, 111, 160],
-  forest: [45, 85, 45],
-  hills: [106, 160, 80],
-  mountain: [138, 112, 96],
+  desert:  [196, 178, 120],
+  savanna: [168, 158, 86],
+  plains:  [112, 146, 72],
+  forest:  [56, 100, 50],
+  taiga:   [70, 104, 84],
+  tundra:  [142, 146, 126],
+  alpine:  [150, 144, 138],
 };
-const SEA_COLOR = [28, 64, 116]; // deeper blue than lake biome
+const SEA_COLOR = [28, 64, 116]; // deep ocean blue
 const BORDER_COLOR = 'rgba(255,255,255,0.55)';
 
 const _fwd = new Vector3();
@@ -77,6 +80,7 @@ export class Minimap {
     this._drawRoads(plane);
     this._drawVillages(plane);
     this._drawRuins(plane);
+    this._drawRace(plane);
     this._drawRemotes(plane);
 
     ctx.restore();
@@ -219,6 +223,41 @@ export class Minimap {
         ctx.lineTo(pos.x - 3, pos.y + 3);
         ctx.stroke();
       }
+    }
+  }
+
+  // Race checkpoints — small rings, the one you're chasing highlighted gold,
+  // with a line linking the gates in order so the course reads at a glance.
+  _drawRace(plane) {
+    const r = this.mp && this.mp.race;
+    if (!r || !r.course || !r.course.length) return;
+    if (r.phase !== 'countdown' && r.phase !== 'racing') return;
+    const ctx = this.ctx;
+    const course = r.course;
+    let nextCp = 0;
+    if (r.standings && this.mp.id != null) {
+      const row = r.standings.find((s) => s.id === this.mp.id);
+      if (row) nextCp = row.n;
+    }
+    // Linking line through the gates.
+    ctx.strokeStyle = 'rgba(255, 210, 58, 0.45)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < course.length; i++) {
+      const p = this._worldToCanvas(course[i].x, course[i].z, plane);
+      if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+    for (let i = 0; i < course.length; i++) {
+      const p = this._worldToCanvas(course[i].x, course[i].z, plane);
+      if (!this._inside(p)) continue;
+      const isNext = i === nextCp;
+      const done = i < nextCp;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, isNext ? 4 : 2.6, 0, Math.PI * 2);
+      ctx.fillStyle = done ? 'rgba(57,255,138,0.9)' : isNext ? '#ffd23a' : 'rgba(57,198,255,0.9)';
+      ctx.fill();
+      if (isNext) { ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke(); }
     }
   }
 
