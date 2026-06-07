@@ -627,12 +627,21 @@ function physicsStep(dt) {
   if (photoMode) return;
   // In the race lobby the plane is parked while the player votes/waits.
   if (inLobby) return;
+  // During the pre-race countdown, hold the plane at the start line so it
+  // doesn't fly forward and overshoot the first gate before the clock starts.
+  if (raceManager.holdAtStart) return;
 
   const resetKey = input.isPressed('KeyR');
   const resetBtn = touch.consumeReset();
   if (resetKey || resetBtn) {
     if (!resetHeld || resetBtn) {
-      plane.reset();
+      // In a race, R respawns at your next gate (airborne); only free flight
+      // resets to the home runway.
+      if (raceManager.inRace) {
+        raceManager.respawnAtGate();
+      } else {
+        plane.reset();
+      }
       explosion.clear();
       if (crashBannerEl) crashBannerEl.style.display = 'none';
       resetHeld = true;

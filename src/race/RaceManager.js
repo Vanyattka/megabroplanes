@@ -203,6 +203,20 @@ export class RaceManager {
   // True while the player must take damage / explosions are forced on.
   isCombatActive() { return this.inRace && this.phase === 'racing'; }
 
+  // During the pre-race countdown the plane is held at the start line (physics
+  // frozen) so it doesn't fly forward and overshoot the first gate before the
+  // clock even starts. main.js skips plane physics while this is true.
+  get holdAtStart() { return this.inRace && this.phase === 'countdown'; }
+
+  // R during a race respawns at the next gate (airborne), NOT the home runway.
+  respawnAtGate() {
+    if (!this.inRace) return;
+    const pose = this._gatePose(this._localNextCp(), 0, 1, 300);
+    this.plane.spawnAirborne(pose.pos, pose.q, pose.vel, 1);
+    this._localDowned = false;
+    this._pendingCp = -1;
+  }
+
   update(dt) {
     if (!this.inRace) return;
     const now = Date.now();
