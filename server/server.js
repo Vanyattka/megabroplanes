@@ -2,77 +2,188 @@ import { WebSocketServer } from 'ws';
 
 const PORT = Number(process.env.PORT) || 3030;
 const TICK_HZ = 20;
-const IDLE_KICK_MS = 15000;
+const IDLE_KICK_MS = 20000;
 
-// ---- Race mode ------------------------------------------------------------
-// One global race for the whole server (the server IS the room). Any player
-// can start one when none is running; everyone connected is auto-entered.
-// Lifecycle: idle → countdown → racing → finished → idle.
-const COUNTDOWN_MS = 6000;     // get-ready window before the clock starts
-const RESULTS_MS = 14000;      // how long the results board stays up
-const RACE_TIMEOUT_MS = 360000; // hard cap so a stuck race always resolves
+// ---- Rooms ---------------------------------------------------------------
+// Every client is in exactly one room:
+//   'free'  — the open multiplayer sandbox (see everyone else flying free)
+//   'lobby' — waiting in the race lobby (voting, not flying)
+//   'race'  — flying an active, isolated race (only see other racers)
+// Snapshots are scoped per room, so racers fly on their own "map" away from
+// the free-flight crowd.
+
+// ---- Lobby + race tuning -------------------------------------------------
+const LOBBY_FULL = 10;
+const LOBBY_AUTO_LAUNCH_MS = 35000; // auto-launch countdown once >=2 are waiting
+const LOBBY_FULL_LAUNCH_MS = 6000;  // when the lobby fills, launch soon
+const HOST_LAUNCH_MS = 4000;        // host pressed START -> short countdown
+const RACE_COUNTDOWN_MS = 6000;
+const RESULTS_MS = 15000;
+const RACE_TIMEOUT_MS = 360000;
 const RACE_CHECKPOINTS = 8;
+// Combat
+const MAX_HP = 100;
+const GUN_DMG = 13;
+const HIT_MIN_INTERVAL_MS = 70;   // per shooter→target, anti-spam
+const HIT_GLOBAL_MIN_MS = 30;     // per shooter across ALL targets, anti-burst
+const RESPAWN_MS = 3500;
+
+const DEFAULT_PLANE = 'piper';
+const DEFAULT_TIME = 'day';
 
 const wss = new WebSocketServer({ port: PORT, host: '0.0.0.0' });
-const clients = new Map(); // id -> { ws, state, hue, lastSeen, race }
+const clients = new Map(); // id -> client
 let nextId = 1;
 
+let lobby = { hostId: null, launchAt: null };
 let race = makeIdleRace();
 function makeIdleRace() {
-  return { phase: 'idle', seed: 0, course: [], startAt: 0, endAt: 0 };
+  return { phase: 'idle', seed: 0, course: [], startAt: 0, endAt: 0, timeKey: DEFAULT_TIME, plane: DEFAULT_PLANE };
 }
 
-// Deterministic course generator (LCG) — a rough loop of gate checkpoints
-// around the origin, at flyable altitudes, biased to stay near the gentle
-// spawn plains so gates don't end up buried in a mountain.
+function membersIn(room) {
+  const out = [];
+  for (const [id, c] of clients) if (c.room === room) out.push([id, c]);
+  return out;
+}
+
+// Deterministic course generator (LCG) — a loop of gate checkpoints near the
+// gentle spawn plains so gates stay flyable.
 function generateCourse(seed) {
   let s = seed >>> 0;
-  const rand = () => {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 4294967296;
-  };
+  const rand = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
   const n = RACE_CHECKPOINTS;
-  const baseR = 600;
-  const spanR = 1150;
+  const baseR = 600, spanR = 1150;
   const cps = [];
   let ang = rand() * Math.PI * 2;
   for (let i = 0; i < n; i++) {
     ang += (Math.PI * 2) / n + (rand() - 0.5) * 0.6;
     const r = baseR + rand() * spanR;
-    const x = Math.cos(ang) * r;
-    const z = Math.sin(ang) * r;
-    const y = 130 + rand() * 170; // 130–300 m
-    cps.push({ x: Math.round(x), y: Math.round(y), z: Math.round(z), r: 60 });
+    cps.push({
+      x: Math.round(Math.cos(ang) * r),
+      y: Math.round(130 + rand() * 170),
+      z: Math.round(Math.sin(ang) * r),
+      r: 60,
+    });
   }
   return cps;
 }
 
-function startRace() {
+// Tally lobby votes (mode wins; ties fall back to host's pick, then default).
+function tallyVotes() {
+  const members = membersIn('lobby');
+  const count = (key, def) => {
+    const tally = {};
+    for (const [, c] of members) {
+      const v = c.lobby[key];
+      if (v) tally[v] = (tally[v] || 0) + 1;
+    }
+    let best = null, bestN = -1;
+    for (const k of Object.keys(tally)) if (tally[k] > bestN) { bestN = tally[k]; best = k; }
+    // tie-break toward the host's choice
+    const host = clients.get(lobby.hostId);
+    if (host && host.lobby[key] && (tally[host.lobby[key]] || 0) === bestN) best = host.lobby[key];
+    return best || def;
+  };
+  return { plane: count('plane', DEFAULT_PLANE), time: count('time', DEFAULT_TIME) };
+}
+
+function recomputeHost() {
+  const members = membersIn('lobby');
+  if (!members.some(([id]) => id === lobby.hostId)) {
+    lobby.hostId = members.length ? members[0][0] : null;
+  }
+}
+
+function lobbyMessage() {
+  const members = membersIn('lobby').map(([id, c]) => ({
+    id, name: c.name || `P${id}`,
+    plane: c.lobby.plane, time: c.lobby.time, color: c.lobby.color,
+    ready: !!c.lobby.ready, host: id === lobby.hostId,
+  }));
+  return {
+    type: 'lobby',
+    members,
+    hostId: lobby.hostId,
+    vote: tallyVotes(),
+    launchAt: lobby.launchAt,
+    full: LOBBY_FULL,
+  };
+}
+
+function sendLobbyState() {
+  const msg = JSON.stringify(lobbyMessage());
+  for (const [, c] of clients) if (c.room === 'lobby' && c.ws.readyState === 1) c.ws.send(msg);
+}
+
+// Re-evaluate the auto-launch countdown whenever lobby membership/size changes.
+function updateLaunchTimer() {
+  const n = membersIn('lobby').length;
+  if (n >= LOBBY_FULL) {
+    const soon = Date.now() + LOBBY_FULL_LAUNCH_MS;
+    if (lobby.launchAt == null || lobby.launchAt > soon) lobby.launchAt = soon;
+  } else if (n >= 2) {
+    if (lobby.launchAt == null) lobby.launchAt = Date.now() + LOBBY_AUTO_LAUNCH_MS;
+  } else {
+    lobby.launchAt = null; // need >=2 (host can still force-start a solo race)
+  }
+}
+
+function launchRace() {
+  const members = membersIn('lobby');
+  if (members.length === 0) return;
+  const vote = tallyVotes();
   const seed = Math.floor(Math.random() * 0x7fffffff);
   race = {
     phase: 'countdown',
     seed,
     course: generateCourse(seed),
-    startAt: Date.now() + COUNTDOWN_MS,
+    startAt: Date.now() + RACE_COUNTDOWN_MS,
     endAt: 0,
+    timeKey: vote.time,
+    plane: vote.plane,
   };
-  for (const [, c] of clients) c.race = { nextCp: 0, finishMs: null };
-  console.log(`[race] starting — seed ${seed}, ${race.course.length} gates`);
+  for (const [, c] of members) {
+    c.room = 'race';
+    c.race = { nextCp: 0, finishMs: null };
+    c.hp = MAX_HP;
+    c.dead = false;
+    c.respawnAt = 0;
+    c.plane.pt = vote.plane; // everyone flies the voted type; color stays personal
+    c.lastHit = {};
+    c.lastHitAny = 0;
+  }
+  lobby.launchAt = null;
+  lobby.hostId = null;
+  console.log(`[race] launch — ${members.length} racers, plane=${vote.plane}, time=${vote.time}, seed=${seed}`);
+  broadcastRace();
 }
 
 function finishRace() {
   race.phase = 'finished';
   race.endAt = Date.now() + RESULTS_MS;
   console.log('[race] finished');
+  broadcastRace();
 }
 
-// Live standings: finished players first (by time asc), then by progress
-// (more gates cleared = higher). Returns compact rows for the wire.
+function endRaceToFree() {
+  const members = membersIn('race');
+  race = makeIdleRace();
+  // Tell racers the race is over (idle) BEFORE moving them out, otherwise the
+  // room-scoped broadcast would never reach them and they'd be stuck in the
+  // race HUD client-side.
+  const idleMsg = JSON.stringify(raceMessage()); // phase idle, empty standings
+  for (const [, c] of members) {
+    if (c.ws.readyState === 1) c.ws.send(idleMsg);
+    c.room = 'free';
+    c.race = null;
+  }
+}
+
 function standings() {
   const rows = [];
-  for (const [id, c] of clients) {
-    if (!c.race) continue;
-    rows.push({ id, n: c.race.nextCp, f: c.race.finishMs });
+  for (const [id, c] of membersIn('race')) {
+    rows.push({ id, name: c.name || `P${id}`, n: c.race ? c.race.nextCp : 0, f: c.race ? c.race.finishMs : null, hp: c.hp ?? MAX_HP });
   }
   rows.sort((a, b) => {
     const af = a.f != null, bf = b.f != null;
@@ -91,130 +202,188 @@ function raceMessage() {
     startAt: race.startAt,
     endAt: race.endAt,
     course: race.course,
+    timeKey: race.timeKey,
+    plane: race.plane,
     standings: standings(),
   };
 }
 
-function broadcast(payload, exceptId = null) {
+function broadcastRace() {
+  const msg = JSON.stringify(raceMessage());
+  for (const [, c] of clients) if (c.room === 'race' && c.ws.readyState === 1) c.ws.send(msg);
+}
+
+function broadcastToRoom(room, payload, exceptId = null) {
   const str = JSON.stringify(payload);
   for (const [id, c] of clients) {
     if (id === exceptId) continue;
-    if (c.ws.readyState === 1) c.ws.send(str);
+    if (c.room === room && c.ws.readyState === 1) c.ws.send(str);
   }
 }
 
 wss.on('connection', (ws, req) => {
   const id = nextId++;
-  // Golden-angle hue spacing gives every new player a distinct color.
   const hue = ((id * 137.508) % 360) / 360;
   clients.set(id, {
-    ws,
+    ws, hue, lastSeen: Date.now(),
+    name: null,
+    room: 'free',
     state: null,
-    hue,
-    lastSeen: Date.now(),
-    // Late joiners can still chase gates in an active race.
-    race: race.phase === 'racing' || race.phase === 'countdown'
-      ? { nextCp: 0, finishMs: null }
-      : null,
+    plane: { pt: DEFAULT_PLANE, pc: null },
+    hp: MAX_HP, dead: false, respawnAt: 0, lastHit: {}, lastHitAny: 0,
+    race: null,
+    lobby: { plane: DEFAULT_PLANE, time: DEFAULT_TIME, color: null, ready: false },
   });
   const addr = req?.socket?.remoteAddress || 'unknown';
   console.log(`[+] player ${id} connected from ${addr} (total: ${clients.size})`);
-
   ws.send(JSON.stringify({ type: 'welcome', id, hue }));
-  // Hand the newcomer the current race state immediately.
-  ws.send(JSON.stringify(raceMessage()));
 
   ws.on('message', (data) => {
-    let msg;
-    try { msg = JSON.parse(data.toString()); } catch { return; }
+    let msg; try { msg = JSON.parse(data.toString()); } catch { return; }
     const c = clients.get(id);
     if (!c) return;
     c.lastSeen = Date.now();
-    if (msg.type === 'state' && msg.state) {
-      c.state = msg.state;
-    } else if (msg.type === 'race_start') {
-      if (race.phase === 'idle' || race.phase === 'finished') {
-        startRace();
-        broadcast(raceMessage());
+
+    switch (msg.type) {
+      case 'state':
+        if (msg.state) {
+          c.state = msg.state;
+          if (msg.state.pc != null) c.plane.pc = msg.state.pc;
+          if (c.room === 'free' && msg.state.pt) c.plane.pt = msg.state.pt;
+        }
+        break;
+      case 'set_name':
+        if (typeof msg.name === 'string') c.name = msg.name.slice(0, 16);
+        break;
+      case 'join_lobby': {
+        c.room = 'lobby';
+        c.lobby.ready = false;
+        if (msg.plane) c.lobby.plane = msg.plane;
+        if (msg.time) c.lobby.time = msg.time;
+        if (msg.color != null) c.lobby.color = msg.color;
+        recomputeHost();
+        updateLaunchTimer();
+        sendLobbyState();
+        break;
       }
-    } else if (msg.type === 'cp') {
-      // Checkpoint cleared — only valid in order, while racing.
-      if (race.phase !== 'racing' || !c.race) return;
-      if (typeof msg.idx !== 'number' || msg.idx !== c.race.nextCp) return;
-      c.race.nextCp++;
-      if (c.race.nextCp >= race.course.length && c.race.finishMs == null) {
-        c.race.finishMs = Date.now() - race.startAt;
-        console.log(`[race] player ${id} finished in ${(c.race.finishMs / 1000).toFixed(1)}s`);
+      case 'leave_lobby':
+        if (c.room === 'lobby') {
+          c.room = 'free';
+          recomputeHost();
+          updateLaunchTimer();
+          sendLobbyState();
+        }
+        break;
+      case 'lobby_set':
+        if (c.room === 'lobby') {
+          if (msg.plane) c.lobby.plane = msg.plane;
+          if (msg.time) c.lobby.time = msg.time;
+          if (msg.color != null) c.lobby.color = msg.color;
+          if (typeof msg.ready === 'boolean') c.lobby.ready = msg.ready;
+          sendLobbyState();
+        }
+        break;
+      case 'lobby_start':
+        if (c.room === 'lobby' && id === lobby.hostId && membersIn('lobby').length >= 1) {
+          lobby.launchAt = Date.now() + HOST_LAUNCH_MS;
+          sendLobbyState();
+        }
+        break;
+      case 'cp':
+        if (race.phase === 'racing' && c.room === 'race' && c.race && !c.dead) {
+          if (typeof msg.idx === 'number' && msg.idx === c.race.nextCp) {
+            c.race.nextCp++;
+            if (c.race.nextCp >= race.course.length && c.race.finishMs == null) {
+              c.race.finishMs = Date.now() - race.startAt;
+            }
+          }
+        }
+        break;
+      case 'fire':
+        // Relay tracer to other racers so they see the shots.
+        if (c.room === 'race' && race.phase === 'racing' && !c.dead && msg.o && msg.d) {
+          broadcastToRoom('race', { type: 'fire', id, o: msg.o, d: msg.d }, id);
+        }
+        break;
+      case 'hit': {
+        // Shooter claims a hit; server is the authority on HP.
+        if (race.phase !== 'racing' || c.room !== 'race' || c.dead) break;
+        const tgt = clients.get(msg.target);
+        if (!tgt || tgt.room !== 'race' || tgt.dead || msg.target === id) break;
+        const now = Date.now();
+        // Per-target AND global (across all targets) rate limits, so a client
+        // can't claim simultaneous hits on many planes in one burst.
+        if (now - (c.lastHit[msg.target] || 0) < HIT_MIN_INTERVAL_MS) break;
+        if (now - (c.lastHitAny || 0) < HIT_GLOBAL_MIN_MS) break;
+        c.lastHit[msg.target] = now;
+        c.lastHitAny = now;
+        tgt.hp = Math.max(0, (tgt.hp ?? MAX_HP) - GUN_DMG);
+        if (tgt.hp <= 0 && !tgt.dead) {
+          tgt.dead = true;
+          tgt.respawnAt = now + RESPAWN_MS;
+        }
+        break;
       }
     }
   });
 
   ws.on('close', () => {
+    const c = clients.get(id);
+    const wasLobby = c && c.room === 'lobby';
     clients.delete(id);
+    if (wasLobby) { recomputeHost(); updateLaunchTimer(); sendLobbyState(); }
     console.log(`[-] player ${id} disconnected (total: ${clients.size})`);
   });
-
-  ws.on('error', () => { /* swallow; close handles cleanup */ });
+  ws.on('error', () => {});
 });
 
-// Broadcast snapshot of all known states each tick + drive the race clock.
 setInterval(() => {
   const now = Date.now();
-  // Kick silent connections.
   for (const [id, c] of clients) {
-    if (now - c.lastSeen > IDLE_KICK_MS) {
-      try { c.ws.close(); } catch {}
-      clients.delete(id);
-    }
+    if (now - c.lastSeen > IDLE_KICK_MS) { try { c.ws.close(); } catch {} clients.delete(id); }
   }
 
-  // Race clock transitions.
+  // Lobby launch.
+  if (lobby.launchAt != null && now >= lobby.launchAt) launchRace();
+
+  // Race clock.
   let raceChanged = false;
-  if (race.phase === 'countdown' && now >= race.startAt) {
-    race.phase = 'racing';
-    raceChanged = true;
-    console.log('[race] go!');
-  }
+  if (race.phase === 'countdown' && now >= race.startAt) { race.phase = 'racing'; raceChanged = true; }
   if (race.phase === 'racing') {
-    const entrants = [...clients.values()].filter((c) => c.race);
-    if (entrants.length === 0) {
-      // Everyone left mid-race — don't leave a zombie race running to timeout.
-      race = makeIdleRace();
-      raceChanged = true;
-    } else {
-      const allDone = entrants.every((c) => c.race.finishMs != null);
-      if (allDone || now - race.startAt > RACE_TIMEOUT_MS) {
-        finishRace();
-        raceChanged = true;
+    const entrants = membersIn('race');
+    if (entrants.length === 0) { endRaceToFree(); raceChanged = true; }
+    else {
+      // Respawns.
+      for (const [, c] of entrants) {
+        if (c.dead && now >= c.respawnAt) { c.dead = false; c.hp = MAX_HP; }
       }
+      const allDone = entrants.every(([, c]) => c.race.finishMs != null);
+      if (allDone || now - race.startAt > RACE_TIMEOUT_MS) { finishRace(); raceChanged = true; }
     }
   }
-  if (race.phase === 'finished' && now >= race.endAt) {
-    race = makeIdleRace();
-    raceChanged = true;
-  }
+  if (race.phase === 'finished' && now >= race.endAt) { endRaceToFree(); raceChanged = true; }
 
-  const states = [];
+  // Per-room snapshots.
+  const byRoom = { free: [], race: [] };
   for (const [id, c] of clients) {
-    if (!c.state) continue;
-    states.push({
-      id,
-      hue: c.hue,
-      p: c.state.p,
-      q: c.state.q,
-      t: c.state.t ?? 0,
-      c: c.state.c ? 1 : 0,
-      pt: c.state.pt,
-      pc: c.state.pc,
+    if (!c.state || (c.room !== 'free' && c.room !== 'race')) continue;
+    byRoom[c.room].push({
+      id, hue: c.hue,
+      p: c.state.p, q: c.state.q, t: c.state.t ?? 0,
+      c: (c.dead ? 1 : 0) || (c.state.c ? 1 : 0),
+      pt: c.plane.pt, pc: c.plane.pc,
+      hp: c.hp ?? MAX_HP,
     });
   }
-  broadcast({ type: 'snapshot', states });
-
-  // Race state: stream every tick while active (timer + standings are live),
-  // otherwise only when something changed.
-  if (race.phase !== 'idle' || raceChanged) {
-    broadcast(raceMessage());
+  const freeMsg = JSON.stringify({ type: 'snapshot', states: byRoom.free });
+  const raceMsg = JSON.stringify({ type: 'snapshot', states: byRoom.race });
+  for (const [, c] of clients) {
+    if (c.ws.readyState !== 1) continue;
+    if (c.room === 'free') c.ws.send(freeMsg);
+    else if (c.room === 'race') c.ws.send(raceMsg);
   }
+
+  if (race.phase !== 'idle' || raceChanged) broadcastRace();
 }, 1000 / TICK_HZ);
 
 console.log(`megabroplanes server listening on ws://0.0.0.0:${PORT}`);

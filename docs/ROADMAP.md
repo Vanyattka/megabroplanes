@@ -58,7 +58,8 @@ Ordered roughly by when they landed. Every one of these was originally listed in
 - **Atmospheric Preetham sky** on High preset.
 - **Moon** — separate additive dome, cool-white disc + halo opposite the sun, gated by night factor.
 - **Stars** — `Points`-based starfield fading in at night.
-- **Water shader** — multi-octave ripples (slow swell + wind chop + sparkle), Fresnel mix, sun glint, jet engine reflection, landing-light pool, plane-color glint disc.
+- **Water shader** — multi-octave ripples (slow swell + wind chop + sparkle), Fresnel mix, sun glint, jet engine reflection, landing-light pool.
+- **Water reflection** (2026) — a real mirrored-plane reflection on the surface (`world/WaterReflection.js`), replacing the old body-color glint disc. Terrain depth naturally occludes it everywhere except over water.
 - **Aerial perspective** on terrain — desaturate + horizon-tint distant fragments.
 - **Volumetric god rays + lens flare** post-FX pass driven by sun screen-space position.
 - **Bloom + vignette** post-FX, with an **adaptive bloom threshold** that drops toward dawn/dusk so low-sun skies glow more.
@@ -87,7 +88,7 @@ Ordered roughly by when they landed. Every one of these was originally listed in
 - **Remote plane manager** — per-remote mesh, lerp targets, jet exhaust + contrails reconstructed from broadcast state.
 - **SP / MP mode toggle** on the main menu, persisted in localStorage.
 - **Global synchronized time** in MP mode — every client derives `t` from `Date.now()` so the sky stays consistent across all players.
-- **Race mode** (2026) — server-authoritative checkpoint races. The server generates a gate course, runs a countdown, validates gate ordering, and tracks live standings + finish times. Client `RaceManager` renders the gate rings + beacon, detects local gate passes, and drives the countdown / race HUD / live leaderboard / results board. Minimap shows the course. Wire additions: `race_start` + `cp` (client→server), `race` (server→client).
+- **Race lobby + combat races** (2026) — a real lobby + isolated race sessions on top of free flight. Server rooms scope snapshots (`free` vs `race`) so racers fly away from the free-flight crowd. The lobby (`race/Lobby.js`) lets players vote the shared aircraft + time (majority wins) and pick their own color; it launches on host **START NOW** or an auto-fill countdown (≥2 players, shortens as it fills to 10). On launch the server applies the voted plane/time, spawns everyone airborne at the start line, generates a gate course, runs a countdown, validates gate ordering, and tracks live standings + finish times. **Combat:** SPACE fires guns (`combat/Bullets.js` tracer pool + swept hit-test; gunfire/boom SFX in `Audio.js`); HP is server-authoritative via `fire`/`hit` messages; at 0 HP a plane explodes and respawns at its next gate. `race/RaceManager.js` owns the in-flight race + combat + HUD. Wire additions: `join_lobby`/`lobby_set`/`lobby_start`/`cp`/`fire`/`hit` (→server), `lobby`/`race`/`fire` (→client).
 
 ### Deploy
 - **Production VPS** at `91.186.209.67` running nginx + systemd-managed WS server. The default WS URL in code points at `wss://<host>/ws` for the prod box.

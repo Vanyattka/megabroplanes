@@ -11,8 +11,11 @@ export class MultiplayerClient {
     this._lastSend = 0;
     this._statusListener = null;
     this._raceListener = null;
-    // Latest race state from the server (null until first 'race' message).
+    this._lobbyListener = null;
+    this._fireListener = null;
+    // Latest race / lobby state from the server (null until first message).
     this.race = null;
+    this.lobby = null;
     this._enabled = true;
     this._reconnectTimer = null;
     this._connect();
@@ -20,6 +23,8 @@ export class MultiplayerClient {
 
   onStatusChange(fn) { this._statusListener = fn; }
   onRace(fn) { this._raceListener = fn; }
+  onLobby(fn) { this._lobbyListener = fn; }
+  onFire(fn) { this._fireListener = fn; }
 
   // Toggle the multiplayer system. When off, close the socket, drop
   // remotes, and stop the reconnect loop. Used by the singleplayer mode:
@@ -43,7 +48,9 @@ export class MultiplayerClient {
       this.id = null;
       this.remotes.clear();
       this.race = null;
+      this.lobby = null;
       if (this._raceListener) this._raceListener(null);
+      if (this._lobbyListener) this._lobbyListener(null);
       this._notify();
     }
   }
@@ -112,6 +119,7 @@ export class MultiplayerClient {
         r.crashed = s.c === 1;
         r.type = s.pt;
         r.color = s.pc;
+        r.hp = s.hp;
       }
       for (const id of this.remotes.keys()) {
         if (!seen.has(id)) this.remotes.delete(id);
@@ -120,22 +128,31 @@ export class MultiplayerClient {
     } else if (msg.type === 'race') {
       this.race = msg;
       if (this._raceListener) this._raceListener(msg);
+    } else if (msg.type === 'lobby') {
+      this.lobby = msg;
+      if (this._lobbyListener) this._lobbyListener(msg);
+    } else if (msg.type === 'fire') {
+      if (this._fireListener) this._fireListener(msg); // {id, o, d}
     }
   }
 
-  // Ask the server to start a race (no-op server-side unless idle/finished).
-  sendRaceStart() {
+  _send(obj) {
     if (this.connected && this.ws && this.ws.readyState === 1) {
-      this.ws.send(JSON.stringify({ type: 'race_start' }));
+      this.ws.send(JSON.stringify(obj));
     }
   }
+
+  setName(name) { this._send({ type: 'set_name', name }); }
+  joinLobby(plane, time, color) { this._send({ type: 'join_lobby', plane, time, color }); }
+  leaveLobby() { this._send({ type: 'leave_lobby' }); }
+  lobbySet(patch) { this._send({ type: 'lobby_set', ...patch }); }
+  lobbyStart() { this._send({ type: 'lobby_start' }); }
 
   // Report clearing the next checkpoint. The server validates ordering.
-  sendCheckpoint(idx) {
-    if (this.connected && this.ws && this.ws.readyState === 1) {
-      this.ws.send(JSON.stringify({ type: 'cp', idx }));
-    }
-  }
+  sendCheckpoint(idx) { this._send({ type: 'cp', idx }); }
+  // Combat: broadcast a tracer + claim a hit (server is HP authority).
+  sendFire(o, d) { this._send({ type: 'fire', o, d }); }
+  sendHit(target) { this._send({ type: 'hit', target }); }
 
   sendState(plane) {
     if (!this._enabled) return;

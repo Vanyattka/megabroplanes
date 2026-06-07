@@ -1,4 +1,4 @@
-import { Color, Vector3 } from 'three';
+import { Vector3 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Renderer } from './core/Renderer.js';
 import { Clock } from './core/Clock.js';
@@ -9,6 +9,7 @@ import { VillageManager } from './world/VillageManager.js';
 import { isOnFlatGround } from './world/Villages.js';
 import { RuinsManager } from './world/RuinsManager.js';
 import { Water } from './world/Water.js';
+import { WaterReflection } from './world/WaterReflection.js';
 import { groundHeight, physicsFloor } from './world/Ground.js';
 import { Clouds } from './world/Clouds.js';
 import { PlaneShadow, makeShadowTexture } from './world/Shadow.js';
@@ -41,6 +42,8 @@ import {
 import { MultiplayerClient } from './net/Client.js';
 import { RemotePlaneManager } from './net/RemotePlaneManager.js';
 import { RaceManager } from './race/RaceManager.js';
+import { Lobby } from './race/Lobby.js';
+import { Bullets } from './combat/Bullets.js';
 import { TouchControls } from './ui/Touch.js';
 import { Minimap } from './ui/Minimap.js';
 import { Menu } from './ui/Menu.js';
@@ -64,8 +67,6 @@ const _lightWorldPos = new Vector3();
 const _lightWorldDir = new Vector3();
 const _lightTargetPos = new Vector3();
 const _landingHitPos = new Vector3();
-const _planeReflPos = new Vector3();
-const _planeReflColor = new Color();
 // Scratch for jet position passed to water shader. Kept distinct from
 // _tmpVec3 so the per-frame computeWaterExtras() bundle doesn't alias
 // jet.position with landing.position (water.update reads both).
@@ -106,6 +107,7 @@ const chunks = new ChunkManager(renderer.scene, { roads, pool: chunkPool });
 const villages = new VillageManager(renderer.scene);
 const ruins = new RuinsManager(renderer.scene);
 const water = new Water(renderer.scene);
+const waterReflection = new WaterReflection(renderer.scene);
 const clouds = new Clouds(renderer.scene);
 
 const plane = new Plane(renderer.scene);
@@ -188,13 +190,17 @@ function defaultServerUrl() {
 }
 const serverUrl = params.get('server') || defaultServerUrl();
 const mp = new MultiplayerClient(serverUrl);
+// Declare bullets BEFORE registering the status callback below — the callback
+// references it, and although the socket opens asynchronously, keeping the
+// declaration first avoids any temporal-dead-zone risk.
+const bullets = new Bullets(renderer.scene, mp.id);
 mp.onStatusChange(({ connected, count, id }) => {
+  if (id != null) bullets.setLocalId(id);
   if (!mpStatusEl) return;
   if (!connected) mpStatusEl.textContent = 'mp: offline';
   else mpStatusEl.textContent = `mp: P${id ?? '?'} · ${count} other${count === 1 ? '' : 's'}`;
 });
 const remotes = new RemotePlaneManager(renderer.scene, mp);
-const raceManager = new RaceManager(renderer.scene, mp, () => plane);
 const touch = new TouchControls();
 const minimap = new Minimap(mp);
 
@@ -235,22 +241,101 @@ function applyModeTime(timePreset) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Race lobby + isolated race sessions + combat. The lobby is a waiting room
+// (vote plane/time, pick color); on launch the server moves participants into
+// an isolated race where everyone sees only other racers. RaceManager owns the
+// in-flight race + combat experience; Lobby owns the waiting-room UI.
+// ---------------------------------------------------------------------------
+const lobby = new Lobby(mp);
+const raceManager = new RaceManager({
+  scene: renderer.scene,
+  client: mp,
+  plane,
+  input,
+  touch,
+  bullets,
+  explosion,
+  audio,
+  getRemoteTargets: () => remotes.listTargets(),
+  getMyColor: () => lobby.getMyColor() ?? plane.color,
+  applyLoadout: (type, color) => plane.setLoadout(type, color),
+  applyRaceTime: (timeKey) => {
+    const p = TIME_PRESETS[timeKey];
+    if (p && p.t != null) dayNight.setFrozenTime(p.t);
+    else applyGlobalTime();
+  },
+  restoreFreeTime: () => applyGlobalTime(),
+  onRaceEnd: () => {
+    // Back to the free-flight world: restore the player's own loadout + spawn.
+    const sel = menu.getSelection();
+    plane.setLoadout(sel.type, sel.color);
+    plane.reset();
+    jetExhaust.clear();
+    contrails.clear();
+    explosion.clear();
+    refreshRaceButton();
+  },
+});
+
+let inLobby = false;
+let lastMpPhase = 'free';
+
+function currentMpPhase() {
+  if (raceManager.inRace) return 'race';
+  if (mp.lobby && mp.lobby.members && mp.id != null &&
+      mp.lobby.members.some((m) => m.id === mp.id)) return 'lobby';
+  return 'free';
+}
+
+// React to free ↔ lobby ↔ race transitions (lobby overlay, plane freeze).
+function updateMpPhase() {
+  const phase = currentMpPhase();
+  if (phase === lastMpPhase) return;
+  lastMpPhase = phase;
+  if (phase === 'lobby') {
+    inLobby = true;
+    lobby.show();
+    document.body.classList.add('in-lobby');
+  } else {
+    inLobby = false;
+    lobby.hide();
+    document.body.classList.remove('in-lobby');
+  }
+  refreshRaceButton();
+}
+
+// The "RACE LOBBY" button (bottom-right) — joins the lobby from free MP flight.
+const raceBtn = document.getElementById('btn-race');
+if (raceBtn) {
+  raceBtn.addEventListener('click', () => {
+    if (currentMode !== 'multiplayer' || gameState !== 'playing') return;
+    if (currentMpPhase() !== 'free') return;
+    lobby.join(menu.getSelection());
+  });
+}
+lobby.onLeave = () => {
+  mp.leaveLobby();
+  inLobby = false;
+  lobby.hide();
+  document.body.classList.remove('in-lobby');
+};
+
+function refreshRaceButton() {
+  if (!raceBtn) return;
+  const showLobbyBtn =
+    currentMode === 'multiplayer' && gameState === 'playing' && currentMpPhase() === 'free';
+  raceBtn.style.display = showLobbyBtn ? 'block' : 'none';
+}
+
 // Wire mp.setEnabled and remote clearing to the current mode. Called
 // whenever the player flips the mode toggle in the main menu, AND on
 // each Start/Continue so the multiplayer client matches the chosen mode.
 function applyMode(mode) {
   currentMode = mode === 'multiplayer' ? 'multiplayer' : 'singleplayer';
+  if (currentMode !== 'multiplayer' && inLobby) lobby.onLeave();
   mp.setEnabled(currentMode === 'multiplayer');
-  syncRaceActive();
-}
-
-// Race mode (gates, HUD, checkpoint reporting) is live only while flying in
-// multiplayer and not framing a photo. Call after any change to mode / game
-// state / photo mode.
-function syncRaceActive() {
-  raceManager.setActive(
-    currentMode === 'multiplayer' && gameState === 'playing' && !photoMode
-  );
+  refreshRaceButton();
 }
 
 menu.onChange = ({ type, color }) => {
@@ -268,14 +353,14 @@ menu.onStart = ({ type, color, timePreset, mode }) => {
   explosion.clear();
   if (crashBannerEl) crashBannerEl.style.display = 'none';
   gameState = 'playing';
-  syncRaceActive();
+  refreshRaceButton();
   audio.setSuspended(false);
 };
 // Continue = resume the existing flight without resetting the plane.
 menu.onContinue = () => {
   plane.mesh.visible = !plane.crashed;
   gameState = 'playing';
-  syncRaceActive();
+  refreshRaceButton();
   audio.setSuspended(false);
 };
 menu.onTimeChange = (preset) => {
@@ -306,7 +391,7 @@ if (backToMenuBtn) {
     if (crashBannerEl) crashBannerEl.style.display = 'none';
     plane.mesh.visible = false;
     gameState = 'menu';
-    syncRaceActive();
+    refreshRaceButton();
     audio.setSuspended(true);
     // The player already has a flight in progress — show CONTINUE on the
     // main menu so they can pick up where they left off.
@@ -345,7 +430,7 @@ function setPhotoMode(on) {
     document.body.classList.remove('photo');
     if (photoBannerEl) photoBannerEl.style.display = 'none';
   }
-  syncRaceActive();
+  refreshRaceButton();
 }
 let _prevDayPaused = false;
 
@@ -459,34 +544,11 @@ function computeWaterExtras() {
     }
   }
 
-  // Plane body-color glint disc — a stand-in for a real planar reflection
-  // visible only when *skimming* the water. The previous range (30–300 m)
-  // was way too generous: the disc was visible from 200 m up, which read
-  // as a giant coloured halo following the plane around rather than a
-  // reflection. Tightened to: full at 0–15 m, fades to nothing by 60 m.
-  // A real plane's reflection on water would be a recognisable silhouette
-  // at low altitude and an indistinct dot/sparkle from any real height —
-  // for the simple disc stand-in, "off above 60 m" reads better than a
-  // long faint trail.
-  let planeRefl = null;
-  if (!plane.crashed) {
-    const altOverWater = plane.position.y - WATER_LEVEL;
-    if (altOverWater > 0 && altOverWater < 60) {
-      const t = 1 - Math.min(1, Math.max(0, (altOverWater - 15) / 45));
-      if (t > 0.001) {
-        _planeReflPos.set(plane.position.x, WATER_LEVEL, plane.position.z);
-        _planeReflColor.setHex(plane.color != null ? plane.color : 0xffffff);
-        planeRefl = {
-          position: _planeReflPos,
-          color: _planeReflColor,
-          intensity: t,
-        };
-      }
-    }
-  }
-
-  if (!jet && !landing && !planeRefl) return null;
-  return { jet, landing, plane: planeRefl };
+  // The player's plane reflection is now a real mirrored mesh on the water
+  // (see WaterReflection.js), not a shader glint disc, so we no longer feed a
+  // `plane` extra to the water shader.
+  if (!jet && !landing) return null;
+  return { jet, landing, plane: null };
 }
 
 function altitudeT(y) {
@@ -563,6 +625,8 @@ function physicsStep(dt) {
   // is already paused via dayNight.paused; streaming still runs from
   // renderStep so loaded chunks stay fresh around the frozen plane.
   if (photoMode) return;
+  // In the race lobby the plane is parked while the player votes/waits.
+  if (inLobby) return;
 
   const resetKey = input.isPressed('KeyR');
   const resetBtn = touch.consumeReset();
@@ -577,11 +641,16 @@ function physicsStep(dt) {
     resetHeld = false;
   }
   const wasCrashed = plane.crashed;
-  plane.update(dt, input, getPhysicsFloor, isOnFlatGround, crashesEnabled(), touch);
+  // In a race, crashes are always on (no toggle) for the full action.
+  const crashesOn = crashesEnabled() || raceManager.isCombatActive();
+  plane.update(dt, input, getPhysicsFloor, isOnFlatGround, crashesOn, touch);
   if (!wasCrashed && plane.crashed && plane.crashImpact) {
     explosion.trigger(plane.crashImpact.position, plane.crashImpact.velocity);
+    audio.boom();
     plane.mesh.visible = false;
-    if (crashBannerEl) crashBannerEl.style.display = 'block';
+    // The race shows its own death/respawn flow; only the free-flight crash
+    // banner is shown outside a race.
+    if (crashBannerEl && !raceManager.inRace) crashBannerEl.style.display = 'block';
   }
   // NOTE: chunks/villages/ruins streaming is NOT called here — it belongs in
   // renderStep. Physics runs 1–3× per render frame via the accumulator, and
@@ -610,11 +679,13 @@ function renderStep(alpha) {
   // frames. Plane physics still gets its proper N physics sub-steps.
   streamUpdate();
 
-  // In multiplayer mode we re-derive `t` from the wall clock every frame
-  // so all clients see the same sky. paused=true tells DayNight not to
-  // advance on its own — we set t directly. Skip while photo mode is on
-  // so the player's shot stays frozen.
-  if (currentMode === 'multiplayer' && !photoMode) {
+  // Track free ↔ lobby ↔ race transitions (lobby overlay, plane freeze).
+  updateMpPhase();
+
+  // In free multiplayer the time of day is wall-clock-synced across clients.
+  // During a race the sky is frozen to the voted time (set by RaceManager), so
+  // we must NOT override it here; only re-derive global time in the free room.
+  if (currentMode === 'multiplayer' && !photoMode && currentMpPhase() === 'free') {
     applyGlobalTime();
   }
   // Day/night advances regardless of menu state — the sky keeps changing
@@ -648,6 +719,7 @@ function renderStep(alpha) {
     sky.update(renderer.camera, renderer.camera.position);
     stars.update(renderer.camera);
     water.update(renderDt, renderer.camera.position, worldTime.horizonColor);
+    waterReflection.setVisible(false);
     clouds.update(
       renderDt,
       renderer.camera.position,
@@ -687,6 +759,8 @@ function renderStep(alpha) {
     worldTime.horizonColor,
     waterExtras
   );
+  // Real mirrored-plane reflection on the water (replaces the old glint disc).
+  if (!photoMode) waterReflection.update(plane);
   clouds.update(
     renderDt,
     plane.position,
@@ -708,7 +782,7 @@ function renderStep(alpha) {
     contrails.update(renderDt, plane);
   }
   remotes.update(renderDt);
-  raceManager.update(renderDt);
+  if (!photoMode) raceManager.update(renderDt);
   mp.sendState(plane);
 
   // Audio tracks plane state each frame.

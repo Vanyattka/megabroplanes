@@ -60,6 +60,7 @@ megabroplanes/
     │   ├── NightLights.js       # shared HDR materials for nav / runway lamps
     │   ├── Stars.js             # Points-based starfield, fades at night
     │   ├── Water.js             # ShaderMaterial: ripples + reflections
+    │   ├── WaterReflection.js   # mirrored-plane reflection on the water surface
     │   └── Clouds.js            # InstancedMesh of camera-facing quads
     ├── effects/
     │   ├── Explosion.js         # crash particle burst (instanced cubes)
@@ -77,7 +78,10 @@ megabroplanes/
     │   ├── Client.js            # WebSocket client (auto-reconnect, setEnabled, race msgs)
     │   └── RemotePlaneManager.js # remote-plane visuals + jet effects
     ├── race/
-    │   └── RaceManager.js       # MP race: gate rings/beacons, checkpoint detection, race HUD
+    │   ├── Lobby.js             # race lobby waiting room (vote plane/time, color, host start)
+    │   └── RaceManager.js       # isolated race: gates, checkpoint detection, combat, death/respawn, HUD
+    ├── combat/
+    │   └── Bullets.js           # pooled tracer projectiles + swept hit-testing (race combat)
     ├── audio/
     │   └── Audio.js             # Web Audio engine + wind voice
     └── debug/

@@ -249,20 +249,23 @@ export const TERRAIN_WARP_SCALE = 0.00055;   // domain-warp feature size
 export const TERRAIN_WARP_AMP = 130;         // meters of coordinate warp
 export const CONTINENT_SCALE = 0.00021;      // ~4800 m continents/uplands
 export const UPLAND_HEIGHT = 34;             // broad highland plateau lift (m)
-export const MOUNTAIN_MASK_SCALE = 0.00034;  // ~2900 m mountain ranges
-export const MOUNTAIN_MASK_LOW = 0.50;       // mask below this = no mountains
-export const MOUNTAIN_MASK_HIGH = 0.74;      // mask above this = full mountains
-export const MOUNTAIN_BASE_RISE = 38;        // massif lift under a range (m)
-export const MOUNTAIN_HEIGHT = 168;          // ridge height above the massif (m)
-export const RIDGE_SCALE = 0.0017;           // base ridge spacing
+export const MOUNTAIN_MASK_SCALE = 0.0003;   // ~3300 m mountain ranges
+export const MOUNTAIN_MASK_LOW = 0.44;       // mask below this = no mountains
+export const MOUNTAIN_MASK_HIGH = 0.70;      // mask above this = full mountains
+export const MOUNTAIN_BASE_RISE = 60;        // broad massif lift under a range (m)
+export const MOUNTAIN_HEIGHT = 135;          // ridge height above the massif (m)
+export const RIDGE_SCALE = 0.0011;           // base ridge spacing (wider = broader peaks)
 export const RIDGE_OCTAVES = 4;
-export const RIDGE_LACUNARITY = 2.05;
-export const RIDGE_GAIN = 0.52;
-export const RIDGE_EXP = 1.35;               // >1 sharpens ridgelines
+export const RIDGE_LACUNARITY = 2.0;
+export const RIDGE_GAIN = 0.45;              // lower = less spiky high-frequency detail
+export const RIDGE_EXP = 0.85;               // <1 rounds ridgelines into broad massifs
+// Smooth dome blended in with the ridges so peaks read as big mountains with
+// rounded shoulders rather than thin needles. 0 = pure ridges, 1 = pure dome.
+export const RIDGE_DOME_MIX = 0.4;
 export const PLAINS_SCALE = 0.0042;          // flatland undulation feature size
 export const PLAINS_OCTAVES = 3;
 export const PLAINS_AMP = 7.5;               // gentle ± on the flats (m)
-export const FOOTHILL_AMP = 28;              // rolling hills in the transition band
+export const FOOTHILL_AMP = 42;              // rolling hills in the transition band
 // Mountains are suppressed within this radius of the world origin so takeoff
 // from the home runway is always over open plains, with ranges in the distance.
 export const SPAWN_FLAT_RADIUS = 1500;
@@ -701,6 +704,18 @@ export const RACE_BEACON_HEIGHT = 600;      // height of the "next gate" light p
 export const RACE_COLOR_NEXT = 0xffd23a;    // the gate you're heading for (gold, blooms)
 export const RACE_COLOR_FUTURE = 0x39c6ff;  // upcoming gates (cyan)
 export const RACE_COLOR_DONE = 0x39ff8a;    // gates already cleared (green)
+
+// Combat (race mode) — guns + HP. Damage/HP are server-authoritative; these
+// are the client-side feel (fire rate, tracer visuals, local hit tolerance).
+export const PLANE_MAX_HP = 100;
+export const GUN_FIRE_INTERVAL = 0.1;     // seconds between shots
+export const BULLET_SPEED = 460;          // m/s (added to plane velocity)
+export const BULLET_LIFE = 1.5;           // seconds before a tracer expires
+export const BULLET_MAX = 320;            // tracer pool size
+export const BULLET_HIT_RADIUS = 8;       // m from a plane center = hit
+export const BULLET_COLOR = 0xfff070;     // tracer color (HDR, blooms)
+export const GUN_MUZZLE_OFFSET = [0.9, -0.1, -4.4]; // local nose offset (wing guns mirror on X)
+export const RACE_RESPAWN_MS = 3500;      // matches server; downed → respawn delay
 
 // ---------------------------------------------------------------------------
 // Audio — procedural engine + wind through the Web Audio API.

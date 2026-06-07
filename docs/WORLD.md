@@ -205,7 +205,7 @@ The fragment shader does:
 - **Sun glint** Blinn-Phong specular — golden sunset path, HDR so it blooms.
 - **Jet engine reflection** — orange smear under low-flying jets (driven by `_jetLight.intensity`).
 - **Landing light pool** — wide soft Blinn-Phong centred on where the SpotLight cone meets water (cone-axis ↔ y=WATER_LEVEL intersection computed in `main.js`).
-- **Plane body-color glint disc** — only visible when skimming the water (full 0–15 m AGL, fades to nothing by 60 m). Tinted to the plane's chosen body colour. A stand-in for true planar reflection (which would require a mirrored render pass).
+- **Real plane reflection** — a mirrored clone of the plane mesh (`world/WaterReflection.js`), reflected across the water plane and rendered just after the water surface. Because the water material has `depthWrite:false` and terrain is opaque, the deep mirrored mesh is depth-occluded everywhere except over actual water — so the reflection only appears on water bodies, no explicit "am I over water" test needed. Replaced the old body-color glint disc (which read as a coloured halo, not a reflection).
 
 `Water.update(dt, planePos, worldTint, extras)` takes an optional `extras = { jet, landing, plane }` bundle. Each sub-uniform self-disables when its intensity is 0, and the shader has explicit early-outs.
 

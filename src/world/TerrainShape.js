@@ -33,6 +33,7 @@ import {
   RIDGE_LACUNARITY,
   RIDGE_GAIN,
   RIDGE_EXP,
+  RIDGE_DOME_MIX,
   PLAINS_SCALE,
   PLAINS_OCTAVES,
   PLAINS_AMP,
@@ -166,8 +167,12 @@ export function landElevation(x, z) {
     const foothill = (foothillNoise(wx * RIDGE_SCALE * 0.5, wz * RIDGE_SCALE * 0.5) * 0.5 + 0.5) * FOOTHILL_AMP;
     let ridge = ridged(wx, wz, RIDGE_OCTAVES, RIDGE_SCALE, RIDGE_LACUNARITY, RIDGE_GAIN);
     ridge = Math.pow(ridge, RIDGE_EXP);
-    const massif = MOUNTAIN_BASE_RISE + ridge * MOUNTAIN_HEIGHT;
-    h += mtn * (foothill * 0.4 + massif);
+    // Blend the sharp ridges with a smooth low-frequency dome so peaks are
+    // broad massifs with rounded shoulders, not thin needles.
+    const dome = foothillNoise(wx * RIDGE_SCALE * 0.35 + 50, wz * RIDGE_SCALE * 0.35 - 50) * 0.5 + 0.5;
+    const relief = ridge * (1 - RIDGE_DOME_MIX) + dome * RIDGE_DOME_MIX;
+    const massif = MOUNTAIN_BASE_RISE + relief * MOUNTAIN_HEIGHT;
+    h += mtn * (foothill * 0.55 + massif);
   }
   return h;
 }
