@@ -20,7 +20,8 @@ const HOST_LAUNCH_MS = 4000;        // host pressed START -> short countdown
 const RACE_COUNTDOWN_MS = 6000;
 const RESULTS_MS = 15000;
 const RACE_TIMEOUT_MS = 360000;
-const RACE_CHECKPOINTS = 8;
+const DEFAULT_GATES = 8;
+const GATE_OPTIONS = [8, 16, 32]; // votable flag counts
 // Combat
 const MAX_HP = 100;
 const GUN_DMG = 13;
@@ -47,21 +48,26 @@ function membersIn(room) {
   return out;
 }
 
-// Deterministic course generator (LCG) — a loop of gate checkpoints near the
-// gentle spawn plains so gates stay flyable.
-function generateCourse(seed) {
+// Deterministic course generator (LCG, seeded → random each race). `n` is the
+// voted flag count (8/16/32). ~8 gates make one 360° loop, so bigger counts
+// wind into a longer multi-loop circuit; the radius oscillates so successive
+// loops sit at different distances instead of stacking. Gates stay over the
+// gentle spawn plains (≈500–1850 m, alt 130–310 m) so they're flyable.
+function generateCourse(seed, n) {
   let s = seed >>> 0;
   const rand = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-  const n = RACE_CHECKPOINTS;
-  const baseR = 600, spanR = 1150;
+  const count = GATE_OPTIONS.includes(n) ? n : DEFAULT_GATES;
+  const baseR = 550, spanR = 1250;
   const cps = [];
   let ang = rand() * Math.PI * 2;
-  for (let i = 0; i < n; i++) {
-    ang += (Math.PI * 2) / n + (rand() - 0.5) * 0.6;
-    const r = baseR + rand() * spanR;
+  const radPhase = rand() * Math.PI * 2;
+  const dir = rand() < 0.5 ? 1 : -1; // randomize circuit direction
+  for (let i = 0; i < count; i++) {
+    ang += dir * (Math.PI * 2 / 8) + (rand() - 0.5) * 0.5;
+    const r = baseR + spanR * (0.5 + 0.45 * Math.sin(i * 0.8 + radPhase)) + (rand() - 0.5) * 220;
     cps.push({
       x: Math.round(Math.cos(ang) * r),
-      y: Math.round(130 + rand() * 170),
+      y: Math.round(130 + rand() * 180),
       z: Math.round(Math.sin(ang) * r),
       r: 60,
     });
@@ -85,7 +91,12 @@ function tallyVotes() {
     if (host && host.lobby[key] && (tally[host.lobby[key]] || 0) === bestN) best = host.lobby[key];
     return best || def;
   };
-  return { plane: count('plane', DEFAULT_PLANE), time: count('time', DEFAULT_TIME) };
+  const gatesVote = parseInt(count('gates', String(DEFAULT_GATES)), 10);
+  return {
+    plane: count('plane', DEFAULT_PLANE),
+    time: count('time', DEFAULT_TIME),
+    gates: GATE_OPTIONS.includes(gatesVote) ? gatesVote : DEFAULT_GATES,
+  };
 }
 
 function recomputeHost() {
@@ -98,7 +109,7 @@ function recomputeHost() {
 function lobbyMessage() {
   const members = membersIn('lobby').map(([id, c]) => ({
     id, name: c.name || `P${id}`,
-    plane: c.lobby.plane, time: c.lobby.time, color: c.lobby.color,
+    plane: c.lobby.plane, time: c.lobby.time, color: c.lobby.color, gates: c.lobby.gates,
     ready: !!c.lobby.ready, host: id === lobby.hostId,
   }));
   return {
@@ -137,7 +148,7 @@ function launchRace() {
   race = {
     phase: 'countdown',
     seed,
-    course: generateCourse(seed),
+    course: generateCourse(seed, vote.gates),
     startAt: Date.now() + RACE_COUNTDOWN_MS,
     endAt: 0,
     timeKey: vote.time,
@@ -232,7 +243,7 @@ wss.on('connection', (ws, req) => {
     plane: { pt: DEFAULT_PLANE, pc: null },
     hp: MAX_HP, dead: false, respawnAt: 0, lastHit: {}, lastHitAny: 0,
     race: null,
-    lobby: { plane: DEFAULT_PLANE, time: DEFAULT_TIME, color: null, ready: false },
+    lobby: { plane: DEFAULT_PLANE, time: DEFAULT_TIME, color: null, gates: DEFAULT_GATES, ready: false },
   });
   const addr = req?.socket?.remoteAddress || 'unknown';
   console.log(`[+] player ${id} connected from ${addr} (total: ${clients.size})`);
@@ -261,6 +272,7 @@ wss.on('connection', (ws, req) => {
         if (msg.plane) c.lobby.plane = msg.plane;
         if (msg.time) c.lobby.time = msg.time;
         if (msg.color != null) c.lobby.color = msg.color;
+        if (GATE_OPTIONS.includes(msg.gates)) c.lobby.gates = msg.gates;
         recomputeHost();
         updateLaunchTimer();
         sendLobbyState();
@@ -279,6 +291,7 @@ wss.on('connection', (ws, req) => {
           if (msg.plane) c.lobby.plane = msg.plane;
           if (msg.time) c.lobby.time = msg.time;
           if (msg.color != null) c.lobby.color = msg.color;
+          if (GATE_OPTIONS.includes(msg.gates)) c.lobby.gates = msg.gates;
           if (typeof msg.ready === 'boolean') c.lobby.ready = msg.ready;
           sendLobbyState();
         }

@@ -143,7 +143,7 @@ export class MultiplayerClient {
   }
 
   setName(name) { this._send({ type: 'set_name', name }); }
-  joinLobby(plane, time, color) { this._send({ type: 'join_lobby', plane, time, color }); }
+  joinLobby(plane, time, color, gates) { this._send({ type: 'join_lobby', plane, time, color, gates }); }
   leaveLobby() { this._send({ type: 'leave_lobby' }); }
   lobbySet(patch) { this._send({ type: 'lobby_set', ...patch }); }
   lobbyStart() { this._send({ type: 'lobby_start' }); }

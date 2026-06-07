@@ -1,4 +1,4 @@
-import { PLANE_TYPES, BODY_COLORS, TIME_PRESETS } from '../config.js';
+import { PLANE_TYPES, BODY_COLORS, TIME_PRESETS, RACE_GATE_OPTIONS } from '../config.js';
 
 // Time options offered in the lobby vote (skip 'auto' — a race wants a fixed,
 // shared sky).
@@ -18,6 +18,7 @@ export class Lobby {
     this.membersEl = document.getElementById('lobby-members');
     this.planeEl = document.getElementById('lobby-plane');
     this.timeEl = document.getElementById('lobby-time');
+    this.gatesEl = document.getElementById('lobby-gates');
     this.colorEl = document.getElementById('lobby-color');
     this.timerEl = document.getElementById('lobby-timer');
     this.startBtn = document.getElementById('lobby-start');
@@ -25,7 +26,7 @@ export class Lobby {
     this.voteNoteEl = document.getElementById('lobby-vote-note');
 
     this.onLeave = null;
-    this._mine = { plane: null, time: null, color: null };
+    this._mine = { plane: null, time: null, color: null, gates: null };
 
     this._buildOptionButtons();
     if (this.startBtn) this.startBtn.addEventListener('click', () => this.client.lobbyStart());
@@ -59,6 +60,18 @@ export class Lobby {
         this.timeEl.appendChild(b);
       }
     }
+    if (this.gatesEl) {
+      this.gatesEl.innerHTML = '';
+      for (const n of RACE_GATE_OPTIONS) {
+        const b = document.createElement('button');
+        b.className = 'lobby-opt';
+        b.dataset.kind = 'gates';
+        b.dataset.val = String(n);
+        b.textContent = `${n} FLAGS`;
+        b.addEventListener('click', () => this.client.lobbySet({ gates: n }));
+        this.gatesEl.appendChild(b);
+      }
+    }
     if (this.colorEl) {
       this.colorEl.innerHTML = '';
       for (const c of BODY_COLORS) {
@@ -75,8 +88,8 @@ export class Lobby {
 
   // Join with an initial loadout (from the menu selection).
   join(loadout) {
-    this._mine = { plane: loadout.type, time: 'day', color: loadout.color };
-    this.client.joinLobby(loadout.type, 'day', loadout.color);
+    this._mine = { plane: loadout.type, time: 'day', color: loadout.color, gates: RACE_GATE_OPTIONS[0] };
+    this.client.joinLobby(loadout.type, 'day', loadout.color, RACE_GATE_OPTIONS[0]);
     if (this.root) this.root.classList.remove('hidden');
   }
 
@@ -106,15 +119,17 @@ export class Lobby {
     const selPlane = me ? me.plane : null;
     const selTime = me ? me.time : null;
     const selColor = me ? me.color : null;
+    const selGates = me ? me.gates : null;
     // Remember my picks so RaceManager can read my chosen color at launch.
-    if (me) this._mine = { plane: selPlane, time: selTime, color: selColor };
+    if (me) this._mine = { plane: selPlane, time: selTime, color: selColor, gates: selGates };
     if (this.planeEl) for (const b of this.planeEl.children) b.classList.toggle('sel', b.dataset.val === selPlane);
     if (this.timeEl) for (const b of this.timeEl.children) b.classList.toggle('sel', b.dataset.val === selTime);
+    if (this.gatesEl) for (const b of this.gatesEl.children) b.classList.toggle('sel', Number(b.dataset.val) === selGates);
     if (this.colorEl) for (const s of this.colorEl.children) s.classList.toggle('sel', Number(s.dataset.hex) === selColor);
 
     // Vote result.
     if (this.voteNoteEl && r.vote) {
-      this.voteNoteEl.textContent = `Racing: ${PLANE_TYPES[r.vote.plane]?.name || r.vote.plane} · ${TIME_PRESETS[r.vote.time]?.label || r.vote.time} (majority vote)`;
+      this.voteNoteEl.textContent = `Racing: ${PLANE_TYPES[r.vote.plane]?.name || r.vote.plane} · ${TIME_PRESETS[r.vote.time]?.label || r.vote.time} · ${r.vote.gates} flags (majority vote)`;
     }
 
     // Host start button.

@@ -701,6 +701,7 @@ export const ROAD_CURVE_AMPLITUDE = 0.12;               // fraction of length
 export const RACE_RING_TUBE = 4.5;          // torus tube thickness (m)
 export const RACE_PASS_RADIUS = 75;         // distance to count a gate as cleared (m)
 export const RACE_BEACON_HEIGHT = 600;      // height of the "next gate" light pillar (m)
+export const RACE_GATE_OPTIONS = [8, 16, 32]; // votable flag counts in the lobby
 export const RACE_COLOR_NEXT = 0xffd23a;    // the gate you're heading for (gold, blooms)
 export const RACE_COLOR_FUTURE = 0x39c6ff;  // upcoming gates (cyan)
 export const RACE_COLOR_DONE = 0x39ff8a;    // gates already cleared (green)
