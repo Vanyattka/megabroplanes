@@ -10,6 +10,7 @@ export function villageToWorkerData(v) {
     airportX: v.airportX,
     airportZ: v.airportZ,
     angle: v.angle,
+    padY: v.padY,
     villageRect: {
       cx: r.cx,
       cz: r.cz,

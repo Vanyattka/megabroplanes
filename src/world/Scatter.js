@@ -35,6 +35,7 @@ import { seedKey } from './WorldSeed.js';
 import {
   villagesAffectingArea,
   villageFlatFactorFromList,
+  lastFlatPadY,
   rectFlatFactor,
   getVillage,
 } from './Villages.js';
@@ -119,7 +120,8 @@ function smoothstep01(edge0, edge1, x) {
 // the cell lookup from O(9) to O(villages.length) is the biggest single win.
 function groundHeightFast(x, z, villages) {
   const f = villageFlatFactorFromList(x, z, villages);
-  if (f === 0) return 0;
+  const padY = lastFlatPadY();
+  if (f === 0) return padY;
   let h = landElevation(x, z);
   const seaStrength = smoothstep01(SEA_THRESHOLD_LOW, SEA_THRESHOLD_HIGH, seaMaskAt(x, z));
   h -= seaStrength * SEA_DEPTH;
@@ -129,7 +131,7 @@ function groundHeightFast(x, z, villages) {
       h = LAND_FLOOR - 3 * (1 - Math.exp((h - LAND_FLOOR) / 20));
     }
   }
-  return h * f;
+  return padY + (h - padY) * f;
 }
 
 // Scatter-local village-area test that uses the precomputed list.

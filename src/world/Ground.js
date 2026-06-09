@@ -1,5 +1,5 @@
 import { landElevation } from './TerrainShape.js';
-import { villageFlatFactor } from './Villages.js';
+import { villageFlatFactor, lastFlatPadY } from './Villages.js';
 import { seaMaskAt } from './SeaMask.js';
 import {
   WATER_LEVEL,
@@ -28,7 +28,8 @@ function smoothstep(edge0, edge1, x) {
 //      independent of the per-biome lake spots.
 export function groundHeight(x, z) {
   const f = villageFlatFactor(x, z);
-  if (f === 0) return 0;
+  const padY = lastFlatPadY();
+  if (f === 0) return padY;
   let h = landElevation(x, z);
   // Sea layer — smoothstep shoreline, full depth out in open water.
   const seaStrength = smoothstep(SEA_THRESHOLD_LOW, SEA_THRESHOLD_HIGH, seaMaskAt(x, z));
@@ -45,7 +46,8 @@ export function groundHeight(x, z) {
     }
   }
 
-  return h * f;
+  // Blend from the airport pad height (flush plateau) to natural terrain.
+  return padY + (h - padY) * f;
 }
 
 // What the plane actually collides with: terrain, unless we're over a lake

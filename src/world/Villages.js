@@ -14,6 +14,7 @@ import {
   VILLAGE_BLEND,
   PLANE_BOTTOM_OFFSET,
   SEA_THRESHOLD_LOW,
+  WATER_LEVEL,
 } from '../config.js';
 import { seaMaskAt } from './SeaMask.js';
 import { landElevation } from './TerrainShape.js';
@@ -270,6 +271,12 @@ function buildVillage(gcx, gcz, isHome) {
     z2: airportZ + pz * sideSign * apronPerp,
   });
 
+  // Pad height: the airport's flat zone levels terrain to the LOCAL natural
+  // height at its center (a plateau flush with the surroundings), not to 0 —
+  // otherwise an airport on an upland carves a deep pit and the runway ends up
+  // "under a hill". Clamped above water so a coastal pad never sinks.
+  const padY = Math.max(WATER_LEVEL + 2, landElevation(airportX, airportZ));
+
   return {
     gcx,
     gcz,
@@ -279,6 +286,7 @@ function buildVillage(gcx, gcz, isHome) {
     sizeName,
     sideSign,
     perpOffset,
+    padY,
     houses,
     roads,
     villageRect: {
@@ -328,19 +336,27 @@ export function airportFlatFactorFor(x, z, v) {
   return Math.min(fA, fV);
 }
 
+// The pad height of the village that produced the last flat-factor result.
+// Read immediately after villageFlatFactor / villageFlatFactorFromList (single
+// thread, so this scratch is safe and avoids per-call allocation).
+let _flatPadY = 0;
+export function lastFlatPadY() { return _flatPadY; }
+
 export function villageFlatFactor(x, z) {
   const pcx = Math.floor(x / VILLAGE_CELL_SIZE);
   const pcz = Math.floor(z / VILLAGE_CELL_SIZE);
   let minF = 1;
+  let padY = 0;
   for (let dcx = -1; dcx <= 1; dcx++) {
     for (let dcz = -1; dcz <= 1; dcz++) {
       const v = getVillage(pcx + dcx, pcz + dcz);
       if (!v) continue;
       const f = airportFlatFactorFor(x, z, v);
-      if (f < minF) minF = f;
-      if (minF === 0) return 0;
+      if (f < minF) { minF = f; padY = v.padY || 0; }
+      if (minF === 0) { _flatPadY = v.padY || 0; return 0; }
     }
   }
+  _flatPadY = padY;
   return minF;
 }
 
@@ -395,13 +411,16 @@ export function villagesAffectingArea(minX, maxX, minZ, maxZ) {
 // lookups per call. Typical chunks pass an empty list and this returns 1
 // immediately.
 export function villageFlatFactorFromList(x, z, villages) {
-  if (villages.length === 0) return 1;
+  if (villages.length === 0) { _flatPadY = 0; return 1; }
   let minF = 1;
+  let padY = 0;
   for (let i = 0; i < villages.length; i++) {
-    const f = airportFlatFactorFor(x, z, villages[i]);
-    if (f < minF) minF = f;
-    if (minF === 0) return 0;
+    const v = villages[i];
+    const f = airportFlatFactorFor(x, z, v);
+    if (f < minF) { minF = f; padY = v.padY || 0; }
+    if (minF === 0) { _flatPadY = v.padY || 0; return 0; }
   }
+  _flatPadY = padY;
   return minF;
 }
 
@@ -467,7 +486,7 @@ export function getHomeSpawnPose() {
   const dirZ = Math.sin(v.angle);
   const position = new Vector3(
     v.airportX + dirX * offset,
-    PLANE_BOTTOM_OFFSET,
+    (v.padY || 0) + PLANE_BOTTOM_OFFSET,
     v.airportZ + dirZ * offset
   );
   const yaw = -Math.PI / 2 - v.angle;

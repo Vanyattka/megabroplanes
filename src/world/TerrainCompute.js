@@ -63,27 +63,32 @@ function rectFlatFactor(x, z, cx, cz, angle, halfL, halfW, blend) {
 // (300 m — long gentle runway approach); village rect uses VILLAGE_BLEND
 // (80 m — just enough flat pad for houses/roads) so mountains near the
 // village don't get their bases chopped off over a 300 m blend ring.
+// Pad height of the controlling village from the last villageFlatFactorFromData
+// call (scratch, read right after — single-threaded worker/main).
+let _padYFast = 0;
 function villageFlatFactorFromData(x, z, villages) {
-  if (villages.length === 0) return 1;
+  if (villages.length === 0) { _padYFast = 0; return 1; }
   const airportHalfL = RUNWAY_LENGTH / 2 + RUNWAY_MARGIN;
   const airportHalfW = RUNWAY_WIDTH / 2 + RUNWAY_MARGIN;
   let minF = 1;
+  let padY = 0;
   for (let i = 0; i < villages.length; i++) {
     const v = villages[i];
     const fA = rectFlatFactor(x, z, v.airportX, v.airportZ, v.angle, airportHalfL, airportHalfW, RUNWAY_BLEND);
-    if (fA === 0) return 0;
     const r = v.villageRect;
     const fV = rectFlatFactor(x, z, r.cx, r.cz, r.angle, r.halfL, r.halfW, VILLAGE_BLEND);
     const f = Math.min(fA, fV);
-    if (f < minF) minF = f;
-    if (minF === 0) return 0;
+    if (f < minF) { minF = f; padY = v.padY || 0; }
+    if (minF === 0) { _padYFast = v.padY || 0; return 0; }
   }
+  _padYFast = padY;
   return minF;
 }
 
 function groundHeightFast(x, z, villages) {
   const f = villageFlatFactorFromData(x, z, villages);
-  if (f === 0) return 0;
+  const padY = _padYFast;
+  if (f === 0) return padY;
   let h = landElevation(x, z);
   const seaStrength = smoothstep01(
     SEA_THRESHOLD_LOW,
@@ -97,7 +102,8 @@ function groundHeightFast(x, z, villages) {
       h = LAND_FLOOR - 3 * (1 - Math.exp((h - LAND_FLOOR) / 20));
     }
   }
-  return h * f;
+  // Blend from the airport pad height (flush plateau) to natural terrain.
+  return padY + (h - padY) * f;
 }
 
 // Compute terrain as raw Float32Arrays. Same code on main thread and in the

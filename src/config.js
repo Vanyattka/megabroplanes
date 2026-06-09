@@ -7,10 +7,19 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.2';
+export const GAME_VERSION = '0.2.1';
 export const GAME_CODENAME = 'Bravo';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.2.1',
+    codename: 'Bravo',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-09',
+    notes: [
+      'Bugfix: airports now level the ground to the local terrain height (a flush plateau) instead of carving down to zero — a regenerated seed no longer leaves the runway sunk in a pit "under a hill".',
+    ],
+  },
   {
     version: '0.2',
     codename: 'Bravo',

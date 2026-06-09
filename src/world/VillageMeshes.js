@@ -330,6 +330,7 @@ function buildAirportStructures(village) {
   const px = -Math.sin(village.angle);
   const pz = Math.cos(village.angle);
   const s = village.sideSign;
+  const pad = village.padY || 0; // airport flat-zone height (plateau level)
 
   // Position helper in runway-local coords (along runway, perpendicular to it).
   function worldPos(along, perp) {
@@ -345,17 +346,17 @@ function buildAirportStructures(village) {
   {
     const p = worldPos(-210, 42);
     const terminal = shadowed(new Mesh(airportGeom.terminal, terminalMat));
-    terminal.position.set(p.x, 0, p.z);
+    terminal.position.set(p.x, pad, p.z);
     terminal.rotation.y = village.angle;
     out.push(terminal);
 
     const tower = shadowed(new Mesh(airportGeom.tower, terminalMat));
-    tower.position.set(p.x, 5, p.z);
+    tower.position.set(p.x, pad + 5, p.z);
     tower.rotation.y = village.angle;
     out.push(tower);
 
     const towerTop = shadowed(new Mesh(airportGeom.towerTop, towerAccentMat));
-    towerTop.position.set(p.x, 10, p.z);
+    towerTop.position.set(p.x, pad + 10, p.z);
     towerTop.rotation.y = village.angle;
     out.push(towerTop);
   }
@@ -364,7 +365,7 @@ function buildAirportStructures(village) {
   {
     const p = worldPos(-160, 50);
     const hangar = shadowed(new Mesh(airportGeom.hangar, hangarMat));
-    hangar.position.set(p.x, 0, p.z);
+    hangar.position.set(p.x, pad, p.z);
     hangar.rotation.y = village.angle;
     out.push(hangar);
   }
@@ -373,7 +374,7 @@ function buildAirportStructures(village) {
   for (let i = 0; i < 2; i++) {
     const p = worldPos(-120 + i * 18, 42);
     const plane = buildPlaneMesh();
-    plane.position.set(p.x, PLANE_BOTTOM_OFFSET, p.z);
+    plane.position.set(p.x, pad + PLANE_BOTTOM_OFFSET, p.z);
     plane.rotation.y = -Math.PI / 2 - village.angle;
     out.push(plane);
   }
@@ -409,7 +410,7 @@ function buildRunwayMeshFor(village) {
   const geo = new PlaneGeometry(RUNWAY_LENGTH, RUNWAY_WIDTH);
   geo.rotateX(-Math.PI / 2);
   const mesh = new Mesh(geo, getRunwayMaterial());
-  mesh.position.set(village.airportX, RUNWAY_Y, village.airportZ);
+  mesh.position.set(village.airportX, (village.padY || 0) + RUNWAY_Y, village.airportZ);
   mesh.rotation.y = village.angle;
   buildRunwayLights(mesh);
   return mesh;
