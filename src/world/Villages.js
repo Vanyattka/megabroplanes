@@ -16,8 +16,7 @@ import {
   SEA_THRESHOLD_LOW,
 } from '../config.js';
 import { seaMaskAt } from './SeaMask.js';
-import { biomeAt } from './Biome.js';
-import { heightAt as noiseHeightAt } from './Noise.js';
+import { landElevation } from './TerrainShape.js';
 
 // Village center sits far enough from the runway that the village rect never
 // overlaps the runway's flat zone. Without this, cities (halfW=140) place
@@ -100,8 +99,7 @@ function buildVillage(gcx, gcz, isHome) {
         for (const perp of [-200, 0, 200]) {
           const px = c.x + fx * along - fz * perp;
           const pz = c.z + fz * along + fx * perp;
-          const b = biomeAt(px, pz);
-          score += Math.max(0, noiseHeightAt(px, pz) * b.amp + b.offset);
+          score += Math.max(0, landElevation(px, pz));
         }
       }
       if (score < bestScore) { bestScore = score; best = c; }
@@ -121,17 +119,14 @@ function buildVillage(gcx, gcz, isHome) {
     // happens to peak at the origin.
     if (seaMaskAt(airportX, airportZ) >= SEA_THRESHOLD_LOW) return null;
 
-    // Reject cells whose airport would sit in mountain terrain. An
+    // Reject cells whose airport would sit in mountainous terrain. An
     // airport's flat zone (320×35 m rect + 300 m blend) carves a ~600 m
-    // plateau through any mountain it lands on — very visible as a
-    // V-shaped wedge cut out of a ridge. Sampling the raw noise height
-    // at the 4 corners of the airport rect + center is enough to catch
-    // cells that would flatten a meaningful chunk of mountain. 22 m
-    // roughly corresponds to the amp*noise range of the hills biome, so
-    // anything above it is genuinely mountainous.
-    const b = biomeAt(airportX, airportZ);
-    if (b.type === 'mountain') return null;
-    const MOUNTAIN_HEIGHT_LIMIT = 22;
+    // plateau through any range it lands on — very visible as a V-shaped
+    // wedge cut out of a ridge. Sampling the natural land elevation at the
+    // airport center + a ring of probes catches cells that would flatten a
+    // meaningful chunk of upland/mountain. Villages should sit on plains
+    // and gentle hills, leaving the ranges pristine.
+    const MOUNTAIN_HEIGHT_LIMIT = 30;
     const probes = [
       [airportX, airportZ],
       [airportX + RUNWAY_LENGTH / 2, airportZ],
@@ -140,9 +135,7 @@ function buildVillage(gcx, gcz, isHome) {
       [airportX, airportZ - 60],
     ];
     for (const [sx, sz] of probes) {
-      const pb = biomeAt(sx, sz);
-      const h = noiseHeightAt(sx, sz) * pb.amp + pb.offset;
-      if (h > MOUNTAIN_HEIGHT_LIMIT) return null;
+      if (landElevation(sx, sz) > MOUNTAIN_HEIGHT_LIMIT) return null;
     }
   }
 

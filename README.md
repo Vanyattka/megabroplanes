@@ -32,12 +32,12 @@ Joystick on the left for pitch/roll, throttle slider on the right, plus on-scree
 ## Features
 
 - Three planes — Cessna (forgiving), Piper (balanced), Jet (sharp + afterburner exhaust + contrails at altitude). Body color is configurable.
-- Five biomes (lake, forest, hills, mountain, snowy alpine peaks) blended via low-frequency noise, with dedicated sea-mask noise carving multi-kilometre oceans across them.
+- Realistic procedural terrain — domain-warped landforms with genuinely flat plains, broad uplands/plateaus, and ridged mountain ranges (real ridgelines, not scaled hills). Climate biomes (desert / savanna / plains / forest / taiga / tundra / alpine) chosen by elevation × temperature × moisture, with sandy beaches, a climate-dependent snow line, and rock strata on cliffs. Sea-mask noise carves multi-kilometre oceans. Takeoff is always over open plains, with ranges in the distance.
 - Day/night cycle with pink sunrises/sunsets, a moon opposite the sun, runway lamps + plane nav lights at night.
-- Procedurally placed villages (small hamlets → khrushchevkas in cities) and stone ruins on mountain peaks. Roads connect nearby villages.
-- Procedural water with multi-octave ripples, sun glint, jet exhaust reflection, landing-light pool, and a plane-color glint disc when you skim low.
-- Volumetric god rays + lens flare on the sun, atmospheric Preetham sky on High preset, aerial perspective tinting distant terrain toward the horizon colour.
-- Multiplayer (see below).
+- Procedurally placed villages (small hamlets → khrushchevkas in cities) and stone ruins on high mountain peaks. Roads connect nearby villages.
+- Procedural water with multi-octave ripples, sun glint, jet exhaust reflection, landing-light pool, and a **real mirrored reflection of your plane** on the surface.
+- Volumetric god rays + lens flare, atmospheric Preetham sky on High preset, aerial perspective, a cinematic color-grade pass, FXAA, and adaptive bloom that glows more at dawn/dusk. All preset-gated.
+- Multiplayer: free-flight sandbox **plus a race lobby + combat races** — vote the plane/time, then race + dogfight on an isolated course (see below).
 - Photo mode (`P`): freeze the world, orbit camera freely with the mouse + scroll wheel, HUD hides itself.
 - Settings menu: graphics preset (Low / Medium / High), view distance, time-of-day preset, plane picker.
 
@@ -55,6 +55,16 @@ Then open the URL Vite prints (usually http://localhost:5173).
 Pick **MULTIPLAYER** on the main menu (top of the start screen). The toggle is persisted, so you only do this once.
 
 In MP mode the WebSocket client connects, every other player you see is real, and the time of day is synchronized across all clients (derived from `Date.now()`). The TIME OF DAY picker is greyed out — global time wins. Switch back to **SINGLEPLAYER** to disconnect, hide other players, and use your own time-of-day preset.
+
+### Race mode 🏁 (lobby + combat)
+
+While flying free in multiplayer, a **🏁 RACE LOBBY** button appears in the bottom-right box. It opens a **lobby** — a waiting room separate from the free-flight crowd where players gather, **vote** on the shared aircraft + time of day (majority wins), and pick their own body **color**. It launches when the **host** (first in) hits **START NOW**, or automatically: a fill countdown begins once ≥2 players are waiting and shortens as the lobby fills (up to 10). So two friends can start instantly, and a busy lobby launches on its own.
+
+On launch everyone is moved into an **isolated race session** — you only see the other racers, on your own course, away from the free-flight world, all flying the voted plane at the voted time. The server generates a loop of glowing checkpoint gates; fly through them in order (the next gate glows gold with a light beacon and is highlighted on the minimap).
+
+Races are **combat** races: **SPACE fires your guns** (visible tracers + gunfire sound), every plane has a **hull bar**, and crashes are always on. Shoot rivals down — at 0 HP they explode and respawn a few seconds later at the gate they were heading for. A live leaderboard tracks gate progress + kills-by-attrition; finishing pops a results board with medal placements and times, then everyone returns to free flight.
+
+The race + combat are **server-authoritative** (course, gate ordering, HP/damage, and finish times all come from the server). Wire additions: `join_lobby` / `lobby_set` / `lobby_start` / `cp` / `fire` / `hit` (client→server); `lobby` / `race` / `fire` (server→client). Snapshots are room-scoped so free-flight and race players never see each other.
 
 ### Hosting
 
@@ -80,6 +90,8 @@ The MP relay state is `{ position, quaternion, throttle, crashed, plane-type, bo
 - `src/camera/` — chase camera
 - `src/ui/` — HUD, menu, minimap, touch controls, graphics settings
 - `src/net/` — WebSocket client + remote plane manager
+- `src/race/` — race lobby + race mode (gates, checkpoint detection, combat, race HUD)
+- `src/combat/` — bullet/tracer pool + hit detection (race combat)
 - `src/audio/` — Web Audio engine + wind voices
 - `server/` — Node WebSocket relay (run with `npm run server`)
 - `docs/` — ARCHITECTURE / PHYSICS / WORLD / ROADMAP

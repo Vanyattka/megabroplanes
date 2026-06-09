@@ -177,7 +177,11 @@
       body.menu-open #settings,
       body.menu-open #horizon,
       body.menu-open #minimap,
-      body.menu-open #touch-ui { display: none; }
+      body.menu-open #touch-ui,
+      body.menu-open #race-status,
+      body.menu-open #race-countdown,
+      body.menu-open #race-leaderboard,
+      body.menu-open #race-results { display: none !important; }
       #menu-title {
         font-size: 72px;
         letter-spacing: 6px;
@@ -191,11 +195,18 @@
         opacity: 0.8;
         margin: 0;
       }
-      #menu-main, #menu-planes, #menu-settings {
+      #menu-main, #menu-planes, #menu-settings, #menu-notes {
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 16px;
+      }
+      #menu-version {
+        font-size: 12px;
+        letter-spacing: 2px;
+        opacity: 0.85;
+        color: #ffd23a;
+        margin-top: -10px;
       }
       .menu-btn {
         background: rgba(255, 255, 255, 0.1);
@@ -245,9 +256,20 @@
         font-style: italic;
         text-align: center;
       }
-      #menu-planes.hidden, #menu-settings.hidden { display: none; }
-      #menu-planes h2, #menu-settings h2 { margin: 0; font-size: 20px; letter-spacing: 3px; }
+      #menu-main.hidden, #menu-planes.hidden, #menu-settings.hidden, #menu-notes.hidden { display: none; }
+      #menu-planes h2, #menu-settings h2, #menu-notes h2 { margin: 0; font-size: 20px; letter-spacing: 3px; }
       #menu-planes h3, #menu-settings h3 { margin: 0; font-size: 14px; letter-spacing: 2px; opacity: 0.85; }
+      /* Release notes */
+      #menu-notes { max-width: 640px; }
+      #notes-list { width: 100%; max-height: 60vh; overflow-y: auto; text-align: left; }
+      .note-release { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.18); border-radius: 8px; padding: 14px 18px; margin-bottom: 14px; }
+      .note-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+      .note-ver { font-size: 18px; font-weight: bold; letter-spacing: 1px; }
+      .note-ver .nv-code { color: #ffd23a; }
+      .note-badge { font-size: 10px; font-weight: bold; letter-spacing: 1px; padding: 2px 7px; border-radius: 10px; background: rgba(255,204,64,0.22); border: 1px solid #ffcc40; color: #ffe0a0; }
+      .note-date { font-size: 11px; opacity: 0.6; margin-left: auto; }
+      .note-list { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
+      .note-list li { margin-bottom: 5px; }
       #plane-list {
         display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;
       }
@@ -352,6 +374,154 @@
         display: none;
         pointer-events: none;
       }
+      /* ---- Race mode HUD ---- */
+      #btn-race {
+        display: none;
+        background: rgba(255, 204, 64, 0.18);
+        border: 1px solid #ffcc40;
+        color: #fff;
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 11px;
+        font-weight: bold;
+        letter-spacing: 1px;
+        cursor: pointer;
+        margin-bottom: 6px;
+        width: 100%;
+      }
+      #btn-race:hover:not(:disabled) { background: rgba(255, 204, 64, 0.34); }
+      #btn-race:disabled { opacity: 0.55; cursor: default; border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.08); }
+      #race-status {
+        position: absolute;
+        top: 12px; left: 50%; transform: translateX(-50%);
+        color: #fff;
+        background: rgba(0, 0, 0, 0.42);
+        padding: 8px 18px;
+        border-radius: 8px;
+        font-family: monospace;
+        font-size: 15px;
+        letter-spacing: 1px;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+        display: none;
+        pointer-events: none;
+        border: 1px solid rgba(255, 204, 64, 0.5);
+      }
+      #race-status b { color: #ffd23a; }
+      #race-status .rs-fin { color: #39ff8a; font-weight: bold; }
+      #race-countdown {
+        position: absolute;
+        top: 38%; left: 50%; transform: translate(-50%, -50%);
+        color: #ffd23a;
+        font-family: monospace;
+        font-size: 120px;
+        font-weight: 900;
+        text-shadow: 0 4px 24px rgba(0,0,0,0.7), 0 0 40px rgba(255,210,58,0.6);
+        display: none;
+        pointer-events: none;
+      }
+      #race-leaderboard {
+        position: absolute;
+        top: 280px; left: 12px;
+        width: 160px;
+        color: #fff;
+        background: rgba(0, 0, 0, 0.42);
+        padding: 8px 10px;
+        border-radius: 6px;
+        font-family: monospace;
+        font-size: 12px;
+        line-height: 1.5;
+        display: none;
+        pointer-events: none;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+      }
+      #race-leaderboard .lb-title { font-weight: bold; letter-spacing: 2px; color: #ffd23a; margin-bottom: 4px; }
+      #race-leaderboard .lb-row { display: flex; justify-content: space-between; gap: 8px; }
+      #race-leaderboard .lb-row.me { color: #ffd23a; }
+      #race-results {
+        position: absolute;
+        top: 50%; left: 50%; transform: translate(-50%, -50%);
+        min-width: 280px;
+        color: #fff;
+        background: rgba(8, 16, 30, 0.82);
+        padding: 18px 26px;
+        border-radius: 10px;
+        font-family: monospace;
+        font-size: 16px;
+        line-height: 1.7;
+        display: none;
+        pointer-events: none;
+        text-align: center;
+        border: 1px solid rgba(255, 204, 64, 0.6);
+        box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+      }
+      #race-results .res-title { font-size: 22px; font-weight: bold; letter-spacing: 2px; margin-bottom: 10px; }
+      #race-results .res-row.me { color: #ffd23a; font-weight: bold; }
+      #race-results .res-foot { margin-top: 10px; font-size: 11px; opacity: 0.6; }
+      body.touch #race-leaderboard { top: 250px; }
+      /* HP bar (bottom-center during a race) */
+      #race-hp {
+        position: absolute;
+        bottom: 18px; left: 50%; transform: translateX(-50%);
+        width: 220px;
+        display: none;
+        pointer-events: none;
+        font-family: monospace;
+        text-align: center;
+      }
+      #race-hp .hp-label { color: #fff; font-size: 11px; letter-spacing: 3px; margin-bottom: 3px; text-shadow: 0 1px 2px rgba(0,0,0,0.7); }
+      #race-hp .hp-track { height: 12px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.5); border-radius: 6px; overflow: hidden; }
+      #race-hp .hp-fill { height: 100%; transition: width 0.12s linear; }
+      #race-crosshair {
+        position: absolute;
+        top: 50%; left: 50%; transform: translate(-50%, -50%);
+        color: rgba(255,255,255,0.7);
+        font-family: monospace;
+        font-size: 26px;
+        display: none;
+        pointer-events: none;
+        text-shadow: 0 0 4px rgba(0,0,0,0.8);
+      }
+      /* Race lobby overlay */
+      #lobby {
+        position: absolute; inset: 0; z-index: 60;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 16px; color: #fff;
+        background: linear-gradient(rgba(8,16,30,0.78), rgba(8,16,30,0.9));
+        font-family: monospace; overflow-y: auto; padding: 24px;
+      }
+      #lobby.hidden { display: none; }
+      #lobby-title { font-size: 40px; letter-spacing: 6px; margin: 0; font-weight: 900; }
+      #lobby-timer { margin: 0; font-size: 14px; letter-spacing: 1px; color: #ffd23a; }
+      .lobby-cols { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; max-width: 820px; }
+      .lobby-panel { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 14px 18px; min-width: 300px; }
+      .lobby-panel h3 { margin: 10px 0 6px; font-size: 12px; letter-spacing: 2px; opacity: 0.85; }
+      .lobby-panel h3:first-child { margin-top: 0; }
+      #lobby-members { min-height: 40px; font-size: 13px; }
+      .lm-row { display: flex; align-items: center; gap: 8px; justify-content: space-between; padding: 2px 0; }
+      .lm-row.me { color: #ffd23a; }
+      .lm-row .lm-vote { opacity: 0.7; font-size: 11px; }
+      .lm-dot { width: 11px; height: 11px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.5); flex: none; }
+      .lm-row > span:nth-child(2) { flex: 1; }
+      .lobby-opts { display: flex; gap: 8px; flex-wrap: wrap; }
+      .lobby-opt {
+        background: rgba(0,0,0,0.4); border: 2px solid rgba(255,255,255,0.3); color: #fff;
+        padding: 6px 12px; border-radius: 4px; font-family: monospace; font-size: 12px;
+        letter-spacing: 1px; cursor: pointer;
+      }
+      .lobby-opt:hover { border-color: rgba(255,204,64,0.7); }
+      .lobby-opt.sel { border-color: #ffcc40; background: rgba(255,204,64,0.2); }
+      .lobby-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+      .lobby-swatch { width: 26px; height: 26px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; box-shadow: inset 0 0 0 2px rgba(0,0,0,0.35); }
+      .lobby-swatch.sel { border-color: #fff; }
+      #lobby-vote-note { margin-top: 12px; font-size: 12px; color: #ffd23a; opacity: 0.9; }
+      .lobby-actions { display: flex; gap: 12px; }
+      #lobby-hint { font-size: 11px; opacity: 0.6; max-width: 600px; text-align: center; letter-spacing: 1px; }
+      /* In the lobby, hide the free-flight HUD behind the overlay. */
+      body.in-lobby #hud, body.in-lobby #hint, body.in-lobby #minimap,
+      body.in-lobby #horizon, body.in-lobby #settings, body.in-lobby #touch-ui { display: none !important; }
+      body.photo #race-hp, body.photo #race-crosshair, body.photo #lobby { display: none !important; }
+      body.menu-open #race-hp, body.menu-open #race-crosshair, body.menu-open #lobby { display: none !important; }
     </style>
   </head>
   <body>
@@ -363,9 +533,42 @@
     <div id="hint">S/W nose down/up · A/D roll · Q/E yaw · Shift/Ctrl throttle · Space brake · R reset · L lights · M mute · drag mouse to look</div>
     <div id="settings">
       <button id="btn-menu">&larr; MENU</button>
+      <button id="btn-race">🏁 START RACE</button>
       <label><input type="checkbox" id="crashes-enabled" checked /> crashes</label>
       <div id="mp-status" style="margin-top: 4px; opacity: 0.85;">mp: offline</div>
       <div id="audio-indicator" title="M to mute" style="margin-top: 2px; opacity: 0.85;">🔈 off</div>
+    </div>
+    <div id="race-status"></div>
+    <div id="race-countdown"></div>
+    <div id="race-hp"></div>
+    <div id="race-crosshair">+</div>
+    <div id="race-leaderboard"></div>
+    <div id="race-results"></div>
+    <div id="lobby" class="hidden">
+      <h1 id="lobby-title">RACE LOBBY</h1>
+      <p id="lobby-timer">Waiting for players …</p>
+      <div class="lobby-cols">
+        <div class="lobby-panel">
+          <h3>PILOTS</h3>
+          <div id="lobby-members"></div>
+        </div>
+        <div class="lobby-panel">
+          <h3>VOTE — AIRCRAFT</h3>
+          <div id="lobby-plane" class="lobby-opts"></div>
+          <h3>VOTE — TIME OF DAY</h3>
+          <div id="lobby-time" class="lobby-opts"></div>
+          <h3>VOTE — FLAGS</h3>
+          <div id="lobby-gates" class="lobby-opts"></div>
+          <h3>YOUR COLOR</h3>
+          <div id="lobby-color" class="lobby-swatches"></div>
+          <div id="lobby-vote-note"></div>
+        </div>
+      </div>
+      <div class="lobby-actions">
+        <button class="menu-btn primary" id="lobby-start">START NOW</button>
+        <button class="menu-btn" id="lobby-leave">LEAVE LOBBY</button>
+      </div>
+      <p id="lobby-hint">Everyone races the majority-voted aircraft + time on a separate course. Fly through the gold gates · SPACE shoots · don't get shot down.</p>
     </div>
     <div id="crash-banner">CRASHED — press R to respawn</div>
     <div id="photo-banner" style="display:none;position:absolute;top:14px;left:50%;transform:translateX(-50%);color:#fff;background:rgba(0,0,0,0.5);padding:8px 16px;border-radius:6px;font-family:monospace;font-size:12px;letter-spacing:2px;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,0.7);">PHOTO MODE — P to exit · drag to orbit · scroll to zoom</div>
@@ -377,11 +580,16 @@
       body.photo #minimap,
       body.photo #touch-ui,
       body.photo #audio-indicator,
-      body.photo #mp-status { display: none !important; }
+      body.photo #mp-status,
+      body.photo #race-status,
+      body.photo #race-countdown,
+      body.photo #race-leaderboard,
+      body.photo #race-results { display: none !important; }
     </style>
     <div id="menu">
       <h1 id="menu-title">MBPlanes</h1>
       <p id="menu-subtitle">fly · drift · explode · vibes</p>
+      <div id="menu-version"></div>
       <div id="menu-main">
         <div id="mode-toggle">
           <button class="mode-btn" data-mode="singleplayer">SINGLEPLAYER</button>
@@ -391,6 +599,7 @@
         <button class="menu-btn" id="btn-continue" hidden>CONTINUE</button>
         <button class="menu-btn" id="btn-planes">PLANES</button>
         <button class="menu-btn" id="btn-settings">SETTINGS</button>
+        <button class="menu-btn" id="btn-notes">RELEASE NOTES</button>
       </div>
       <div id="menu-planes" class="hidden">
         <h2>AIRCRAFT</h2>
@@ -409,6 +618,11 @@
         <h3>VIEW DISTANCE</h3>
         <div id="view-list"></div>
         <button class="menu-btn" id="btn-back-settings">BACK</button>
+      </div>
+      <div id="menu-notes" class="hidden">
+        <h2>RELEASE NOTES</h2>
+        <div id="notes-list"></div>
+        <button class="menu-btn" id="btn-back-notes">BACK</button>
       </div>
       <div id="menu-footer-hint">WASD · QE · shift/ctrl · space · R · drag mouse to look</div>
     </div>

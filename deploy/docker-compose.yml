@@ -1,0 +1,33 @@
+# megabroplanes deployment. Runs as its own compose project ("mbplanes") and
+# joins the EXISTING reverse-proxy network so the shared Caddy can route
+# mbplanes.com → this container. It does NOT bind 80/443 itself (Caddy owns
+# those). Bring up:  docker compose up -d --build
+#
+# The shared Caddy (realrating's deploy) must have a site block:
+#   mbplanes.com, www.mbplanes.com {
+#       encode gzip zstd
+#       reverse_proxy mbplanes:3030
+#   }
+# Caddy auto-issues the Let's Encrypt cert once mbplanes.com's A record points
+# here. reverse_proxy transparently upgrades the /ws WebSocket connection.
+
+name: mbplanes
+
+services:
+  mbplanes:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    environment:
+      - PORT=3030
+      - STATIC_DIR=/app/dist
+    expose:
+      - "3030"          # internal only — reached by Caddy on the shared network
+    restart: unless-stopped
+    networks:
+      - web
+
+networks:
+  web:
+    external: true
+    name: deploy_default   # the network the shared Caddy lives on

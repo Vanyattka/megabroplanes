@@ -18,6 +18,7 @@ import {
   JET_LIGHT_DISTANCE,
   JET_LIGHT_DECAY,
   JET_EXHAUST_OFFSET_Z,
+  PLANE_MAX_HP,
 } from '../config.js';
 
 export class Plane {
@@ -42,6 +43,9 @@ export class Plane {
     this.onGround = true;
     this.crashed = false;
     this.crashImpact = null;
+    // Combat (race mode). Full health outside combat.
+    this.maxHp = PLANE_MAX_HP;
+    this.hp = PLANE_MAX_HP;
 
     this.type = DEFAULT_PLANE_TYPE;
     this.color = DEFAULT_BODY_COLOR;
@@ -152,6 +156,29 @@ export class Plane {
     this._roughLogged = false;
     this.crashed = false;
     this.crashImpact = null;
+    this.hp = this.maxHp;
+    this.mesh.visible = true;
+    this.syncMesh();
+  }
+
+  // Spawn already in flight (used for race starts and post-death respawns):
+  // place at an arbitrary pose with an initial velocity and throttle, fully
+  // healed and un-crashed.
+  spawnAirborne(position, quaternion, velocity, throttle = 1) {
+    this.position.copy(position);
+    this.quaternion.copy(quaternion);
+    this.velocity.copy(velocity);
+    this.angularVelocity.set(0, 0, 0);
+    this._prevPosition.copy(position);
+    this._prevQuaternion.copy(quaternion);
+    this.renderPosition.copy(position);
+    this.renderQuaternion.copy(quaternion);
+    this.throttle = throttle;
+    this.onGround = false;
+    this._roughLogged = false;
+    this.crashed = false;
+    this.crashImpact = null;
+    this.hp = this.maxHp;
     this.mesh.visible = true;
     this.syncMesh();
   }

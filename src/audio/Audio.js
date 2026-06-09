@@ -143,6 +143,58 @@ export class Audio {
     this._windFilter.frequency.setTargetAtTime(windHz, now, k);
   }
 
+  // One-shot gunfire crack — a short bandpassed noise burst plus a low thump.
+  // Transient nodes are created per shot (cheap; fire rate caps how often).
+  gunShot() {
+    if (!this.started || !this.ctx || this._muted || this._suspended) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    if (!this._gunBuf) this._gunBuf = makeNoiseBuffer(ctx, 0.2);
+
+    const src = ctx.createBufferSource();
+    src.buffer = this._gunBuf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1400;
+    bp.Q.value = 0.7;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.42, now + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+    src.connect(bp); bp.connect(g); g.connect(this._master);
+    src.start(now); src.stop(now + 0.14);
+
+    const osc = ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(180, now);
+    osc.frequency.exponentialRampToValueAtTime(55, now + 0.09);
+    const g2 = ctx.createGain();
+    g2.gain.setValueAtTime(0.22, now);
+    g2.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
+    osc.connect(g2); g2.connect(this._master);
+    osc.start(now); osc.stop(now + 0.12);
+  }
+
+  // One-shot explosion boom — low rumble for crashes / kills.
+  boom() {
+    if (!this.started || !this.ctx || this._muted || this._suspended) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    if (!this._boomBuf) this._boomBuf = makeNoiseBuffer(ctx, 0.6);
+    const src = ctx.createBufferSource();
+    src.buffer = this._boomBuf;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(900, now);
+    lp.frequency.exponentialRampToValueAtTime(120, now + 0.4);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.6, now + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+    src.connect(lp); lp.connect(g); g.connect(this._master);
+    src.start(now); src.stop(now + 0.55);
+  }
+
   setMasterVolume(v) {
     if (!this._master || !this.ctx) return;
     const target = this._muted || this._suspended ? 0 : clamp(v, 0, 1);

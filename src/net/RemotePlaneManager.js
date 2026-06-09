@@ -56,6 +56,17 @@ export class RemotePlaneManager {
     };
   }
 
+  // Lightweight list of live remote planes for combat hit-testing:
+  // [{ id, position }]. Skips crashed/downed planes.
+  listTargets() {
+    const out = [];
+    for (const [id, v] of this.visuals) {
+      if (v.crashed) continue;
+      out.push({ id, position: v.mesh.position });
+    }
+    return out;
+  }
+
   update(dt) {
     const seen = new Set();
     for (const [id, r] of this.client.remotes) {

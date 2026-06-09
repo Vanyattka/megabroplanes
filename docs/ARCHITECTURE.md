@@ -33,15 +33,16 @@ megabroplanes/
     │   ├── Controls.js          # input → angular velocity / throttle
     │   └── PlaneMesh.js         # build a plane Group from primitives
     ├── world/
-    │   ├── Noise.js             # seeded simplex (terrain + biome + sea)
-    │   ├── Biome.js             # 5-band weighted blend (lake → highmountain)
+    │   ├── TerrainShape.js      # realistic landforms + climate biomes + surface color (pure, three-free)
+    │   ├── Noise.js             # legacy seeded simplex (kept; terrain now uses TerrainShape)
+    │   ├── Biome.js             # thin re-export of biomeAt from TerrainShape
     │   ├── SeaMask.js           # low-frequency ocean noise overlay
     │   ├── TerrainCompute.js    # heavy per-chunk math (positions/colors/normals)
     │   ├── Terrain.js           # Mesh assembly + shared MeshStandardMaterial
     │   ├── ChunkManager.js      # streams chunks, owns roads per chunk
     │   ├── ChunkWorker.js       # worker entry: TerrainCompute off the main thread
     │   ├── ChunkWorkerPool.js   # round-robin pool of workers + result queue
-    │   ├── Ground.js            # heightAt sampler used by physics
+    │   ├── Ground.js            # groundHeight sampler (TerrainShape + sea + village) used by physics
     │   ├── Runway.js            # home-airport flat zone + canvas-textured mesh
     │   ├── VillageData.js       # deterministic village placement per cell
     │   ├── Villages.js          # per-cell house/street layout
@@ -59,12 +60,13 @@ megabroplanes/
     │   ├── NightLights.js       # shared HDR materials for nav / runway lamps
     │   ├── Stars.js             # Points-based starfield, fades at night
     │   ├── Water.js             # ShaderMaterial: ripples + reflections
+    │   ├── WaterReflection.js   # mirrored-plane reflection on the water surface
     │   └── Clouds.js            # InstancedMesh of camera-facing quads
     ├── effects/
     │   ├── Explosion.js         # crash particle burst (instanced cubes)
     │   ├── JetExhaust.js        # throttle-scaled HDR particle plume
     │   ├── Contrails.js         # long-lived white vapor at altitude
-    │   └── PostFx.js            # bloom + vignette + god-rays/lens-flare
+    │   └── PostFx.js            # bloom + godrays/lensflare + vignette + color grade + FXAA
     ├── ui/
     │   ├── Hud.js               # speed/altitude/throttle DOM
     │   ├── Minimap.js           # 2D minimap
@@ -73,8 +75,13 @@ megabroplanes/
     │   ├── Touch.js             # joystick + throttle slider for mobile
     │   └── GraphicsSettings.js  # gfx + view-distance preset singletons
     ├── net/
-    │   ├── Client.js            # WebSocket client (auto-reconnect, setEnabled)
+    │   ├── Client.js            # WebSocket client (auto-reconnect, setEnabled, race msgs)
     │   └── RemotePlaneManager.js # remote-plane visuals + jet effects
+    ├── race/
+    │   ├── Lobby.js             # race lobby waiting room (vote plane/time, color, host start)
+    │   └── RaceManager.js       # isolated race: gates, checkpoint detection, combat, death/respawn, HUD
+    ├── combat/
+    │   └── Bullets.js           # pooled tracer projectiles + swept hit-testing (race combat)
     ├── audio/
     │   └── Audio.js             # Web Audio engine + wind voice
     └── debug/

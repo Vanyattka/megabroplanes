@@ -12,7 +12,6 @@
 import {
   CHUNK_SIZE,
   CHUNK_RESOLUTION,
-  SLOPE_ROCK_THRESHOLD,
   WATER_LEVEL,
   SEA_THRESHOLD_LOW,
   SEA_THRESHOLD_HIGH,
@@ -23,21 +22,8 @@ import {
   RUNWAY_BLEND,
   VILLAGE_BLEND,
 } from '../config.js';
-import { heightAt as noiseHeightAt } from './Noise.js';
-import { biomeAt } from './Biome.js';
+import { landElevation, surfaceColor } from './TerrainShape.js';
 import { seaMaskAt } from './SeaMask.js';
-
-const ROCK = [0.48, 0.44, 0.40];
-
-function colorByHeight(y) {
-  if (y < 1) return [0.85, 0.80, 0.60];       // sand
-  if (y < 10) return [0.35, 0.55, 0.25];      // grass
-  if (y < 25) return [0.40, 0.48, 0.30];      // darker grass
-  if (y < 45) return [0.55, 0.52, 0.45];      // scrub / exposed rock
-  if (y < 75) return [0.62, 0.58, 0.55];      // alpine stone
-  if (y < 110) return [0.88, 0.90, 0.94];     // packed snow (slight blue tint)
-  return [0.98, 0.98, 1.00];                  // summit snow
-}
 
 // Deterministic per-vertex hash in [0, 1). Used to perturb vertex colors
 // so each triangle reads as slightly different grass/rock instead of one
@@ -98,15 +84,14 @@ function villageFlatFactorFromData(x, z, villages) {
 function groundHeightFast(x, z, villages) {
   const f = villageFlatFactorFromData(x, z, villages);
   if (f === 0) return 0;
-  const b = biomeAt(x, z);
-  let h = noiseHeightAt(x, z) * b.amp + b.offset;
+  let h = landElevation(x, z);
   const seaStrength = smoothstep01(
     SEA_THRESHOLD_LOW,
     SEA_THRESHOLD_HIGH,
     seaMaskAt(x, z)
   );
   h -= seaStrength * SEA_DEPTH;
-  if (b.type !== 'lake' && seaStrength < 0.3) {
+  if (seaStrength < 0.3) {
     const LAND_FLOOR = WATER_LEVEL + 2;
     if (h < LAND_FLOOR) {
       h = LAND_FLOOR - 3 * (1 - Math.exp((h - LAND_FLOOR) / 20));
@@ -185,18 +170,16 @@ export function computeTerrainData(cx, cz, villages, detail) {
     }
   }
 
-  // Pass 3: colors (height band + rock on steep slopes + optional jitter).
+  // Pass 3: colors (climate biome palette + beach/snow/rock strata via
+  // TerrainShape.surfaceColor + optional per-vertex jitter).
   for (let iy = 0; iy < RES; iy++) {
+    const worldZ = chunkOriginZ + startLocal + iy * step;
     for (let ix = 0; ix < RES; ix++) {
       const idx = iy * RES + ix;
       const y = heights[idx];
       const ny = normals[idx * 3 + 1];
-      let rgb;
-      if (ny < SLOPE_ROCK_THRESHOLD && y > 0.5) {
-        rgb = ROCK;
-      } else {
-        rgb = colorByHeight(y);
-      }
+      const worldX = chunkOriginX + startLocal + ix * step;
+      const rgb = surfaceColor(worldX, worldZ, y, ny);
       let r = rgb[0], g = rgb[1], b = rgb[2];
       if (detail) {
         const localX = positions[idx * 3 + 0];

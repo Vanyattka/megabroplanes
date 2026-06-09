@@ -1,5 +1,32 @@
 // All tunable constants. No magic numbers in logic files.
 
+// ---------------------------------------------------------------------------
+// Version + release notes (main menu → RELEASE NOTES).
+// Scheme: v0.x while pre-1.0 (pre-release). Each release gets a NATO phonetic
+// codename (Alpha, Bravo, Charlie, …) — fitting for an aviation game.
+// On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
+// TOP of CHANGELOG (newest first).
+// ---------------------------------------------------------------------------
+export const GAME_VERSION = '0.1';
+export const GAME_CODENAME = 'Alpha';
+export const GAME_CHANNEL = 'PRE-RELEASE';
+export const CHANGELOG = [
+  {
+    version: '0.1',
+    codename: 'Alpha',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-09',
+    notes: [
+      'First public pre-release — expect rough edges, things will change.',
+      'World — realistic procedural terrain: flat plains, ridged mountain ranges, and climate biomes (desert · savanna · plains · forest · taiga · tundra · alpine), with beaches, snow lines, oceans, villages, ruins and roads.',
+      'Flight — three aircraft (Cessna · Piper · Jet) with arcade physics, chase + free-look camera, and a photo mode (P).',
+      'Looks — day/night cycle with pink sunrises/sunsets, water with real plane reflections, clouds, god rays, bloom, a cinematic color grade and FXAA. Low / Medium / High presets.',
+      'Multiplayer — fly together in free flight, or open the RACE LOBBY: vote the plane, time of day and flag count (8 / 16 / 32), then race an isolated checkpoint course.',
+      'Combat races — SPACE fires your guns; every plane has a hull bar; shoot rivals down and respawn at your next gate.',
+    ],
+  },
+];
+
 // Timing
 export const FIXED_STEP = 1 / 60;
 // Cap on how much sim time a single frame can absorb. Previously 0.1s meant
@@ -87,7 +114,7 @@ export const VILLAGE_SIZE_WEIGHTS = { small: 0.28, medium: 0.47, large: 0.20, ci
 // Ruins — old stone structures on mountain peaks.
 export const RUIN_CELL_SIZE = 2400;
 export const RUIN_CHANCE = 0.55;     // of a cell containing an eligible mountain peak
-export const RUIN_MIN_HEIGHT = 32;   // groundHeight must exceed this for a ruin to spawn
+export const RUIN_MIN_HEIGHT = 95;   // groundHeight must exceed this for a ruin to spawn (high peaks only)
 
 // Physics
 export const GRAVITY = 9.81;
@@ -232,7 +259,71 @@ export const SLOPE_ROCK_THRESHOLD = 0.72;
 // mountain. Parameters blend smoothly across boundaries.
 export const BIOME_SCALE = 0.0006;              // biome feature size (~1700m across)
 export const MAX_TREE_FACTOR = 2.8;             // forest peak tree-density multiplier
-export const MAX_ROCK_FACTOR = 2.5;             // mountain peak rock-density multiplier
+export const MAX_ROCK_FACTOR = 3.6;             // alpine peak rock-density multiplier
+
+// ---------------------------------------------------------------------------
+// Terrain shape — realistic multi-layer landform model (TerrainShape.js).
+// Replaces the old "uniform 3-octave noise × biome.amp" approach. Terrain is
+// composed analytically (no stateful per-chunk passes, so chunk seams stay
+// invisible and the worker output is bit-identical to the main thread):
+//   plains  = gentle low-amplitude undulation everywhere
+//   uplands = broad swells/plateaus where "continentalness" is high
+//   ranges  = ridged multifractal mountains, gated by a mountain-mask noise,
+//             so peaks form actual ridgelined ranges instead of round blobs.
+// Coordinates are domain-warped first so nothing looks grid-aligned.
+// ---------------------------------------------------------------------------
+export const TERRAIN_WARP_SCALE = 0.00055;   // domain-warp feature size
+export const TERRAIN_WARP_AMP = 130;         // meters of coordinate warp
+export const CONTINENT_SCALE = 0.00021;      // ~4800 m continents/uplands
+export const UPLAND_HEIGHT = 34;             // broad highland plateau lift (m)
+export const MOUNTAIN_MASK_SCALE = 0.0003;   // ~3300 m mountain ranges
+export const MOUNTAIN_MASK_LOW = 0.44;       // mask below this = no mountains
+export const MOUNTAIN_MASK_HIGH = 0.70;      // mask above this = full mountains
+export const MOUNTAIN_BASE_RISE = 60;        // broad massif lift under a range (m)
+export const MOUNTAIN_HEIGHT = 135;          // ridge height above the massif (m)
+export const RIDGE_SCALE = 0.0011;           // base ridge spacing (wider = broader peaks)
+export const RIDGE_OCTAVES = 4;
+export const RIDGE_LACUNARITY = 2.0;
+export const RIDGE_GAIN = 0.45;              // lower = less spiky high-frequency detail
+export const RIDGE_EXP = 0.85;               // <1 rounds ridgelines into broad massifs
+// Smooth dome blended in with the ridges so peaks read as big mountains with
+// rounded shoulders rather than thin needles. 0 = pure ridges, 1 = pure dome.
+export const RIDGE_DOME_MIX = 0.4;
+export const PLAINS_SCALE = 0.0042;          // flatland undulation feature size
+export const PLAINS_OCTAVES = 3;
+export const PLAINS_AMP = 7.5;               // gentle ± on the flats (m)
+export const FOOTHILL_AMP = 42;              // rolling hills in the transition band
+// Mountains are suppressed within this radius of the world origin so takeoff
+// from the home runway is always over open plains, with ranges in the distance.
+export const SPAWN_FLAT_RADIUS = 1500;
+export const SPAWN_FLAT_BLEND = 900;
+
+// Climate — two independent warped low-frequency fields drive biome choice.
+export const CLIMATE_SCALE = 0.00019;        // ~5300 m climate zones
+export const CLIMATE_WARP = 0.0006;
+
+// Snow / alpine coloring thresholds (meters).
+export const SNOW_LINE = 130;                // base snow elevation
+export const SNOW_LINE_VARIATION = 28;       // noise jitter on the snow line
+export const SNOW_SCALE = 0.0011;            // snow-line wobble feature size
+export const BEACH_HEIGHT = 2.6;             // sand band height above water level
+// Elevation proxies used by biomeAt() to pick alpine/highland vs lowland.
+export const ALPINE_ELEV = 98;
+export const HIGHLAND_ELEV = 52;
+
+// Climate-biome definitions. `color` is the base ground RGB (0..1); `trees`
+// and `rocks` are scatter-density factors (normalized by MAX_TREE_FACTOR /
+// MAX_ROCK_FACTOR in Scatter.js). Coloring (snow/beach/rock strata) is layered
+// on top per-vertex in TerrainShape.surfaceColor.
+export const BIOME_DEFS = {
+  desert:   { color: [0.80, 0.71, 0.49], trees: 0.04, rocks: 1.1 },
+  savanna:  { color: [0.66, 0.61, 0.33], trees: 0.55, rocks: 0.6 },
+  plains:   { color: [0.44, 0.57, 0.28], trees: 0.32, rocks: 0.4 },
+  forest:   { color: [0.22, 0.42, 0.19], trees: 2.7,  rocks: 0.5 },
+  taiga:    { color: [0.27, 0.42, 0.32], trees: 1.9,  rocks: 0.9 },
+  tundra:   { color: [0.57, 0.59, 0.50], trees: 0.12, rocks: 1.5 },
+  alpine:   { color: [0.50, 0.48, 0.46], trees: 0.05, rocks: 3.4 },
+};
 
 // Fog range factors — fog_near starts at VIEW_DISTANCE_M × FOG_NEAR_FRAC and
 // fades to full at VIEW_DISTANCE_M × FOG_FAR_FRAC. Keeps the terrain edge
@@ -400,8 +491,8 @@ export const DEBUG_PROFILER_REPORT_INTERVAL_MS = 5000;
 export const VILLAGE_BUILD_BUDGET_MS = 3;
 export const RUIN_BUILD_BUDGET_MS = 2;
 export const TREE_MIN_HEIGHT = 1.5;
-export const TREE_MAX_HEIGHT = 24;
-export const TREE_MAX_SLOPE = 0.35;   // tan of slope: reject steep spots
+export const TREE_MAX_HEIGHT = 90;    // treeline — forests climb the uplands + lower slopes
+export const TREE_MAX_SLOPE = 0.45;   // tan of slope: reject steep spots
 
 // Camera
 export const CAMERA_FOV = 70;
@@ -457,6 +548,8 @@ export const GRAPHICS_PRESETS = {
     contactShadows: false,
     terrainDetail: false,
     godrays: false,
+    fxaa: true,        // cheap edge AA — worth it even on Low
+    colorGrade: true,  // cinematic grade is ~free
     pixelRatio: 1.0,
     toneMappingExposure: 1.0,
   },
@@ -473,6 +566,8 @@ export const GRAPHICS_PRESETS = {
     contactShadows: true,
     terrainDetail: true,
     godrays: true,
+    fxaa: true,
+    colorGrade: true,
     pixelRatio: 1.0,
     toneMappingExposure: 1.0,
   },
@@ -489,11 +584,13 @@ export const GRAPHICS_PRESETS = {
     contactShadows: true,
     terrainDetail: true,
     godrays: true,
+    fxaa: true,
+    colorGrade: true,
     pixelRatio: Math.min(
       typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1,
       1.75
     ),
-    toneMappingExposure: 1.05,
+    toneMappingExposure: 1.06,
   },
 };
 export const DEFAULT_GFX_PRESET = 'medium';
@@ -514,8 +611,20 @@ export const SHADOW_NORMAL_BIAS = 0.08;
 export const BLOOM_STRENGTH = 0.45;
 export const BLOOM_RADIUS = 0.35;
 export const BLOOM_THRESHOLD = 2.0;
+// Adaptive bloom threshold: the HDR cutoff drops toward dusk/dawn so low sun
+// + warm sky glow bloom more (golden-hour bloom), then climbs back at noon so
+// the daytime scene stays crisp. Driven per-frame from sun intensity (main.js).
+export const BLOOM_THRESHOLD_DAY = 2.0;
+export const BLOOM_THRESHOLD_DUSK = 1.25;
 // Vignette strength (0 = off, ~0.35 is subtle).
 export const VIGNETTE_STRENGTH = 0.32;
+
+// Cinematic color grade — a final display-space pass (contrast + saturation +
+// gentle filmic shoulder + a touch of warmth). Cheap, runs on every preset.
+export const GRADE_CONTRAST = 1.07;
+export const GRADE_SATURATION = 1.14;
+export const GRADE_LIFT = 0.012;        // raise the blacks slightly (filmic)
+export const GRADE_TINT = [1.015, 1.0, 0.985]; // subtle warm cast
 
 // Volumetric god-rays (screen-space radial blur of bright pixels) and
 // lens flare — combined post-fx pass. SAMPLES is a shader `#define` so
@@ -610,6 +719,31 @@ export const ROAD_Y_OFFSET = 0.22;                      // lift above ground to 
 // by up to CURVE_AMPLITUDE fraction of the total length.
 export const ROAD_CURVE_CONTROLS = 3;                   // interior control points
 export const ROAD_CURVE_AMPLITUDE = 0.12;               // fraction of length
+
+// ---------------------------------------------------------------------------
+// Multiplayer race mode — checkpoint gates rendered in-world. The course
+// itself (gate positions + radius) is authored server-side and streamed to
+// every client; these are just the client-side visuals + pass tolerance.
+// ---------------------------------------------------------------------------
+export const RACE_RING_TUBE = 4.5;          // torus tube thickness (m)
+export const RACE_PASS_RADIUS = 75;         // distance to count a gate as cleared (m)
+export const RACE_BEACON_HEIGHT = 600;      // height of the "next gate" light pillar (m)
+export const RACE_GATE_OPTIONS = [8, 16, 32]; // votable flag counts in the lobby
+export const RACE_COLOR_NEXT = 0xffd23a;    // the gate you're heading for (gold, blooms)
+export const RACE_COLOR_FUTURE = 0x39c6ff;  // upcoming gates (cyan)
+export const RACE_COLOR_DONE = 0x39ff8a;    // gates already cleared (green)
+
+// Combat (race mode) — guns + HP. Damage/HP are server-authoritative; these
+// are the client-side feel (fire rate, tracer visuals, local hit tolerance).
+export const PLANE_MAX_HP = 100;
+export const GUN_FIRE_INTERVAL = 0.1;     // seconds between shots
+export const BULLET_SPEED = 460;          // m/s (added to plane velocity)
+export const BULLET_LIFE = 1.5;           // seconds before a tracer expires
+export const BULLET_MAX = 320;            // tracer pool size
+export const BULLET_HIT_RADIUS = 8;       // m from a plane center = hit
+export const BULLET_COLOR = 0xfff070;     // tracer color (HDR, blooms)
+export const GUN_MUZZLE_OFFSET = [0.9, -0.1, -4.4]; // local nose offset (wing guns mirror on X)
+export const RACE_RESPAWN_MS = 3500;      // matches server; downed → respawn delay
 
 // ---------------------------------------------------------------------------
 // Audio — procedural engine + wind through the Web Audio API.

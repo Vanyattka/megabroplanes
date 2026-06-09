@@ -1,6 +1,5 @@
-import { heightAt as noiseHeightAt } from './Noise.js';
+import { landElevation } from './TerrainShape.js';
 import { villageFlatFactor } from './Villages.js';
-import { biomeAt } from './Biome.js';
 import { seaMaskAt } from './SeaMask.js';
 import {
   WATER_LEVEL,
@@ -30,18 +29,16 @@ function smoothstep(edge0, edge1, x) {
 export function groundHeight(x, z) {
   const f = villageFlatFactor(x, z);
   if (f === 0) return 0;
-  const b = biomeAt(x, z);
-  let h = noiseHeightAt(x, z) * b.amp + b.offset;
+  let h = landElevation(x, z);
   // Sea layer — smoothstep shoreline, full depth out in open water.
   const seaStrength = smoothstep(SEA_THRESHOLD_LOW, SEA_THRESHOLD_HIGH, seaMaskAt(x, z));
   h -= seaStrength * SEA_DEPTH;
 
-  // In non-lake, non-sea biomes prevent the raw noise from dipping below
-  // water. Hills/mountain amplitudes alone can produce dips that look like
-  // lakes on the minimap but are really just "the forest floor sunk below
-  // water level". We softly compress below-floor values so the result
-  // asymptotes just under the land floor — no flat plateau, no fake ponds.
-  if (b.type !== 'lake' && seaStrength < 0.3) {
+  // Outside the sea, keep the land from dipping below water — gentle plains
+  // undulation occasionally crosses the waterline, which would read as fake
+  // ponds. Softly compress below-floor values so they asymptote just under
+  // the land floor (no flat plateau, no false lakes).
+  if (seaStrength < 0.3) {
     const LAND_FLOOR = WATER_LEVEL + 2;
     if (h < LAND_FLOOR) {
       h = LAND_FLOOR - 3 * (1 - Math.exp((h - LAND_FLOOR) / 20));
