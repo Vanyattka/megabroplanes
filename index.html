@@ -195,11 +195,18 @@
         opacity: 0.8;
         margin: 0;
       }
-      #menu-main, #menu-planes, #menu-settings {
+      #menu-main, #menu-planes, #menu-settings, #menu-notes {
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 16px;
+      }
+      #menu-version {
+        font-size: 12px;
+        letter-spacing: 2px;
+        opacity: 0.85;
+        color: #ffd23a;
+        margin-top: -10px;
       }
       .menu-btn {
         background: rgba(255, 255, 255, 0.1);
@@ -249,9 +256,20 @@
         font-style: italic;
         text-align: center;
       }
-      #menu-planes.hidden, #menu-settings.hidden { display: none; }
-      #menu-planes h2, #menu-settings h2 { margin: 0; font-size: 20px; letter-spacing: 3px; }
+      #menu-main.hidden, #menu-planes.hidden, #menu-settings.hidden, #menu-notes.hidden { display: none; }
+      #menu-planes h2, #menu-settings h2, #menu-notes h2 { margin: 0; font-size: 20px; letter-spacing: 3px; }
       #menu-planes h3, #menu-settings h3 { margin: 0; font-size: 14px; letter-spacing: 2px; opacity: 0.85; }
+      /* Release notes */
+      #menu-notes { max-width: 640px; }
+      #notes-list { width: 100%; max-height: 60vh; overflow-y: auto; text-align: left; }
+      .note-release { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.18); border-radius: 8px; padding: 14px 18px; margin-bottom: 14px; }
+      .note-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+      .note-ver { font-size: 18px; font-weight: bold; letter-spacing: 1px; }
+      .note-ver .nv-code { color: #ffd23a; }
+      .note-badge { font-size: 10px; font-weight: bold; letter-spacing: 1px; padding: 2px 7px; border-radius: 10px; background: rgba(255,204,64,0.22); border: 1px solid #ffcc40; color: #ffe0a0; }
+      .note-date { font-size: 11px; opacity: 0.6; margin-left: auto; }
+      .note-list { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
+      .note-list li { margin-bottom: 5px; }
       #plane-list {
         display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;
       }
@@ -571,6 +589,7 @@
     <div id="menu">
       <h1 id="menu-title">MBPlanes</h1>
       <p id="menu-subtitle">fly · drift · explode · vibes</p>
+      <div id="menu-version"></div>
       <div id="menu-main">
         <div id="mode-toggle">
           <button class="mode-btn" data-mode="singleplayer">SINGLEPLAYER</button>
@@ -580,6 +599,7 @@
         <button class="menu-btn" id="btn-continue" hidden>CONTINUE</button>
         <button class="menu-btn" id="btn-planes">PLANES</button>
         <button class="menu-btn" id="btn-settings">SETTINGS</button>
+        <button class="menu-btn" id="btn-notes">RELEASE NOTES</button>
       </div>
       <div id="menu-planes" class="hidden">
         <h2>AIRCRAFT</h2>
@@ -598,6 +618,11 @@
         <h3>VIEW DISTANCE</h3>
         <div id="view-list"></div>
         <button class="menu-btn" id="btn-back-settings">BACK</button>
+      </div>
+      <div id="menu-notes" class="hidden">
+        <h2>RELEASE NOTES</h2>
+        <div id="notes-list"></div>
+        <button class="menu-btn" id="btn-back-notes">BACK</button>
       </div>
       <div id="menu-footer-hint">WASD · QE · shift/ctrl · space · R · drag mouse to look</div>
     </div>

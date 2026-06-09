@@ -7,6 +7,10 @@ import {
   DEFAULT_TIME_PRESET,
   GRAPHICS_PRESETS,
   VIEW_DISTANCE_PRESETS,
+  CHANGELOG,
+  GAME_VERSION,
+  GAME_CODENAME,
+  GAME_CHANNEL,
 } from '../config.js';
 import { PlanePreview } from './PlanePreview.js';
 import { gfx, view } from './GraphicsSettings.js';
@@ -44,6 +48,7 @@ export class Menu {
     this.main = document.getElementById('menu-main');
     this.planesScreen = document.getElementById('menu-planes');
     this.settingsScreen = document.getElementById('menu-settings');
+    this.notesScreen = document.getElementById('menu-notes');
     this.planeList = document.getElementById('plane-list');
     this.colorList = document.getElementById('color-list');
     this.timeList = document.getElementById('time-list');
@@ -69,6 +74,8 @@ export class Menu {
     this._renderTimePresets();
     this._renderGfxPresets();
     this._renderViewPresets();
+    this._renderVersion();
+    this._renderNotes();
     this._wireButtons();
     this._wireModeToggle();
     this._refreshModeUI();
@@ -121,12 +128,14 @@ export class Menu {
     this.main.classList.remove('hidden');
     this.planesScreen.classList.add('hidden');
     this.settingsScreen.classList.add('hidden');
+    if (this.notesScreen) this.notesScreen.classList.add('hidden');
     this._stopRaf();
   }
   _showPlanes() {
     this.main.classList.add('hidden');
     this.planesScreen.classList.remove('hidden');
     this.settingsScreen.classList.add('hidden');
+    if (this.notesScreen) this.notesScreen.classList.add('hidden');
     this._ensurePreviews();
     this._startRaf();
   }
@@ -134,7 +143,37 @@ export class Menu {
     this.main.classList.add('hidden');
     this.planesScreen.classList.add('hidden');
     this.settingsScreen.classList.remove('hidden');
+    if (this.notesScreen) this.notesScreen.classList.add('hidden');
     this._stopRaf();
+  }
+  _showNotes() {
+    this.main.classList.add('hidden');
+    this.planesScreen.classList.add('hidden');
+    this.settingsScreen.classList.add('hidden');
+    if (this.notesScreen) this.notesScreen.classList.remove('hidden');
+    this._stopRaf();
+  }
+
+  _renderVersion() {
+    const el = document.getElementById('menu-version');
+    if (el) el.textContent = `v${GAME_VERSION} “${GAME_CODENAME}” · ${GAME_CHANNEL}`;
+  }
+
+  _renderNotes() {
+    const list = document.getElementById('notes-list');
+    if (!list) return;
+    const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    list.innerHTML = (CHANGELOG || []).map((r) => {
+      const items = (r.notes || []).map((n) => `<li>${esc(n)}</li>`).join('');
+      return `<div class="note-release">
+        <div class="note-head">
+          <span class="note-ver">v${esc(r.version)} <span class="nv-code">“${esc(r.codename)}”</span></span>
+          ${r.channel ? `<span class="note-badge">${esc(r.channel)}</span>` : ''}
+          ${r.date ? `<span class="note-date">${esc(r.date)}</span>` : ''}
+        </div>
+        <ul class="note-list">${items}</ul>
+      </div>`;
+    }).join('');
   }
 
   _renderPlaneCards() {
@@ -391,7 +430,11 @@ export class Menu {
     }
     document.getElementById('btn-planes').addEventListener('click', () => this._showPlanes());
     document.getElementById('btn-settings').addEventListener('click', () => this._showSettings());
+    const notesBtn = document.getElementById('btn-notes');
+    if (notesBtn) notesBtn.addEventListener('click', () => this._showNotes());
     document.getElementById('btn-back-planes').addEventListener('click', () => this._showMain());
     document.getElementById('btn-back-settings').addEventListener('click', () => this._showMain());
+    const backNotes = document.getElementById('btn-back-notes');
+    if (backNotes) backNotes.addEventListener('click', () => this._showMain());
   }
 }

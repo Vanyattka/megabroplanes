@@ -1,5 +1,32 @@
 // All tunable constants. No magic numbers in logic files.
 
+// ---------------------------------------------------------------------------
+// Version + release notes (main menu → RELEASE NOTES).
+// Scheme: v0.x while pre-1.0 (pre-release). Each release gets a NATO phonetic
+// codename (Alpha, Bravo, Charlie, …) — fitting for an aviation game.
+// On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
+// TOP of CHANGELOG (newest first).
+// ---------------------------------------------------------------------------
+export const GAME_VERSION = '0.1';
+export const GAME_CODENAME = 'Alpha';
+export const GAME_CHANNEL = 'PRE-RELEASE';
+export const CHANGELOG = [
+  {
+    version: '0.1',
+    codename: 'Alpha',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-09',
+    notes: [
+      'First public pre-release — expect rough edges, things will change.',
+      'World — realistic procedural terrain: flat plains, ridged mountain ranges, and climate biomes (desert · savanna · plains · forest · taiga · tundra · alpine), with beaches, snow lines, oceans, villages, ruins and roads.',
+      'Flight — three aircraft (Cessna · Piper · Jet) with arcade physics, chase + free-look camera, and a photo mode (P).',
+      'Looks — day/night cycle with pink sunrises/sunsets, water with real plane reflections, clouds, god rays, bloom, a cinematic color grade and FXAA. Low / Medium / High presets.',
+      'Multiplayer — fly together in free flight, or open the RACE LOBBY: vote the plane, time of day and flag count (8 / 16 / 32), then race an isolated checkpoint course.',
+      'Combat races — SPACE fires your guns; every plane has a hull bar; shoot rivals down and respawn at your next gate.',
+    ],
+  },
+];
+
 // Timing
 export const FIXED_STEP = 1 / 60;
 // Cap on how much sim time a single frame can absorb. Previously 0.1s meant
