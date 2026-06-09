@@ -22,7 +22,7 @@ import {
   RUNWAY_BLEND,
   VILLAGE_BLEND,
 } from '../config.js';
-import { landElevation, surfaceColor } from './TerrainShape.js';
+import { landElevation, surfaceColor, spawnFlat01 } from './TerrainShape.js';
 import { seaMaskAt } from './SeaMask.js';
 
 // Deterministic per-vertex hash in [0, 1). Used to perturb vertex colors
@@ -94,7 +94,7 @@ function groundHeightFast(x, z, villages) {
     SEA_THRESHOLD_LOW,
     SEA_THRESHOLD_HIGH,
     seaMaskAt(x, z)
-  );
+  ) * spawnFlat01(x, z);
   h -= seaStrength * SEA_DEPTH;
   if (seaStrength < 0.3) {
     const LAND_FLOOR = WATER_LEVEL + 2;

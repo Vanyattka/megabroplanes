@@ -7,10 +7,21 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.2.2';
+export const GAME_VERSION = '0.2.3';
 export const GAME_CODENAME = 'Bravo';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.2.3',
+    codename: 'Bravo',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-10',
+    notes: [
+      'Worldgen fixes: the home spawn is now always a flat, dry clearing (no spawning on a hillside, in a pit, or on a coastal platform — for any seed).',
+      'Villages no longer generate on or over water — the whole settlement must sit on dry land (no half-submerged or floating houses).',
+      'Roads now run alongside runways (to the apron) instead of crossing them.',
+    ],
+  },
   {
     version: '0.2.2',
     codename: 'Bravo',

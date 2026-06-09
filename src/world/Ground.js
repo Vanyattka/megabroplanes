@@ -1,4 +1,4 @@
-import { landElevation } from './TerrainShape.js';
+import { landElevation, spawnFlat01 } from './TerrainShape.js';
 import { villageFlatFactor, lastFlatPadY } from './Villages.js';
 import { seaMaskAt } from './SeaMask.js';
 import {
@@ -31,8 +31,9 @@ export function groundHeight(x, z) {
   const padY = lastFlatPadY();
   if (f === 0) return padY;
   let h = landElevation(x, z);
-  // Sea layer — smoothstep shoreline, full depth out in open water.
-  const seaStrength = smoothstep(SEA_THRESHOLD_LOW, SEA_THRESHOLD_HIGH, seaMaskAt(x, z));
+  // Sea layer — smoothstep shoreline, full depth out in open water. Suppressed
+  // near the world origin so the home spawn is always on dry land.
+  const seaStrength = smoothstep(SEA_THRESHOLD_LOW, SEA_THRESHOLD_HIGH, seaMaskAt(x, z)) * spawnFlat01(x, z);
   h -= seaStrength * SEA_DEPTH;
 
   // Outside the sea, keep the land from dipping below water — gentle plains

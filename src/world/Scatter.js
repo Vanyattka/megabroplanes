@@ -29,7 +29,7 @@ import {
   RUNWAY_MARGIN,
   VILLAGE_CELL_SIZE,
 } from '../config.js';
-import { landElevation, biomeAt } from './TerrainShape.js';
+import { landElevation, biomeAt, spawnFlat01 } from './TerrainShape.js';
 import { seaMaskAt } from './SeaMask.js';
 import { seedKey } from './WorldSeed.js';
 import {
@@ -123,7 +123,7 @@ function groundHeightFast(x, z, villages) {
   const padY = lastFlatPadY();
   if (f === 0) return padY;
   let h = landElevation(x, z);
-  const seaStrength = smoothstep01(SEA_THRESHOLD_LOW, SEA_THRESHOLD_HIGH, seaMaskAt(x, z));
+  const seaStrength = smoothstep01(SEA_THRESHOLD_LOW, SEA_THRESHOLD_HIGH, seaMaskAt(x, z)) * spawnFlat01(x, z);
   h -= seaStrength * SEA_DEPTH;
   if (seaStrength < 0.3) {
     const LAND_FLOOR = WATER_LEVEL + 2;

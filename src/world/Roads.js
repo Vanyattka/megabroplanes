@@ -20,7 +20,8 @@ import {
   ROAD_CURVE_CONTROLS,
   ROAD_CURVE_AMPLITUDE,
   VILLAGE_CELL_SIZE,
-  RUNWAY_LENGTH,
+  RUNWAY_WIDTH,
+  RUNWAY_MARGIN,
   WATER_LEVEL,
 } from '../config.js';
 import { getVillage } from './Villages.js';
@@ -188,6 +189,16 @@ function villageCellsForChunk(cx, cz) {
   return out;
 }
 
+// A point on the apron BESIDE the runway (on the village side), so roads
+// approach the airport without crossing the runway strip itself.
+function apronPoint(v) {
+  const px = -Math.sin(v.angle);
+  const pz = Math.cos(v.angle);
+  const off = RUNWAY_WIDTH / 2 + RUNWAY_MARGIN + 8;
+  const s = v.sideSign || 1;
+  return { x: v.airportX + px * s * off, z: v.airportZ + pz * s * off };
+}
+
 // Roads are "owned" by the chunk containing the from-village's airport. For
 // each village whose airport falls inside (cx, cz), emit roads to nearby
 // villages (with a canonical ordering to avoid doubling) and optionally a
@@ -217,22 +228,25 @@ function roadsOwnedByChunk(cx, cz) {
         const ddz = n.airportZ - v.airportZ;
         const dist2 = ddx * ddx + ddz * ddz;
         if (dist2 > ROAD_MAX_VILLAGE_LINK_DISTANCE * ROAD_MAX_VILLAGE_LINK_DISTANCE) continue;
-        out.push({
-          ax: v.airportX, az: v.airportZ,
-          bx: n.airportX, bz: n.airportZ,
-        });
+        // Connect apron-to-apron so the ribbon runs beside each runway, not
+        // across it.
+        const ap = apronPoint(v);
+        const bp = apronPoint(n);
+        out.push({ ax: ap.x, az: ap.z, bx: bp.x, bz: bp.z });
       }
     }
 
     if (!v.isHome) {
       const dd2 = v.airportX * v.airportX + v.airportZ * v.airportZ;
       if (dd2 < ROAD_RUNWAY_DISTANCE * ROAD_RUNWAY_DISTANCE) {
-        const ex1 = RUNWAY_LENGTH / 2;
-        const ex2 = -RUNWAY_LENGTH / 2;
-        const d1 = (v.airportX - ex1) ** 2 + v.airportZ ** 2;
-        const d2 = (v.airportX - ex2) ** 2 + v.airportZ ** 2;
-        const ex = d1 < d2 ? ex1 : ex2;
-        out.push({ ax: v.airportX, az: v.airportZ, bx: ex, bz: 0 });
+        // Spur to the home airport's apron (its actual position/orientation),
+        // not the runway centerline.
+        const home = getVillage(0, 0);
+        if (home) {
+          const ap = apronPoint(v);
+          const hp = apronPoint(home);
+          out.push({ ax: ap.x, az: ap.z, bx: hp.x, bz: hp.z });
+        }
       }
     }
   }

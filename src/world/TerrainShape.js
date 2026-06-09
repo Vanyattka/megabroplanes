@@ -137,20 +137,22 @@ function warp(x, z) {
   return [wx, wz];
 }
 
+// 0 at the world origin, ramping to 1 past SPAWN_FLAT_RADIUS. Used to flatten
+// (and dry out, in the height/sea code) the home region so the starting
+// airport always has level, dry ground regardless of seed — no spawning on a
+// hillside or a coastal platform.
+export function spawnFlat01(x, z) {
+  const d = Math.sqrt(x * x + z * z);
+  return smoothstep(SPAWN_FLAT_RADIUS, SPAWN_FLAT_RADIUS + SPAWN_FLAT_BLEND, d);
+}
+
 // How "mountainous" a spot is, 0..1, after the mask threshold + spawn
 // suppression. Shared by landElevation and the biome elevation proxy so they
 // agree on where ranges are.
 function mountainAmount(wx, wz, x, z) {
   const mask = mtnMaskNoise(wx * MOUNTAIN_MASK_SCALE, wz * MOUNTAIN_MASK_SCALE) * 0.5 + 0.5;
-  let amt = smoothstep(MOUNTAIN_MASK_LOW, MOUNTAIN_MASK_HIGH, mask);
-  // Keep the home area (world origin) gentle so the first takeoff is over plains.
-  const originDist = Math.sqrt(x * x + z * z);
-  const spawnFlat = smoothstep(
-    SPAWN_FLAT_RADIUS,
-    SPAWN_FLAT_RADIUS + SPAWN_FLAT_BLEND,
-    originDist
-  );
-  return amt * spawnFlat;
+  const amt = smoothstep(MOUNTAIN_MASK_LOW, MOUNTAIN_MASK_HIGH, mask);
+  return amt * spawnFlat01(x, z);
 }
 
 // Broad continental swell (uplands/plateaus), 0..UPLAND_HEIGHT-ish.
@@ -163,12 +165,14 @@ function continentSwell(wx, wz) {
 export function landElevation(x, z) {
   if (profiler.enabled) profiler.counters.heightAt++;
   const [wx, wz] = warp(x, z);
+  const sf = spawnFlat01(x, z); // 0 at origin → 1 far; flattens the home area
 
   // Gentle undulation everywhere — this is what genuine flat plains look like.
-  const plains = fbm(plainsNoise, wx, wz, PLAINS_OCTAVES, PLAINS_SCALE) * PLAINS_AMP;
+  // Damped near origin so the spawn clearing is genuinely level.
+  const plains = fbm(plainsNoise, wx, wz, PLAINS_OCTAVES, PLAINS_SCALE) * PLAINS_AMP * (0.2 + 0.8 * sf);
 
-  // Broad highland swells.
-  const upland = continentSwell(wx, wz);
+  // Broad highland swells — suppressed near origin so spawn isn't on an upland.
+  const upland = continentSwell(wx, wz) * sf;
 
   // Mountains: ridged crests sitting on a lifted massif, gated by the mask.
   const mtn = mountainAmount(wx, wz, x, z);
