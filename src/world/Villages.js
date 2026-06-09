@@ -75,15 +75,16 @@ function buildVillage(gcx, gcz, isHome) {
   let airportZ;
   let angle;
   if (isHome) {
-    // Home airport: search a small grid of candidate positions around the
-    // origin cell and pick the flattest. Running just once at module load,
-    // so the cost is negligible. Without this, the starting airport
-    // sometimes landed on a ridge and its flatten zone visibly sliced
-    // adjacent hills near the spawn point.
+    // Home airport: search a grid of candidate positions/orientations around
+    // the origin and pick the FLATTEST footprint (smallest height spread), not
+    // merely the lowest. Picking "lowest" landed the strip at the foot of a
+    // slope, so its flat plateau cut a wedge into the rising hill and the
+    // player spawned half-buried. Measuring the height range over the whole
+    // runway-plus-blend footprint finds genuinely level ground. Runs once at
+    // module load — cost is a few ms.
     const candidates = [];
-    const STEP = 200;
-    for (let dx = -400; dx <= 400; dx += STEP) {
-      for (let dz = -400; dz <= 400; dz += STEP) {
+    for (let dx = -600; dx <= 600; dx += 200) {
+      for (let dz = -600; dz <= 600; dz += 200) {
         for (const a of [0, Math.PI / 2]) {
           candidates.push({ x: dx, z: dz, angle: a });
         }
@@ -93,17 +94,24 @@ function buildVillage(gcx, gcz, isHome) {
     let bestScore = Infinity;
     for (const c of candidates) {
       // Rotate probe offsets with candidate angle so we're measuring the
-      // RUNWAY's flat zone, not a fixed axis-aligned one.
+      // RUNWAY's flat zone, not a fixed axis-aligned one. Cover the full strip
+      // length + blend ring so a hill just past the runway end is penalized.
       const fx = Math.cos(c.angle);
       const fz = Math.sin(c.angle);
-      let score = 0;
-      for (const along of [-300, -150, 0, 150, 300]) {
-        for (const perp of [-200, 0, 200]) {
+      let lo = Infinity, hi = -Infinity, sum = 0, n = 0;
+      for (const along of [-450, -300, -150, 0, 150, 300, 450]) {
+        for (const perp of [-250, 0, 250]) {
           const px = c.x + fx * along - fz * perp;
           const pz = c.z + fz * along + fx * perp;
-          score += Math.max(0, landElevation(px, pz));
+          const h = landElevation(px, pz);
+          if (h < lo) lo = h;
+          if (h > hi) hi = h;
+          sum += Math.max(0, h);
+          n++;
         }
       }
+      // Flatness dominates; a small lowness term breaks ties toward valleys.
+      const score = (hi - lo) + 0.12 * (sum / n);
       if (score < bestScore) { bestScore = score; best = c; }
     }
     airportX = best.x;

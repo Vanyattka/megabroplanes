@@ -7,10 +7,19 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.2.1';
+export const GAME_VERSION = '0.2.2';
 export const GAME_CODENAME = 'Bravo';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.2.2',
+    codename: 'Bravo',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-10',
+    notes: [
+      'Bugfix: the home airport now picks the flattest nearby ground (not just the lowest), so a regenerated seed no longer spawns you on the slope/edge of a hill with the runway cutting into it.',
+    ],
+  },
   {
     version: '0.2.1',
     codename: 'Bravo',
