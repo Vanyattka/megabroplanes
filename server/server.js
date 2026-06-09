@@ -1,8 +1,46 @@
 import { WebSocketServer } from 'ws';
+import http from 'http';
+import { readFile } from 'fs/promises';
+import { join, normalize, extname } from 'path';
 
 const PORT = Number(process.env.PORT) || 3030;
 const TICK_HZ = 20;
 const IDLE_KICK_MS = 20000;
+// When set, the same server also serves the built game (static dist) over HTTP,
+// so one container/process can host both the page and the WebSocket relay
+// behind a single reverse-proxy host. Unset = WebSocket-only (legacy nginx box).
+const STATIC_DIR = process.env.STATIC_DIR || null;
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg',
+  '.ico': 'image/x-icon', '.webp': 'image/webp', '.woff2': 'font/woff2', '.map': 'application/json',
+};
+
+async function serveStatic(req, res) {
+  if (!STATIC_DIR) { res.writeHead(426); res.end('WebSocket endpoint'); return; }
+  let urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+  if (urlPath === '/') urlPath = '/index.html';
+  let filePath = normalize(join(STATIC_DIR, urlPath));
+  // Path-traversal guard.
+  if (!filePath.startsWith(STATIC_DIR)) { res.writeHead(403); res.end('forbidden'); return; }
+  let data;
+  try {
+    data = await readFile(filePath);
+  } catch {
+    // SPA fallback to index.html for unknown routes.
+    try { filePath = join(STATIC_DIR, 'index.html'); data = await readFile(filePath); }
+    catch { res.writeHead(404); res.end('not found'); return; }
+  }
+  const ext = extname(filePath);
+  // Hashed assets are immutable; the entry HTML must always re-fetch.
+  const cache = filePath.includes('/assets/')
+    ? 'public, max-age=31536000, immutable'
+    : 'no-cache';
+  res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': cache });
+  res.end(data);
+}
 
 // ---- Rooms ---------------------------------------------------------------
 // Every client is in exactly one room:
@@ -32,7 +70,8 @@ const RESPAWN_MS = 3500;
 const DEFAULT_PLANE = 'piper';
 const DEFAULT_TIME = 'day';
 
-const wss = new WebSocketServer({ port: PORT, host: '0.0.0.0' });
+const httpServer = http.createServer(serveStatic);
+const wss = new WebSocketServer({ server: httpServer });
 const clients = new Map(); // id -> client
 let nextId = 1;
 
@@ -399,5 +438,7 @@ setInterval(() => {
   if (race.phase !== 'idle' || raceChanged) broadcastRace();
 }, 1000 / TICK_HZ);
 
-console.log(`megabroplanes server listening on ws://0.0.0.0:${PORT}`);
-console.log('tell friends: ws://<your-ip>:' + PORT);
+httpServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`megabroplanes server listening on :${PORT}`);
+  console.log(STATIC_DIR ? `serving game from ${STATIC_DIR} + WebSocket` : 'WebSocket only');
+});
