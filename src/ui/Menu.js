@@ -14,6 +14,7 @@ import {
 } from '../config.js';
 import { PlanePreview } from './PlanePreview.js';
 import { gfx, view } from './GraphicsSettings.js';
+import { getWorldSeed, DEFAULT_WORLD_SEED } from '../world/WorldSeed.js';
 
 const STORAGE_KEY = 'mbp:loadout';
 const MODES = ['singleplayer', 'multiplayer'];
@@ -62,6 +63,10 @@ export class Menu {
     this.selectedMode = saved?.mode || DEFAULT_MODE;
     this.modeToggle = document.getElementById('mode-toggle');
     this.timeMpNote = document.getElementById('time-mp-note');
+    this.seedRow = document.getElementById('seed-row');
+    this.seedCurrentEl = document.getElementById('seed-current');
+    this.btnRegen = document.getElementById('btn-regen-seed');
+    this.seedMpNote = document.getElementById('seed-mp-note');
 
     this.previews = [];
     this._previewsInitialized = false;
@@ -76,6 +81,7 @@ export class Menu {
     this._renderViewPresets();
     this._renderVersion();
     this._renderNotes();
+    this._renderSeed();
     this._wireButtons();
     this._wireModeToggle();
     this._refreshModeUI();
@@ -84,6 +90,7 @@ export class Menu {
     this.onChange = null;
     this.onTimeChange = null;
     this.onModeChange = null;
+    this.onRegenerate = null;
 
     document.body.classList.add('menu-open');
     this._refreshMainButtons();
@@ -157,6 +164,12 @@ export class Menu {
   _renderVersion() {
     const el = document.getElementById('menu-version');
     if (el) el.textContent = `v${GAME_VERSION} “${GAME_CODENAME}” · ${GAME_CHANNEL}`;
+  }
+
+  _renderSeed() {
+    if (!this.seedCurrentEl) return;
+    const s = getWorldSeed();
+    this.seedCurrentEl.textContent = s === DEFAULT_WORLD_SEED ? 'default' : s;
   }
 
   _renderNotes() {
@@ -406,6 +419,9 @@ export class Menu {
     if (this.timeMpNote) {
       this.timeMpNote.style.display = mp ? 'block' : 'none';
     }
+    // World-seed regeneration is singleplayer-only — MP shares one world.
+    if (this.seedRow) this.seedRow.style.display = mp ? 'none' : 'flex';
+    if (this.seedMpNote) this.seedMpNote.style.display = mp ? 'block' : 'none';
   }
 
   _wireButtons() {
@@ -436,5 +452,8 @@ export class Menu {
     document.getElementById('btn-back-settings').addEventListener('click', () => this._showMain());
     const backNotes = document.getElementById('btn-back-notes');
     if (backNotes) backNotes.addEventListener('click', () => this._showMain());
+    if (this.btnRegen) {
+      this.btnRegen.addEventListener('click', () => { if (this.onRegenerate) this.onRegenerate(); });
+    }
   }
 }

@@ -15,10 +15,23 @@
 // full Three.js library). Noise/Biome/SeaMask are pure math modules that
 // initialise once from config seeds on both sides.
 import { computeTerrainData } from './TerrainCompute.js';
+import { getWorldSeed, setWorldSeed } from './WorldSeed.js';
+import { reseedTerrain } from './TerrainShape.js';
+import { reseedSea } from './SeaMask.js';
+
+// The worker starts on the default seed; the main thread sends the active world
+// seed with each build request so worker terrain matches the main thread.
+let currentSeed = getWorldSeed();
 
 self.addEventListener('message', (e) => {
   const msg = e.data;
   if (!msg || msg.type !== 'buildTerrain') return;
+  if (msg.seed && msg.seed !== currentSeed) {
+    currentSeed = msg.seed;
+    setWorldSeed(msg.seed);
+    reseedTerrain();
+    reseedSea();
+  }
   const { reqId, cx, cz, villages, detail } = msg;
   try {
     const data = computeTerrainData(cx, cz, villages || [], !!detail);

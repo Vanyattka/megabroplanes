@@ -1,15 +1,16 @@
 import { createNoise2D } from 'simplex-noise';
 import alea from 'alea';
 import { SEA_SCALE } from '../config.js';
+import { seedKey } from './WorldSeed.js';
 import { profiler } from '../debug/Profiler.js';
 
 // Deterministic low-frequency noise that flags where the world should have a
 // sea. Separate seed from the biome/terrain noise so sea regions don't align
 // with biome boundaries — they feel like a completely independent geography
-// layer, which they are.
+// layer, which they are. Re-seedable for world regeneration.
 
-const prng = alea('sea-mask-seed');
-const noise2D = createNoise2D(prng);
+let noise2D = createNoise2D(alea(seedKey('sea-mask-seed')));
+export function reseedSea() { noise2D = createNoise2D(alea(seedKey('sea-mask-seed'))); }
 
 // Returns a value in [0, 1]. Tuned so the majority of the map reads as
 // "land" (< 0.55) and large contiguous pockets read as "sea" (> 0.7).

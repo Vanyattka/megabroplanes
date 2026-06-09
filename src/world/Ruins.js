@@ -7,6 +7,7 @@ import {
   RUIN_MIN_HEIGHT,
 } from '../config.js';
 import { groundHeight } from './Ground.js';
+import { seedKey } from './WorldSeed.js';
 
 // Terrain mesh vertices sit on this grid. Snapping ruin spawn points to the
 // grid guarantees the ruin's base y matches the rendered surface exactly —
@@ -26,7 +27,7 @@ export function getRuin(rcx, rcz) {
   const key = `${rcx},${rcz}`;
   if (ruinCache.has(key)) return ruinCache.get(key);
 
-  const prng = alea(`ruin:${rcx}:${rcz}`);
+  const prng = alea(seedKey(`ruin:${rcx}:${rcz}`));
   let ruin = null;
   if (prng() < RUIN_CHANCE) {
     // Sample several points inside the cell and pick the highest mountain

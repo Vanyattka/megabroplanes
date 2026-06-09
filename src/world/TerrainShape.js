@@ -53,18 +53,29 @@ import {
   SLOPE_ROCK_THRESHOLD,
 } from '../config.js';
 import { profiler } from '../debug/Profiler.js';
+import { seedKey } from './WorldSeed.js';
 
-// Distinct seeds → independent fields. Same seeds on every thread.
-const warpA = createNoise2D(alea('ts-warp-a'));
-const warpB = createNoise2D(alea('ts-warp-b'));
-const contNoise = createNoise2D(alea('ts-continent'));
-const mtnMaskNoise = createNoise2D(alea('ts-mtn-mask'));
-const ridgeNoise = createNoise2D(alea('ts-ridge'));
-const plainsNoise = createNoise2D(alea('ts-plains'));
-const foothillNoise = createNoise2D(alea('ts-foothill'));
-const tempNoise = createNoise2D(alea('ts-temp'));
-const moistNoise = createNoise2D(alea('ts-moist'));
-const snowNoise = createNoise2D(alea('ts-snow'));
+// Distinct seeds → independent fields. Derived from the current world seed via
+// seedKey() so reseedTerrain() can rebuild them for a new world. Same seed on
+// every thread → identical terrain (the worker calls reseedTerrain() when the
+// build message carries a new seed).
+let warpA, warpB, contNoise, mtnMaskNoise, ridgeNoise, plainsNoise,
+  foothillNoise, tempNoise, moistNoise, snowNoise;
+function buildNoise() {
+  warpA = createNoise2D(alea(seedKey('ts-warp-a')));
+  warpB = createNoise2D(alea(seedKey('ts-warp-b')));
+  contNoise = createNoise2D(alea(seedKey('ts-continent')));
+  mtnMaskNoise = createNoise2D(alea(seedKey('ts-mtn-mask')));
+  ridgeNoise = createNoise2D(alea(seedKey('ts-ridge')));
+  plainsNoise = createNoise2D(alea(seedKey('ts-plains')));
+  foothillNoise = createNoise2D(alea(seedKey('ts-foothill')));
+  tempNoise = createNoise2D(alea(seedKey('ts-temp')));
+  moistNoise = createNoise2D(alea(seedKey('ts-moist')));
+  snowNoise = createNoise2D(alea(seedKey('ts-snow')));
+}
+buildNoise();
+// Rebuild all fields for the current world seed (call after setWorldSeed).
+export function reseedTerrain() { buildNoise(); }
 
 function smoothstep(edge0, edge1, x) {
   if (x <= edge0) return 0;

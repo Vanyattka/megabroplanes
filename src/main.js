@@ -11,6 +11,7 @@ import { RuinsManager } from './world/RuinsManager.js';
 import { Water } from './world/Water.js';
 import { WaterReflection } from './world/WaterReflection.js';
 import { groundHeight, physicsFloor } from './world/Ground.js';
+import { getWorldSeed, DEFAULT_WORLD_SEED } from './world/WorldSeed.js';
 import { Clouds } from './world/Clouds.js';
 import { PlaneShadow, makeShadowTexture } from './world/Shadow.js';
 import { Explosion } from './effects/Explosion.js';
@@ -333,9 +334,26 @@ function refreshRaceButton() {
 // each Start/Continue so the multiplayer client matches the chosen mode.
 function applyMode(mode) {
   currentMode = mode === 'multiplayer' ? 'multiplayer' : 'singleplayer';
+  // Multiplayer must use the shared default world. If a custom singleplayer
+  // seed is currently loaded, reload — the mode is already persisted as MP, so
+  // the fresh load resolves to the default seed and all clients match.
+  if (currentMode === 'multiplayer' && getWorldSeed() !== DEFAULT_WORLD_SEED) {
+    location.reload();
+    return;
+  }
   if (currentMode !== 'multiplayer' && inLobby) lobby.onLeave();
   mp.setEnabled(currentMode === 'multiplayer');
   refreshRaceButton();
+}
+
+// Singleplayer "regenerate seed": pick a new random world seed, persist it, and
+// reload so the whole world rebuilds from it. (MP ignores this — see WorldSeed.)
+function regenerateSeed() {
+  try {
+    const s = Math.random().toString(36).slice(2, 9) + Math.random().toString(36).slice(2, 5);
+    localStorage.setItem('mbp:seed', s);
+  } catch {}
+  location.reload();
 }
 
 menu.onChange = ({ type, color }) => {
@@ -369,6 +387,7 @@ menu.onTimeChange = (preset) => {
   if (currentMode === 'multiplayer') return;
   applyTimePreset(preset);
 };
+menu.onRegenerate = regenerateSeed;
 // Mode toggle in the main menu — disconnect/connect MP and switch the
 // time policy. Doesn't kick the player out of a running flight.
 menu.onModeChange = (mode) => {

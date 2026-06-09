@@ -31,6 +31,7 @@ import {
 } from '../config.js';
 import { landElevation, biomeAt } from './TerrainShape.js';
 import { seaMaskAt } from './SeaMask.js';
+import { seedKey } from './WorldSeed.js';
 import {
   villagesAffectingArea,
   villageFlatFactorFromList,
@@ -42,15 +43,68 @@ import { profiler } from '../debug/Profiler.js';
 
 // Shared geometries and materials — one set for the whole world. Do not
 // dispose per-chunk; only dispose the per-chunk InstancedMesh instance buffer.
-const trunkGeom = new CylinderGeometry(0.25, 0.35, 2, 6);
-trunkGeom.translate(0, 1, 0);
-const topGeom = new ConeGeometry(1.4, 3.8, 7);
-topGeom.translate(0, 3.9, 0);
 const rockGeom = new IcosahedronGeometry(1, 0);
-
-const trunkMat = new MeshStandardMaterial({ color: 0x5a3a20, flatShading: true, roughness: 1 });
-const topMat = new MeshStandardMaterial({ color: 0x2d6b22, flatShading: true, roughness: 1 });
 const rockMat = new MeshStandardMaterial({ color: 0x7a7572, flatShading: true, roughness: 1 });
+
+// Tree species — each is a trunk + canopy geometry/material pair, built from
+// primitives and shared across the whole world (per-chunk only the instance
+// buffers are allocated). Geometries are pre-translated so the model sits on
+// the ground at y=0.
+function makeSpecies(trunk, canopy) {
+  trunk.geom.translate(0, trunk.y, 0);
+  canopy.geom.translate(0, canopy.y, 0);
+  return {
+    trunkGeom: trunk.geom,
+    canopyGeom: canopy.geom,
+    trunkMat: new MeshStandardMaterial({ color: trunk.color, flatShading: true, roughness: 1 }),
+    canopyMat: new MeshStandardMaterial({ color: canopy.color, flatShading: true, roughness: 1 }),
+  };
+}
+const SPECIES = {
+  // Classic pine — the original tree.
+  conifer: makeSpecies(
+    { geom: new CylinderGeometry(0.25, 0.35, 2, 6), y: 1, color: 0x5a3a20 },
+    { geom: new ConeGeometry(1.4, 3.8, 7), y: 3.9, color: 0x2d6b22 }
+  ),
+  // Rounded deciduous tree.
+  broadleaf: makeSpecies(
+    { geom: new CylinderGeometry(0.3, 0.42, 2.4, 6), y: 1.2, color: 0x6b4a2a },
+    { geom: new IcosahedronGeometry(2.0, 0), y: 3.6, color: 0x3f8f3a }
+  ),
+  // Slim, pale-trunked birch with a light canopy.
+  birch: makeSpecies(
+    { geom: new CylinderGeometry(0.16, 0.2, 3, 5), y: 1.5, color: 0xd8d8d0 },
+    { geom: new IcosahedronGeometry(1.3, 0), y: 3.8, color: 0x9fc77a }
+  ),
+  // Flat-topped savanna acacia.
+  acacia: makeSpecies(
+    { geom: new CylinderGeometry(0.3, 0.45, 2.8, 6), y: 1.4, color: 0x6b5230 },
+    { geom: new ConeGeometry(2.6, 1.3, 9), y: 3.4, color: 0x8a9a3a }
+  ),
+  // Low, dusty arid/tundra shrub.
+  shrub: makeSpecies(
+    { geom: new CylinderGeometry(0.16, 0.2, 0.5, 5), y: 0.25, color: 0x5a4a2a },
+    { geom: new IcosahedronGeometry(0.9, 0), y: 0.85, color: 0x7a8a4a }
+  ),
+};
+
+// Per-biome species mix (weights sum ≈ 1). Determines which trees grow where.
+const BIOME_TREE_SPECIES = {
+  forest:  [['conifer', 0.45], ['broadleaf', 0.45], ['birch', 0.10]],
+  taiga:   [['conifer', 0.78], ['birch', 0.22]],
+  plains:  [['broadleaf', 0.60], ['birch', 0.25], ['acacia', 0.15]],
+  savanna: [['acacia', 0.70], ['broadleaf', 0.30]],
+  desert:  [['shrub', 1.0]],
+  tundra:  [['shrub', 0.60], ['birch', 0.40]],
+  alpine:  [['conifer', 1.0]],
+};
+function pickSpecies(type, prng) {
+  const table = BIOME_TREE_SPECIES[type] || BIOME_TREE_SPECIES.forest;
+  const r = prng();
+  let acc = 0;
+  for (const [name, w] of table) { acc += w; if (r < acc) return name; }
+  return table[table.length - 1][0];
+}
 
 function smoothstep01(edge0, edge1, x) {
   if (x <= edge0) return 0;
@@ -109,7 +163,7 @@ const _scale = new Vector3();
 export function buildScatter(cx, cz) {
   const _t0 = profiler.timeBegin();
   const group = new Group();
-  const prng = alea(`scatter:${cx}:${cz}`);
+  const prng = alea(seedKey(`scatter:${cx}:${cz}`));
 
   const chunkOriginX = cx * CHUNK_SIZE;
   const chunkOriginZ = cz * CHUNK_SIZE;
@@ -135,8 +189,10 @@ export function buildScatter(cx, cz) {
     return Math.sqrt(hx * hx + hz * hz);
   };
 
-  // Trees — trunk and top share the same per-instance matrix.
-  const treeMatrices = [];
+  // Trees — accumulate per-species instance matrices, then build one
+  // trunk+canopy InstancedMesh per species present in this chunk. Species is
+  // chosen by biome (BIOME_TREE_SPECIES) so each region grows fitting trees.
+  const bySpecies = {};
   for (let i = 0; i < TREES_PER_CHUNK; i++) {
     const x = chunkOriginX + prng() * CHUNK_SIZE;
     const z = chunkOriginZ + prng() * CHUNK_SIZE;
@@ -154,24 +210,28 @@ export function buildScatter(cx, cz) {
     _q.setFromEuler(_e);
     _scale.set(s, s, s);
     _m.compose(_pos, _q, _scale);
-    treeMatrices.push(_m.clone());
+    const name = pickSpecies(b.type, prng);
+    (bySpecies[name] || (bySpecies[name] = [])).push(_m.clone());
   }
 
-  if (treeMatrices.length > 0) {
-    const trunks = new InstancedMesh(trunkGeom, trunkMat, treeMatrices.length);
-    const tops = new InstancedMesh(topGeom, topMat, treeMatrices.length);
-    const castTreeShadows = !!gfx.settings.shadowTrees;
+  const castTreeShadows = !!gfx.settings.shadowTrees;
+  for (const name of Object.keys(bySpecies)) {
+    const mats = bySpecies[name];
+    if (!mats.length) continue;
+    const sp = SPECIES[name];
+    const trunks = new InstancedMesh(sp.trunkGeom, sp.trunkMat, mats.length);
+    const canopies = new InstancedMesh(sp.canopyGeom, sp.canopyMat, mats.length);
     trunks.castShadow = castTreeShadows;
     trunks.receiveShadow = true;
-    tops.castShadow = castTreeShadows;
-    tops.receiveShadow = true;
-    for (let i = 0; i < treeMatrices.length; i++) {
-      trunks.setMatrixAt(i, treeMatrices[i]);
-      tops.setMatrixAt(i, treeMatrices[i]);
+    canopies.castShadow = castTreeShadows;
+    canopies.receiveShadow = true;
+    for (let i = 0; i < mats.length; i++) {
+      trunks.setMatrixAt(i, mats[i]);
+      canopies.setMatrixAt(i, mats[i]);
     }
     trunks.instanceMatrix.needsUpdate = true;
-    tops.instanceMatrix.needsUpdate = true;
-    group.add(trunks, tops);
+    canopies.instanceMatrix.needsUpdate = true;
+    group.add(trunks, canopies);
   }
 
   // Rocks — tolerant of slope, bias toward higher terrain.

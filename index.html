@@ -250,12 +250,14 @@
         background: rgba(255, 204, 64, 0.28);
         color: #fff;
       }
-      #time-mp-note {
+      #time-mp-note, #seed-mp-note {
         font-size: 12px;
         opacity: 0.7;
         font-style: italic;
         text-align: center;
       }
+      #seed-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+      #seed-current { color: #ffd23a; font-weight: bold; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       #menu-main.hidden, #menu-planes.hidden, #menu-settings.hidden, #menu-notes.hidden { display: none; }
       #menu-planes h2, #menu-settings h2, #menu-notes h2 { margin: 0; font-size: 20px; letter-spacing: 3px; }
       #menu-planes h3, #menu-settings h3 { margin: 0; font-size: 14px; letter-spacing: 2px; opacity: 0.85; }
@@ -617,6 +619,13 @@
         <div id="gfx-list"></div>
         <h3>VIEW DISTANCE</h3>
         <div id="view-list"></div>
+        <h3>WORLD SEED</h3>
+        <div id="seed-row">
+          <span>seed:</span>
+          <span id="seed-current">default</span>
+          <button class="time-btn" id="btn-regen-seed">REGENERATE</button>
+        </div>
+        <div id="seed-mp-note" style="display:none;">World seed is shared by everyone in multiplayer.</div>
         <button class="menu-btn" id="btn-back-settings">BACK</button>
       </div>
       <div id="menu-notes" class="hidden">

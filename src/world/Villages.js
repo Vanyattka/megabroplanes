@@ -17,6 +17,7 @@ import {
 } from '../config.js';
 import { seaMaskAt } from './SeaMask.js';
 import { landElevation } from './TerrainShape.js';
+import { seedKey } from './WorldSeed.js';
 
 // Village center sits far enough from the runway that the village rect never
 // overlaps the runway's flat zone. Without this, cities (halfW=140) place
@@ -68,7 +69,7 @@ function pickSize(prng) {
 }
 
 function buildVillage(gcx, gcz, isHome) {
-  const prng = alea(`village-data:${gcx}:${gcz}`);
+  const prng = alea(seedKey(`village-data:${gcx}:${gcz}`));
   let airportX;
   let airportZ;
   let angle;
@@ -299,7 +300,7 @@ export function getVillage(gcx, gcz) {
   if (gcx === 0 && gcz === 0) {
     v = buildVillage(0, 0, true);
   } else {
-    const prng = alea(`village-skip:${gcx}:${gcz}`);
+    const prng = alea(seedKey(`village-skip:${gcx}:${gcz}`));
     if (prng() < VILLAGE_CHANCE) {
       v = buildVillage(gcx, gcz, false);
     }

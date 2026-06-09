@@ -7,10 +7,22 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.1';
-export const GAME_CODENAME = 'Alpha';
+export const GAME_VERSION = '0.2';
+export const GAME_CODENAME = 'Bravo';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.2',
+    codename: 'Bravo',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-09',
+    notes: [
+      'Water reflections — the jet engine glow and the landing lamp now show in your reflection too (no more dark-engined reflection).',
+      'Landing light (L) is much brighter on every aircraft.',
+      'More tree species — conifer, broadleaf, birch, savanna acacia and arid shrub — spread across the biomes for a more varied world.',
+      'Singleplayer: a REGENERATE SEED button (Settings) rebuilds the whole world from a new random seed. Multiplayer still shares one world.',
+    ],
+  },
   {
     version: '0.1',
     codename: 'Alpha',
@@ -698,10 +710,10 @@ export const NAV_TAIL_BLINK_HZ = 1.2;
 // Intensity bumped: at 4 the cone barely lit the runway threshold and was
 // invisible past ~80 m; at 12 it actually does its job — a clear bright
 // pool ahead of the plane during night approaches.
-export const LANDING_LIGHT_INTENSITY = 12.0;
-export const LANDING_LIGHT_RANGE = 260;
-export const LANDING_LIGHT_ANGLE = Math.PI / 6;  // half-cone
-export const LANDING_LIGHT_PENUMBRA = 0.35;
+export const LANDING_LIGHT_INTENSITY = 26.0;     // brighter on every plane (v0.2)
+export const LANDING_LIGHT_RANGE = 340;
+export const LANDING_LIGHT_ANGLE = Math.PI / 5.5; // slightly wider half-cone
+export const LANDING_LIGHT_PENUMBRA = 0.4;
 export const LANDING_LIGHT_COLOR = 0xfff8cc;
 
 // ---------------------------------------------------------------------------

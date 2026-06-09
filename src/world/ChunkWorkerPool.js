@@ -1,3 +1,5 @@
+import { getWorldSeed } from './WorldSeed.js';
+
 // Small pool of Web Workers for offloading buildChunk computation off the
 // main thread. With 2 workers on an 8+ core machine (any modern Mac), all
 // chunk generation runs in parallel with physics + render + audio — the
@@ -60,6 +62,7 @@ export class ChunkWorkerPool {
         cz,
         villages,
         detail,
+        seed: getWorldSeed(), // worker reseeds its noise if this changed
       });
     });
   }
