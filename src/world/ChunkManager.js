@@ -185,7 +185,8 @@ export class ChunkManager {
         this.chunks.delete(key);
         const qi = this._scatterQueue.indexOf(entry);
         if (qi !== -1) this._scatterQueue.splice(qi, 1);
-        if (this.roads) this.roads.disposeForChunk(entry.cx, entry.cz);
+        // Roads stream independently by player distance (Roads.update) — they
+        // are no longer tied to terrain-chunk lifetime.
       }
     }
   }
@@ -332,7 +333,6 @@ export class ChunkManager {
     };
     this.chunks.set(key, entry);
     this._scatterQueue.push(entry);
-    if (this.roads) this.roads.buildForChunk(cx, cz);
   }
 
   hasChunk(cx, cz) {

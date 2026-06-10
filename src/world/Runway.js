@@ -45,6 +45,14 @@ export function getRunwayMaterial() {
       map: makeRunwayTexture(),
       roughness: 0.9,
       metalness: 0.0,
+      // The strip sits a few cm above perfectly coplanar flat-zone terrain —
+      // inside the depth buffer's error at grazing angles/distance, so the
+      // ground z-fought over it ("runway buried under a thin layer of
+      // earth"). polygonOffset biases the depth test so the runway always
+      // wins against the terrain beneath it.
+      polygonOffset: true,
+      polygonOffsetFactor: -3,
+      polygonOffsetUnits: -3,
     });
   }
   return cachedRunwayMaterial;

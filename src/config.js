@@ -7,10 +7,23 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.2.3';
-export const GAME_CODENAME = 'Bravo';
+export const GAME_VERSION = '0.3';
+export const GAME_CODENAME = 'Charlie';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.3',
+    codename: 'Charlie',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-10',
+    notes: [
+      'Rivers! Winding channels now carve through the lowlands (visible on the minimap too). Villages keep their distance from the banks.',
+      'Bridges — when a road meets a river it crosses on a proper deck with piers; only genuinely wide water (lakes, sea) still blocks a road.',
+      'Monumental ruins — mountain peaks now carry real castle ruins: crumbling ring walls with crenellated towers, a half-collapsed keep, a gatehouse and rubble, each stone grounded into the slope (nothing floats).',
+      'Fixed runways and roads "buried under a thin layer of earth" (depth-buffer fighting at grazing angles).',
+      'Fixed roads flickering in and out near clustered villages — roads now stream by your distance to them instead of being tied to faraway terrain chunks.',
+    ],
+  },
   {
     version: '0.2.3',
     codename: 'Bravo',
@@ -126,7 +139,11 @@ export const RUNWAY_BLEND = 300;
 // to sit flat — 80 m blend keeps nearby mountains from losing their
 // natural profile to the village footprint.
 export const VILLAGE_BLEND = 80;
-export const RUNWAY_Y = 0.02;
+// Lift above the (perfectly coplanar) flat-zone terrain. Combined with a
+// polygonOffset on the runway material — 0.02 alone was inside the depth
+// buffer's error at grazing angles, so distant terrain z-fought over the
+// strip and the runway looked "buried under a thin layer of earth".
+export const RUNWAY_Y = 0.06;
 
 // Villages — one village per grid cell. Size tiers vary house count, streets,
 // and rect size so settlements range from hamlets to small towns.
@@ -152,10 +169,16 @@ export const VILLAGE_SIZES = {
 // Per-cell size distribution. Must sum to 1. Cities are rare landmarks.
 export const VILLAGE_SIZE_WEIGHTS = { small: 0.28, medium: 0.47, large: 0.20, city: 0.05 };
 
-// Ruins — old stone structures on mountain peaks.
+// Ruins — monumental castle ruins on mountain peaks: crumbling ring walls
+// with crenellations, corner towers, a keep, a gatehouse and rubble. Every
+// piece is generated a little sunk into the ground (and follows the local
+// slope) so nothing floats on a peak.
 export const RUIN_CELL_SIZE = 2400;
 export const RUIN_CHANCE = 0.55;     // of a cell containing an eligible mountain peak
 export const RUIN_MIN_HEIGHT = 95;   // groundHeight must exceed this for a ruin to spawn (high peaks only)
+export const RUIN_SINK = 1.1;        // how deep each piece is buried below local ground (m)
+export const RUIN_COURT_MIN = 16;    // castle courtyard half-size range (m)
+export const RUIN_COURT_MAX = 26;
 
 // Physics
 export const GRAVITY = 9.81;
@@ -342,6 +365,21 @@ export const SPAWN_FLAT_BLEND = 900;
 // Climate — two independent warped low-frequency fields drive biome choice.
 export const CLIMATE_SCALE = 0.00019;        // ~5300 m climate zones
 export const CLIMATE_WARP = 0.0006;
+
+// Rivers — winding channels carved where a low-frequency noise crosses zero
+// (|n| < width). They cut below WATER_LEVEL so the global water plane fills
+// them. Faded out on high ground (no canyon-rivers through mountains), near
+// the world origin (dry spawn clearing), and inside the sea.
+export const RIVER_SCALE = 0.0009;        // meander wavelength ~1–2 km
+export const RIVER_WIDTH_N = 0.022;       // |noise| half-width of the channel
+export const RIVER_BED = -12;             // channel bed elevation (m)
+// U-shaped channel profile: carve saturates to full depth once the bank mask
+// passes BANK_HIGH, so most of the channel floor sits well below the water
+// line (a V-profile left only a thin central strip wet → "empty" rivers).
+export const RIVER_BANK_LOW = 0.18;
+export const RIVER_BANK_HIGH = 0.6;
+export const RIVER_MAX_LAND = 16;         // rivers fade out as land rises to this
+export const RIVER_FADE_LAND = 30;        // fully gone above this elevation
 
 // Snow / alpine coloring thresholds (meters).
 export const SNOW_LINE = 130;                // base snow elevation
@@ -750,11 +788,27 @@ export const LANDING_LIGHT_COLOR = 0xfff8cc;
 // ---------------------------------------------------------------------------
 export const ROAD_WIDTH = 8;
 export const ROAD_COLOR = 0x6d5a43;                     // gravel/compacted dirt — visible from altitude
-export const ROAD_SAMPLE_STEP = 14;                     // meters between centerline samples
+// 7 m sampling drapes the ribbon closely over the 4 m terrain grid — at the
+// old 14 m, terrain bulges between samples poked through the road surface.
+export const ROAD_SAMPLE_STEP = 7;                      // meters between centerline samples
 export const ROAD_MAX_VILLAGE_LINK_DISTANCE = 3600;     // don't attempt roads longer than this
 export const ROAD_MAX_SLOPE = 0.42;                     // |dy| / step; higher = too steep
 export const ROAD_RUNWAY_DISTANCE = 3000;               // spur-to-home-runway threshold
-export const ROAD_Y_OFFSET = 0.22;                      // lift above ground to avoid z-fight
+export const ROAD_Y_OFFSET = 0.3;                       // lift above ground (plus material polygonOffset)
+// Roads are streamed by distance to the PLAYER (not tied to terrain-chunk
+// lifetime — that made a road vanish whenever the far-away chunk that "owned"
+// it unloaded). Build within VIEW, dispose past VIEW × HYSTERESIS.
+export const ROAD_VIEW_DISTANCE = 4200;                 // build roads with an endpoint within this
+export const ROAD_VIEW_HYSTERESIS = 1.25;               // dispose only beyond view × this
+export const ROAD_BUILDS_PER_UPDATE = 2;                // per-frame build cap (each build samples terrain)
+
+// Bridges — when a road crosses a river it continues over the water on a
+// deck with piers. Stretches of water longer than BRIDGE_MAX_SPAN still
+// reject the route (that's a lake/sea, not a river crossing).
+export const BRIDGE_MAX_SPAN = 120;                     // longest waterway a road will bridge (m)
+export const BRIDGE_DECK_CLEARANCE = 2.4;               // deck height above water level (m)
+export const BRIDGE_ARCH = 1.2;                         // extra rise at mid-span (m)
+export const BRIDGE_PIER_SPACING = 3;                   // pier every N wet samples
 // Road shape: deterministic gentle curve instead of a dead-straight line.
 // N control points between the two endpoints, each offset perpendicularly
 // by up to CURVE_AMPLITUDE fraction of the total length.

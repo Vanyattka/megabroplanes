@@ -129,14 +129,15 @@ function buildVillage(gcx, gcz, isHome) {
     // happens to peak at the origin.
     if (seaMaskAt(airportX, airportZ) >= SEA_THRESHOLD_LOW) return null;
 
-    // Reject cells whose airport would sit in mountainous terrain. An
-    // airport's flat zone (320×35 m rect + 300 m blend) carves a ~600 m
-    // plateau through any range it lands on — very visible as a V-shaped
-    // wedge cut out of a ridge. Sampling the natural land elevation at the
-    // airport center + a ring of probes catches cells that would flatten a
-    // meaningful chunk of upland/mountain. Villages should sit on plains
-    // and gentle hills, leaving the ranges pristine.
-    const MOUNTAIN_HEIGHT_LIMIT = 30;
+    // Reject cells whose airport would sit on mountains or visibly sloped
+    // ground. Height alone is the wrong test — flat uplands/plateaus (~35 m)
+    // are perfectly good village sites (the pad levels to LOCAL height since
+    // v0.2.1), and rejecting them culled half the world's villages. So:
+    // reject genuine mountain elevations, UNEVEN footprints (a sloped site
+    // would get a visible wedge cut by the flat zone), and wet spots (a
+    // river channel under the strip).
+    const MOUNTAIN_HEIGHT_LIMIT = 55;  // below MOUNTAIN_BASE_RISE — real ranges only
+    const MAX_FOOTPRINT_SPREAD = 16;   // max height range across the strip (m)
     const probes = [
       [airportX, airportZ],
       [airportX + RUNWAY_LENGTH / 2, airportZ],
@@ -144,20 +145,27 @@ function buildVillage(gcx, gcz, isHome) {
       [airportX, airportZ + 60],
       [airportX, airportZ - 60],
     ];
+    let hLo = Infinity, hHi = -Infinity;
     for (const [sx, sz] of probes) {
-      if (landElevation(sx, sz) > MOUNTAIN_HEIGHT_LIMIT) return null;
+      const h = landElevation(sx, sz);
+      if (h > MOUNTAIN_HEIGHT_LIMIT || h < WATER_LEVEL + 1) return null;
+      if (h < hLo) hLo = h;
+      if (h > hHi) hHi = h;
     }
-    // Reject if the runway flat zone (+margin) would touch the sea — a coastal
-    // airport otherwise raises a flat platform poking out of the water.
+    if (hHi - hLo > MAX_FOOTPRINT_SPREAD) return null;
+    // Reject if the runway flat zone (+margin) would touch the sea or a river
+    // — a coastal/riverside airport otherwise raises a flat platform poking
+    // out of the water.
     const afx = Math.cos(angle), afz = Math.sin(angle);
     const apx = -Math.sin(angle), apz = Math.cos(angle);
     const ahl = RUNWAY_LENGTH / 2 + RUNWAY_MARGIN + 40;
     const ahw = RUNWAY_WIDTH / 2 + RUNWAY_MARGIN + 40;
     for (const la of [-ahl, 0, ahl]) {
       for (const pw of [-ahw, 0, ahw]) {
-        if (seaMaskAt(airportX + afx * la + apx * pw, airportZ + afz * la + apz * pw) >= SEA_THRESHOLD_LOW) {
-          return null;
-        }
+        const cx = airportX + afx * la + apx * pw;
+        const cz = airportZ + afz * la + apz * pw;
+        if (seaMaskAt(cx, cz) >= SEA_THRESHOLD_LOW) return null;
+        if (landElevation(cx, cz) < WATER_LEVEL + 1) return null;
       }
     }
   }
@@ -178,10 +186,12 @@ function buildVillage(gcx, gcz, isHome) {
       const sx = airportX + Math.cos(a) * ringR;
       const sz = airportZ + Math.sin(a) * ringR;
       if (seaMaskAt(sx, sz) >= SEA_THRESHOLD_LOW) waterHits++;
+      else if (landElevation(sx, sz) < WATER_LEVEL + 1) waterHits++; // river channel
     }
-    // Any water around the settlement footprint disqualifies it — keeps whole
-    // villages on dry land (no half-submerged / floating houses).
-    if (waterHits >= 1) return null;
+    // Mostly-wet surroundings = a spit/islet — reject. (The precise "no house
+    // in water" guarantee is the village-rect check further down; requiring a
+    // fully dry ring here culled ~90% of all villages.)
+    if (waterHits >= samples / 2) return null;
   }
 
   const fx = Math.cos(angle);
@@ -193,6 +203,21 @@ function buildVillage(gcx, gcz, isHome) {
 
   const villageCx = airportX + px * sideSign * perpOffset;
   const villageCz = airportZ + pz * sideSign * perpOffset;
+
+  // The settlement rect itself must be fully dry — corners + center checked
+  // against both the sea mask and river channels (landElevation below water).
+  // This is the precise guard against half-submerged / floating houses.
+  if (!isHome) {
+    const m = 10; // small margin beyond the rect edge
+    for (const [la, pw] of [[0, 0],
+      [size.halfL + m, size.halfW + m], [size.halfL + m, -size.halfW - m],
+      [-size.halfL - m, size.halfW + m], [-size.halfL - m, -size.halfW - m]]) {
+      const sx = villageCx + fx * la + px * pw;
+      const sz = villageCz + fz * la + pz * pw;
+      if (seaMaskAt(sx, sz) >= SEA_THRESHOLD_LOW) return null;
+      if (landElevation(sx, sz) < WATER_LEVEL + 1) return null;
+    }
+  }
 
   const houseCount =
     size.housesMin +

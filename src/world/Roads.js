@@ -1,4 +1,5 @@
 import {
+  BoxGeometry,
   BufferAttribute,
   BufferGeometry,
   CatmullRomCurve3,
@@ -9,7 +10,6 @@ import {
 } from 'three';
 import alea from 'alea';
 import {
-  CHUNK_SIZE,
   ROAD_WIDTH,
   ROAD_COLOR,
   ROAD_SAMPLE_STEP,
@@ -19,6 +19,13 @@ import {
   ROAD_Y_OFFSET,
   ROAD_CURVE_CONTROLS,
   ROAD_CURVE_AMPLITUDE,
+  ROAD_VIEW_DISTANCE,
+  ROAD_VIEW_HYSTERESIS,
+  ROAD_BUILDS_PER_UPDATE,
+  BRIDGE_MAX_SPAN,
+  BRIDGE_DECK_CLEARANCE,
+  BRIDGE_ARCH,
+  BRIDGE_PIER_SPACING,
   VILLAGE_CELL_SIZE,
   RUNWAY_WIDTH,
   RUNWAY_MARGIN,
@@ -28,30 +35,36 @@ import { getVillage } from './Villages.js';
 import { groundHeight } from './Ground.js';
 import { profiler } from '../debug/Profiler.js';
 
-// One MeshStandardMaterial shared across every road mesh in the world —
-// the only thing that varies per road is the BufferGeometry ribbon shape.
+// One MeshStandardMaterial shared across every road mesh in the world.
+// polygonOffset biases the depth test so the ribbon always wins against the
+// coplanar-ish terrain underneath — without it, distant/grazing-angle road
+// (and runway) surfaces z-fought with the ground and looked "buried".
 const SHARED_ROAD_MAT = new MeshStandardMaterial({
   color: ROAD_COLOR,
   roughness: 1.0,
   metalness: 0.0,
   side: DoubleSide,
+  polygonOffset: true,
+  polygonOffsetFactor: -2,
+  polygonOffsetUnits: -2,
 });
 
-const WATER_CLEARANCE = 1.0; // road centerline must sit this high above water
+// Shared unit box scaled per bridge pier.
+const PIER_GEOM = new BoxGeometry(1, 1, 1);
 
-// Generate a gentle deterministic curve between two village centers by
-// jittering interior control points perpendicular to the main axis, then
-// fitting a centripetal Catmull-Rom spline. Seeding by endpoint coordinates
-// keeps the same pair always producing the same curve across clients.
+const WATER_CLEARANCE = 1.0; // ground below WATER_LEVEL + this counts as "wet"
+
+// Generate a gentle deterministic curve between two endpoints by jittering
+// interior control points perpendicular to the main axis, then fitting a
+// centripetal Catmull-Rom spline. Seeding by endpoint coordinates keeps the
+// same pair always producing the same curve across clients.
 function buildCurveControlPoints(ax, az, bx, bz) {
   const dx = bx - ax;
   const dz = bz - az;
   const length = Math.sqrt(dx * dx + dz * dz);
   if (length < 1) return null;
-  const fx = dx / length;
-  const fz = dz / length;
-  const px = fz;  // perpendicular in XZ
-  const pz = -fx;
+  const px = dz / length;  // perpendicular in XZ
+  const pz = -dx / length;
 
   const prng = alea(
     `road:${ax.toFixed(1)}:${az.toFixed(1)}:${bx.toFixed(1)}:${bz.toFixed(1)}`
@@ -74,46 +87,88 @@ function buildCurveControlPoints(ax, az, bx, bz) {
   return { points: pts, length };
 }
 
-// Evaluate the curve and validate every sample. Returns the sampled
-// centerline + per-sample tangent, or null if the route is unbuildable.
-function sampleAndValidate(controlPoints, length) {
+// Evaluate the curve and validate every sample. Short waterway crossings
+// (rivers) become BRIDGE spans — the deck runs level between the two banks
+// with clearance over the water and a slight arch; longer wet stretches
+// (lakes/sea) still reject the route. Returns the sampled centerline +
+// per-sample tangent + pier positions, or null if unbuildable.
+function sampleAndValidate(controlPoints) {
   const curve = new CatmullRomCurve3(controlPoints, false, 'centripetal', 0.5);
   const approxLen = curve.getLength();
   const steps = Math.max(2, Math.ceil(approxLen / ROAD_SAMPLE_STEP));
   const samples = curve.getSpacedPoints(steps);
+  const stepLen = approxLen / steps;
+  const n = samples.length;
+
+  const ys = new Array(n);
+  const wet = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const y = groundHeight(samples[i].x, samples[i].z);
+    ys[i] = y;
+    wet[i] = y < WATER_LEVEL + WATER_CLEARANCE;
+  }
+  // Endpoints are airport aprons — if one is wet something else is wrong.
+  if (wet[0] || wet[n - 1]) return null;
+
+  // Convert each wet run into a bridge deck. The span is EXTENDED a few
+  // samples beyond the water on each side so the deck anchors on normal
+  // ground past the carved riverbanks — otherwise the steep bank slopes
+  // (dry, but plunging to the bed) fail the grade check below and the whole
+  // route gets rejected before it ever bridges.
+  const EXTEND = 3;
+  const isBridge = new Array(n).fill(false);
+  const piers = [];
+  let i = 0;
+  while (i < n) {
+    if (!wet[i]) { i++; continue; }
+    let j = i;
+    while (j < n && wet[j]) j++;
+    // Wet run [i, j-1]. Only the WATER portion counts against the span cap.
+    if ((j - i + 1) * stepLen > BRIDGE_MAX_SPAN) return null; // lake/sea — no road
+    const a = Math.max(1, i - EXTEND);          // first decked sample
+    const b = Math.min(n - 1, j + EXTEND);      // first ground sample after the deck
+    const y0 = ys[a - 1];
+    const y1 = ys[b];
+    const deckMin = WATER_LEVEL + BRIDGE_DECK_CLEARANCE;
+    for (let k = a; k < b; k++) {
+      if (isBridge[k]) continue; // overlapping span already decked
+      const t = (k - (a - 1)) / (b - (a - 1));
+      const deck =
+        Math.max(y0 + (y1 - y0) * t, deckMin) + Math.sin(t * Math.PI) * BRIDGE_ARCH;
+      if (wet[k] && (k - i) % BRIDGE_PIER_SPACING === 1) {
+        piers.push({ x: samples[k].x, z: samples[k].z, topY: deck, bedY: ys[k] });
+      }
+      ys[k] = deck;
+      isBridge[k] = true;
+    }
+    i = j;
+  }
+
+  // Slope validation on ground sections only — deck grades are controlled by
+  // construction, and the bank→deck junction is intentionally a step up.
+  for (let s = 1; s < n; s++) {
+    if (isBridge[s] || isBridge[s - 1]) continue;
+    const segLen =
+      Math.hypot(samples[s].x - samples[s - 1].x, samples[s].z - samples[s - 1].z) || stepLen;
+    if (Math.abs(ys[s] - ys[s - 1]) / segLen > ROAD_MAX_SLOPE) return null;
+  }
 
   const centerline = [];
-  let prevY = null;
-  for (let i = 0; i < samples.length; i++) {
-    const p = samples[i];
-    const y = groundHeight(p.x, p.z);
-    if (y < WATER_LEVEL + WATER_CLEARANCE) return null;
-    if (prevY !== null) {
-      const segLen =
-        i > 0
-          ? Math.hypot(p.x - samples[i - 1].x, p.z - samples[i - 1].z)
-          : ROAD_SAMPLE_STEP;
-      if (segLen > 1e-4) {
-        const slope = Math.abs(y - prevY) / segLen;
-        if (slope > ROAD_MAX_SLOPE) return null;
-      }
-    }
-    prevY = y;
-    centerline.push({ x: p.x, z: p.z, y });
+  for (let k = 0; k < n; k++) {
+    centerline.push({ x: samples[k].x, z: samples[k].z, y: ys[k] });
   }
 
   // Tangents via finite differences — used to build the ribbon.
   const tangents = [];
-  for (let i = 0; i < centerline.length; i++) {
-    const a = i === 0 ? centerline[i] : centerline[i - 1];
-    const b =
-      i === centerline.length - 1 ? centerline[i] : centerline[i + 1];
+  for (let k = 0; k < n; k++) {
+    const a = k === 0 ? centerline[k] : centerline[k - 1];
+    const b = k === n - 1 ? centerline[k] : centerline[k + 1];
     const tx = b.x - a.x;
     const tz = b.z - a.z;
     const tl = Math.hypot(tx, tz) || 1;
     tangents.push({ x: tx / tl, z: tz / tl });
   }
-  return { centerline, tangents };
+  return { centerline, tangents, piers };
 }
 
 function buildRibbonGeometry(centerline, tangents) {
@@ -154,39 +209,26 @@ function buildRibbonGeometry(centerline, tangents) {
   return geom;
 }
 
-// Returns { mesh, geometry } or null if this pair can't be connected by a
-// road without crossing water or climbing too steep a grade.
+// Returns { mesh, geometry, centerline, pierMeshes } or null if this pair
+// can't be connected (open water too wide, or grades too steep).
 function buildRoadMesh(ax, az, bx, bz) {
   const ctl = buildCurveControlPoints(ax, az, bx, bz);
   if (!ctl) return null;
-  const s = sampleAndValidate(ctl.points, ctl.length);
+  const s = sampleAndValidate(ctl.points);
   if (!s) return null;
   const geometry = buildRibbonGeometry(s.centerline, s.tangents);
   const mesh = new Mesh(geometry, SHARED_ROAD_MAT);
   mesh.receiveShadow = false;
   mesh.frustumCulled = false;
-  return { mesh, geometry, centerline: s.centerline };
-}
-
-// Villages.js doesn't expose cell coords for villages (cells are what define
-// villages, not vice versa). We iterate the few cells that could touch this
-// chunk. Cell size is 1800m, chunk is 128m, so at most 2×2 cells intersect.
-function villageCellsForChunk(cx, cz) {
-  const minX = cx * CHUNK_SIZE;
-  const maxX = (cx + 1) * CHUNK_SIZE;
-  const minZ = cz * CHUNK_SIZE;
-  const maxZ = (cz + 1) * CHUNK_SIZE;
-  const gminX = Math.floor(minX / VILLAGE_CELL_SIZE);
-  const gmaxX = Math.floor(maxX / VILLAGE_CELL_SIZE);
-  const gminZ = Math.floor(minZ / VILLAGE_CELL_SIZE);
-  const gmaxZ = Math.floor(maxZ / VILLAGE_CELL_SIZE);
-  const out = [];
-  for (let gx = gminX; gx <= gmaxX; gx++) {
-    for (let gz = gminZ; gz <= gmaxZ; gz++) {
-      out.push([gx, gz]);
-    }
+  const pierMeshes = [];
+  for (const p of s.piers) {
+    const h = Math.max(1.5, p.topY - p.bedY + 1.5); // extend into the riverbed
+    const pier = new Mesh(PIER_GEOM, SHARED_ROAD_MAT);
+    pier.scale.set(1.5, h, 1.5);
+    pier.position.set(p.x, p.topY - h / 2, p.z);
+    pierMeshes.push(pier);
   }
-  return out;
+  return { mesh, geometry, centerline: s.centerline, pierMeshes };
 }
 
 // A point on the apron BESIDE the runway (on the village side), so roads
@@ -199,53 +241,59 @@ function apronPoint(v) {
   return { x: v.airportX + px * s * off, z: v.airportZ + pz * s * off };
 }
 
-// Roads are "owned" by the chunk containing the from-village's airport. For
-// each village whose airport falls inside (cx, cz), emit roads to nearby
-// villages (with a canonical ordering to avoid doubling) and optionally a
-// spur to the home runway. This keeps the chunk↔road lifetime link simple.
-function roadsOwnedByChunk(cx, cz) {
-  const out = [];
-  const cells = villageCellsForChunk(cx, cz);
+// Distance from (px,pz) to the segment a→b of a road spec, in XZ.
+function distToSpec(px, pz, spec) {
+  const dx = spec.bx - spec.ax;
+  const dz = spec.bz - spec.az;
+  const len2 = dx * dx + dz * dz;
+  let t = len2 > 1e-6 ? ((px - spec.ax) * dx + (pz - spec.az) * dz) / len2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const qx = spec.ax + dx * t;
+  const qz = spec.az + dz * t;
+  return Math.hypot(px - qx, pz - qz);
+}
 
-  for (const [gx, gz] of cells) {
-    const v = getVillage(gx, gz);
-    if (!v) continue;
-    const ocx = Math.floor(v.airportX / CHUNK_SIZE);
-    const ocz = Math.floor(v.airportZ / CHUNK_SIZE);
-    if (ocx !== cx || ocz !== cz) continue;
+// Enumerate every road spec whose endpoints lie within `radius` of (x, z):
+// inter-village links (canonical ordering to avoid doubles) + home spurs.
+function enumerateSpecsNear(x, z, radius) {
+  const out = new Map(); // canonical key → spec
+  const cellR = Math.ceil((radius + ROAD_MAX_VILLAGE_LINK_DISTANCE) / VILLAGE_CELL_SIZE);
+  const pcx = Math.floor(x / VILLAGE_CELL_SIZE);
+  const pcz = Math.floor(z / VILLAGE_CELL_SIZE);
+  const linkRing = Math.ceil(ROAD_MAX_VILLAGE_LINK_DISTANCE / VILLAGE_CELL_SIZE);
 
-    const fromKey = `${gx},${gz}`;
+  for (let gx = pcx - cellR; gx <= pcx + cellR; gx++) {
+    for (let gz = pcz - cellR; gz <= pcz + cellR; gz++) {
+      const v = getVillage(gx, gz);
+      if (!v) continue;
+      const fromKey = `${gx},${gz}`;
 
-    const ring = Math.ceil(ROAD_MAX_VILLAGE_LINK_DISTANCE / VILLAGE_CELL_SIZE);
-    for (let dx = -ring; dx <= ring; dx++) {
-      for (let dz = -ring; dz <= ring; dz++) {
-        if (dx === 0 && dz === 0) continue;
-        const n = getVillage(gx + dx, gz + dz);
-        if (!n) continue;
-        const toKey = `${gx + dx},${gz + dz}`;
-        if (fromKey > toKey) continue;
-        const ddx = n.airportX - v.airportX;
-        const ddz = n.airportZ - v.airportZ;
-        const dist2 = ddx * ddx + ddz * ddz;
-        if (dist2 > ROAD_MAX_VILLAGE_LINK_DISTANCE * ROAD_MAX_VILLAGE_LINK_DISTANCE) continue;
-        // Connect apron-to-apron so the ribbon runs beside each runway, not
-        // across it.
-        const ap = apronPoint(v);
-        const bp = apronPoint(n);
-        out.push({ ax: ap.x, az: ap.z, bx: bp.x, bz: bp.z });
-      }
-    }
-
-    if (!v.isHome) {
-      const dd2 = v.airportX * v.airportX + v.airportZ * v.airportZ;
-      if (dd2 < ROAD_RUNWAY_DISTANCE * ROAD_RUNWAY_DISTANCE) {
-        // Spur to the home airport's apron (its actual position/orientation),
-        // not the runway centerline.
-        const home = getVillage(0, 0);
-        if (home) {
+      for (let dx = -linkRing; dx <= linkRing; dx++) {
+        for (let dz = -linkRing; dz <= linkRing; dz++) {
+          if (dx === 0 && dz === 0) continue;
+          const n = getVillage(gx + dx, gz + dz);
+          if (!n) continue;
+          const toKey = `${gx + dx},${gz + dz}`;
+          if (fromKey > toKey) continue; // canonical direction
+          const ddx = n.airportX - v.airportX;
+          const ddz = n.airportZ - v.airportZ;
+          if (ddx * ddx + ddz * ddz >
+              ROAD_MAX_VILLAGE_LINK_DISTANCE * ROAD_MAX_VILLAGE_LINK_DISTANCE) continue;
           const ap = apronPoint(v);
-          const hp = apronPoint(home);
-          out.push({ ax: ap.x, az: ap.z, bx: hp.x, bz: hp.z });
+          const bp = apronPoint(n);
+          out.set(`${fromKey}->${toKey}`, { ax: ap.x, az: ap.z, bx: bp.x, bz: bp.z });
+        }
+      }
+
+      if (!v.isHome) {
+        const dd2 = v.airportX * v.airportX + v.airportZ * v.airportZ;
+        if (dd2 < ROAD_RUNWAY_DISTANCE * ROAD_RUNWAY_DISTANCE) {
+          const home = getVillage(0, 0);
+          if (home) {
+            const ap = apronPoint(v);
+            const hp = apronPoint(home);
+            out.set(`home->${fromKey}`, { ax: ap.x, az: ap.z, bx: hp.x, bz: hp.z });
+          }
         }
       }
     }
@@ -253,80 +301,96 @@ function roadsOwnedByChunk(cx, cz) {
   return out;
 }
 
-// Per-chunk road bucket. We store both the 3D mesh entries and the raw
-// centerline points so the minimap can re-draw the exact same curves as
-// 3D space, without re-sampling from scratch.
+// The single live Roads instance — listRoadSegmentsNear (minimap) reads its
+// already-built centerlines instead of re-sampling terrain every redraw.
+let ACTIVE_ROADS = null;
+
+// Roads stream by DISTANCE TO THE PLAYER, decoupled from terrain-chunk
+// lifetime. (They used to be owned by the chunk containing the from-village's
+// airport — so with several villages close together, a road would vanish the
+// moment its faraway owner chunk unloaded, flickering as you flew between
+// them.) Build when the route comes within ROAD_VIEW_DISTANCE; dispose past
+// view × hysteresis. Failed routes are cached so they aren't re-sampled.
 export class Roads {
   constructor(scene) {
     this.scene = scene;
-    this.perChunk = new Map(); // "cx,cz" → { meshes: [{mesh, geometry, centerline}] }
+    this.built = new Map(); // canonical key → { spec, rejected } | { spec, mesh, geometry, centerline, pierMeshes }
+    this._specs = new Map();
+    this._lastCellX = NaN;
+    this._lastCellZ = NaN;
+    ACTIVE_ROADS = this;
   }
 
-  buildForChunk(cx, cz) {
-    const key = `${cx},${cz}`;
-    if (this.perChunk.has(key)) return;
+  update(planePos) {
+    const cellX = Math.floor(planePos.x / VILLAGE_CELL_SIZE);
+    const cellZ = Math.floor(planePos.z / VILLAGE_CELL_SIZE);
+    if (cellX !== this._lastCellX || cellZ !== this._lastCellZ) {
+      this._lastCellX = cellX;
+      this._lastCellZ = cellZ;
+      this._specs = enumerateSpecsNear(
+        planePos.x, planePos.z, ROAD_VIEW_DISTANCE * ROAD_VIEW_HYSTERESIS
+      );
+    }
+
+    // Dispose routes that drifted far away (with hysteresis so the boundary
+    // doesn't thrash while flying along it).
+    const dropBeyond = ROAD_VIEW_DISTANCE * ROAD_VIEW_HYSTERESIS;
+    for (const [key, entry] of this.built) {
+      if (distToSpec(planePos.x, planePos.z, entry.spec) > dropBeyond) {
+        this._disposeEntry(entry);
+        this.built.delete(key);
+      }
+    }
+
+    // Build the nearest few missing routes (sampling terrain is the cost, so
+    // cap per frame).
+    const candidates = [];
+    for (const [key, spec] of this._specs) {
+      if (this.built.has(key)) continue;
+      const d = distToSpec(planePos.x, planePos.z, spec);
+      if (d <= ROAD_VIEW_DISTANCE) candidates.push({ key, spec, d });
+    }
+    if (candidates.length === 0) return;
+    candidates.sort((a, b) => a.d - b.d);
     const _t0 = profiler.timeBegin();
-    const specs = roadsOwnedByChunk(cx, cz);
-    if (specs.length === 0) {
-      this.perChunk.set(key, { meshes: [] });
-      profiler.timeEnd('roads', _t0);
-      return;
-    }
-    const meshes = [];
-    for (const s of specs) {
-      const r = buildRoadMesh(s.ax, s.az, s.bx, s.bz);
-      if (!r) continue;
+    const limit = Math.min(ROAD_BUILDS_PER_UPDATE, candidates.length);
+    for (let i = 0; i < limit; i++) {
+      const { key, spec } = candidates[i];
+      const r = buildRoadMesh(spec.ax, spec.az, spec.bx, spec.bz);
+      if (!r) {
+        this.built.set(key, { spec, rejected: true });
+        continue;
+      }
       this.scene.add(r.mesh);
-      meshes.push(r);
+      for (const p of r.pierMeshes) this.scene.add(p);
+      this.built.set(key, { spec, ...r });
     }
-    this.perChunk.set(key, { meshes });
     profiler.timeEnd('roads', _t0);
   }
 
-  disposeForChunk(cx, cz) {
-    const key = `${cx},${cz}`;
-    const entry = this.perChunk.get(key);
-    if (!entry) return;
-    for (const { mesh, geometry } of entry.meshes) {
-      this.scene.remove(mesh);
-      geometry.dispose();
-    }
-    this.perChunk.delete(key);
+  _disposeEntry(entry) {
+    if (entry.rejected) return;
+    this.scene.remove(entry.mesh);
+    entry.geometry.dispose();
+    for (const p of entry.pierMeshes) this.scene.remove(p); // shared geom/mat stay
   }
 
   dispose() {
-    for (const key of [...this.perChunk.keys()]) {
-      const [cx, cz] = key.split(',').map(Number);
-      this.disposeForChunk(cx, cz);
-    }
-    SHARED_ROAD_MAT.dispose();
+    for (const entry of this.built.values()) this._disposeEntry(entry);
+    this.built.clear();
+    if (ACTIVE_ROADS === this) ACTIVE_ROADS = null;
   }
 }
 
-// Re-enumerate road centerlines around a world position without touching
-// any 3D meshes. Used by the minimap. A road is only returned if it would
-// actually be built (same validation as buildRoadMesh) so straight "ghost"
-// lines never appear over water.
+// Road centerlines near a world position, for the minimap. Reads the live
+// Roads instance's built routes — no terrain re-sampling per redraw.
 export function listRoadSegmentsNear(worldX, worldZ, radius) {
-  const cxMin = Math.floor((worldX - radius) / CHUNK_SIZE);
-  const cxMax = Math.floor((worldX + radius) / CHUNK_SIZE);
-  const czMin = Math.floor((worldZ - radius) / CHUNK_SIZE);
-  const czMax = Math.floor((worldZ + radius) / CHUNK_SIZE);
+  if (!ACTIVE_ROADS) return [];
   const out = [];
-  const seen = new Set();
-  for (let cx = cxMin; cx <= cxMax; cx++) {
-    for (let cz = czMin; cz <= czMax; cz++) {
-      for (const s of roadsOwnedByChunk(cx, cz)) {
-        const key = `${s.ax.toFixed(0)},${s.az.toFixed(0)}->${s.bx.toFixed(0)},${s.bz.toFixed(0)}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        const ctl = buildCurveControlPoints(s.ax, s.az, s.bx, s.bz);
-        if (!ctl) continue;
-        const v = sampleAndValidate(ctl.points, ctl.length);
-        if (!v) continue; // same rejection as the 3D build
-        out.push({ centerline: v.centerline });
-      }
-    }
+  for (const entry of ACTIVE_ROADS.built.values()) {
+    if (entry.rejected) continue;
+    if (distToSpec(worldX, worldZ, entry.spec) > radius) continue;
+    out.push({ centerline: entry.centerline });
   }
   return out;
 }

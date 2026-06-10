@@ -42,6 +42,13 @@ import {
   SPAWN_FLAT_BLEND,
   CLIMATE_SCALE,
   CLIMATE_WARP,
+  RIVER_SCALE,
+  RIVER_WIDTH_N,
+  RIVER_BED,
+  RIVER_BANK_LOW,
+  RIVER_BANK_HIGH,
+  RIVER_MAX_LAND,
+  RIVER_FADE_LAND,
   SNOW_LINE,
   SNOW_LINE_VARIATION,
   SNOW_SCALE,
@@ -54,13 +61,15 @@ import {
 } from '../config.js';
 import { profiler } from '../debug/Profiler.js';
 import { seedKey } from './WorldSeed.js';
+import { seaMaskAt } from './SeaMask.js';
+import { SEA_THRESHOLD_LOW } from '../config.js';
 
 // Distinct seeds → independent fields. Derived from the current world seed via
 // seedKey() so reseedTerrain() can rebuild them for a new world. Same seed on
 // every thread → identical terrain (the worker calls reseedTerrain() when the
 // build message carries a new seed).
 let warpA, warpB, contNoise, mtnMaskNoise, ridgeNoise, plainsNoise,
-  foothillNoise, tempNoise, moistNoise, snowNoise;
+  foothillNoise, tempNoise, moistNoise, snowNoise, riverNoise;
 function buildNoise() {
   warpA = createNoise2D(alea(seedKey('ts-warp-a')));
   warpB = createNoise2D(alea(seedKey('ts-warp-b')));
@@ -72,6 +81,7 @@ function buildNoise() {
   tempNoise = createNoise2D(alea(seedKey('ts-temp')));
   moistNoise = createNoise2D(alea(seedKey('ts-moist')));
   snowNoise = createNoise2D(alea(seedKey('ts-snow')));
+  riverNoise = createNoise2D(alea(seedKey('ts-river')));
 }
 buildNoise();
 // Rebuild all fields for the current world seed (call after setWorldSeed).
@@ -189,7 +199,46 @@ export function landElevation(x, z) {
     const massif = MOUNTAIN_BASE_RISE + relief * MOUNTAIN_HEIGHT;
     h += mtn * (foothill * 0.55 + massif);
   }
+
+  // Anti-fake-pond floor: stray land dips below the waterline are softly
+  // compressed back up so random terrain noise never reads as ponds. This
+  // MUST run before the river carve — it used to live in the height
+  // functions AFTER it, which clamped riverbeds back above the water and
+  // left every river channel dry.
+  const LAND_FLOOR = WATER_LEVEL + 2;
+  if (h < LAND_FLOOR) {
+    h = LAND_FLOOR - 3 * (1 - Math.exp((h - LAND_FLOOR) / 20));
+  }
+
+  // Rivers — carve a winding channel below the water line wherever the river
+  // field crosses zero. Faded out on rising ground (rivers stay in lowlands,
+  // no canyons through ranges), near the origin (dry spawn clearing), and as
+  // the sea begins (no river grooves etched into the ocean floor — the
+  // channel hands over to the sea carve at the coast).
+  // Because the carve lives inside landElevation, physics, the chunk worker,
+  // scatter and village placement all see identical riverbeds.
+  const rn = Math.abs(riverNoise(wx * RIVER_SCALE, wz * RIVER_SCALE));
+  if (rn < RIVER_WIDTH_N) {
+    const m = 1 - smoothstep(0, RIVER_WIDTH_N, rn);
+    // U-shaped profile: full-depth floor across most of the channel, banks
+    // only at the edges — so the waterline strip is wide and reads as a river.
+    const u = smoothstep(RIVER_BANK_LOW, RIVER_BANK_HIGH, m);
+    const lowland = 1 - smoothstep(RIVER_MAX_LAND, RIVER_FADE_LAND, h);
+    const seaHandoff = 1 - smoothstep(SEA_THRESHOLD_LOW - 0.06, SEA_THRESHOLD_LOW, seaMaskAt(x, z));
+    const carve = u * lowland * sf * seaHandoff;
+    if (carve > 0.001) h = mix(h, RIVER_BED, carve);
+  }
   return h;
+}
+
+// Cheap river test for the minimap (mask only — skips the lowland fade, so a
+// faded-out mountain "river" can show a stray blue pixel; acceptable at 22 m
+// per pixel). Uses the same warped coordinates as the real carve.
+export function riverMaskAt(x, z) {
+  const [wx, wz] = warp(x, z);
+  const rn = Math.abs(riverNoise(wx * RIVER_SCALE, wz * RIVER_SCALE));
+  if (rn >= RIVER_WIDTH_N) return 0;
+  return (1 - smoothstep(0, RIVER_WIDTH_N, rn)) * spawnFlat01(x, z);
 }
 
 // --- Climate -------------------------------------------------------------

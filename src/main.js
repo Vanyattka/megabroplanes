@@ -634,6 +634,9 @@ function streamUpdate() {
   chunks.update(plane.position, viewDistanceFor(plane), fogFarFor(plane));
   villages.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
   ruins.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
+  // Roads stream by distance to the player (decoupled from chunk lifetime so
+  // a road never vanishes just because a faraway owner chunk unloaded).
+  roads.update(plane.position);
 }
 
 function physicsStep(dt) {

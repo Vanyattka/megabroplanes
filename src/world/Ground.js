@@ -35,17 +35,8 @@ export function groundHeight(x, z) {
   // near the world origin so the home spawn is always on dry land.
   const seaStrength = smoothstep(SEA_THRESHOLD_LOW, SEA_THRESHOLD_HIGH, seaMaskAt(x, z)) * spawnFlat01(x, z);
   h -= seaStrength * SEA_DEPTH;
-
-  // Outside the sea, keep the land from dipping below water — gentle plains
-  // undulation occasionally crosses the waterline, which would read as fake
-  // ponds. Softly compress below-floor values so they asymptote just under
-  // the land floor (no flat plateau, no false lakes).
-  if (seaStrength < 0.3) {
-    const LAND_FLOOR = WATER_LEVEL + 2;
-    if (h < LAND_FLOOR) {
-      h = LAND_FLOOR - 3 * (1 - Math.exp((h - LAND_FLOOR) / 20));
-    }
-  }
+  // (The anti-fake-pond land floor now lives inside landElevation, BEFORE the
+  // river carve — applying it here clamped riverbeds dry.)
 
   // Blend from the airport pad height (flush plateau) to natural terrain.
   return padY + (h - padY) * f;

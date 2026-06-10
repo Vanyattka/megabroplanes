@@ -1,5 +1,6 @@
 import { Vector3 } from 'three';
 import { biomeAt } from '../world/Biome.js';
+import { riverMaskAt } from '../world/TerrainShape.js';
 import { seaMaskAt } from '../world/SeaMask.js';
 import { getVillage } from '../world/Villages.js';
 import { getRuin } from '../world/Ruins.js';
@@ -27,6 +28,7 @@ const TERRAIN_COLORS = {
   alpine:  [150, 144, 138],
 };
 const SEA_COLOR = [28, 64, 116]; // deep ocean blue
+const RIVER_COLOR = [62, 118, 170]; // lighter than the sea so channels read as rivers
 const BORDER_COLOR = 'rgba(255,255,255,0.55)';
 
 const _fwd = new Vector3();
@@ -108,7 +110,13 @@ export class Minimap {
           c = SEA_COLOR;
         } else {
           const b = biomeAt(wx, wz);
-          c = TERRAIN_COLORS[b.type] || [85, 85, 85];
+          // Rivers only flow through lowlands — skip the high/cold biomes
+          // where the carve fades out, so the map matches the terrain.
+          if (b.type !== 'alpine' && b.type !== 'tundra' && riverMaskAt(wx, wz) > 0.45) {
+            c = RIVER_COLOR;
+          } else {
+            c = TERRAIN_COLORS[b.type] || [85, 85, 85];
+          }
         }
         const i = (py * GRID + px) * 4;
         data[i] = c[0];

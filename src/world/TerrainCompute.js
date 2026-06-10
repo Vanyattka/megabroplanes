@@ -96,12 +96,7 @@ function groundHeightFast(x, z, villages) {
     seaMaskAt(x, z)
   ) * spawnFlat01(x, z);
   h -= seaStrength * SEA_DEPTH;
-  if (seaStrength < 0.3) {
-    const LAND_FLOOR = WATER_LEVEL + 2;
-    if (h < LAND_FLOOR) {
-      h = LAND_FLOOR - 3 * (1 - Math.exp((h - LAND_FLOOR) / 20));
-    }
-  }
+  // (Anti-fake-pond floor lives inside landElevation, before the river carve.)
   // Blend from the airport pad height (flush plateau) to natural terrain.
   return padY + (h - padY) * f;
 }
