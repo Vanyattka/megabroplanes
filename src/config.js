@@ -7,10 +7,19 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.3.1';
+export const GAME_VERSION = '0.3.2';
 export const GAME_CODENAME = 'Charlie';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.3.2',
+    codename: 'Charlie',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-10',
+    notes: [
+      'Rivers now carry their own local water level: the water follows the land in stepped pools (a cascade of level reaches), so rivers high above sea level are no longer dry gullies. Water is rendered per pool; the plane lands on it, bridges clear it, and trees avoid it.',
+    ],
+  },
   {
     version: '0.3.1',
     codename: 'Charlie',
@@ -383,12 +392,22 @@ export const CLIMATE_WARP = 0.0006;
 // the world origin (dry spawn clearing), and inside the sea.
 export const RIVER_SCALE = 0.0009;        // meander wavelength ~1–2 km
 export const RIVER_WIDTH_N = 0.022;       // |noise| half-width of the channel
-// Rivers are VALLEYS, not slot canyons: a wide gentle depression first eases
-// the land down to low meadows just above the waterline (VALLEY_FLOOR), and
-// only the inner channel dips below the water. Carving a deep bed straight
-// into high plains made a narrow gorge with a "creek at the bottom".
-export const RIVER_BED = -6.5;            // channel bed elevation (m) — ~2.5 m of water
-export const RIVER_VALLEY_FLOOR = -2.2;   // meadow level beside the water (water is at -4)
+// Rivers carry their own LOCAL water level. The global water plane sits at
+// WATER_LEVEL (-4), but rivers often run through land well above it — carving
+// to a fixed depth left dry gullies up high. Instead the river's water level
+// follows a SMOOTH base of the terrain (the continental swell), quantized to
+// RIVER_STEP-metre pools, so a river descends to the sea as a cascade of
+// level reaches with small ledges between them — no weird sloping water.
+// All targets are RELATIVE to that local level; a per-chunk water surface
+// renders the pools (see TerrainCompute/Terrain).
+export const RIVER_STEP = 5;              // pool quantization step (m)
+export const RIVER_LOCAL_DROP = 3;        // water sits this far below the smooth base
+export const RIVER_BED_DEPTH = 2.8;       // channel bed below the local water level
+export const RIVER_MEADOW_RISE = 1.6;     // valley meadows above the local water level
+// Fade rivers out where the land towers over the would-be water (ridges,
+// foothills) — rivers flow through plains and plateaus, not over mountains.
+export const RIVER_RELIEF_LO = 14;
+export const RIVER_RELIEF_HI = 26;
 export const RIVER_VALLEY_MULT = 3.2;     // valley half-width = WIDTH_N × this
 export const RIVER_CHANNEL_MULT = 1.3;    // waterway half-width = WIDTH_N × this
 // U-shaped channel profile: carve saturates to full depth once the bank mask

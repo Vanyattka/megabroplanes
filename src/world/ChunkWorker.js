@@ -35,7 +35,10 @@ self.addEventListener('message', (e) => {
   const { reqId, cx, cz, villages, detail } = msg;
   try {
     const data = computeTerrainData(cx, cz, villages || [], !!detail);
-    // Transfer the three big Float32Array buffers back zero-copy.
+    // Transfer the big Float32Array buffers back zero-copy. waterPositions
+    // (river pools) is only present for chunks containing submerged riverbed.
+    const transfer = [data.positions.buffer, data.normals.buffer, data.colors.buffer];
+    if (data.waterPositions) transfer.push(data.waterPositions.buffer);
     self.postMessage(
       {
         type: 'terrainResult',
@@ -43,10 +46,11 @@ self.addEventListener('message', (e) => {
         positions: data.positions,
         normals: data.normals,
         colors: data.colors,
+        waterPositions: data.waterPositions || null,
         boundingSphereCenter: data.boundingSphereCenter,
         boundingSphereRadius: data.boundingSphereRadius,
       },
-      [data.positions.buffer, data.normals.buffer, data.colors.buffer]
+      transfer
     );
   } catch (err) {
     self.postMessage({

@@ -22,7 +22,7 @@ import {
   RUNWAY_BLEND,
   VILLAGE_BLEND,
 } from '../config.js';
-import { landElevation, surfaceColor, spawnFlat01 } from './TerrainShape.js';
+import { landElevation, surfaceColor, spawnFlat01, riverWaterLevelAt } from './TerrainShape.js';
 import { seaMaskAt } from './SeaMask.js';
 
 // Deterministic per-vertex hash in [0, 1). Used to perturb vertex colors
@@ -198,6 +198,62 @@ export function computeTerrainData(cx, cz, villages, detail) {
     }
   }
 
+  // Pass 4: river water surface. Rivers carry a LOCAL, stepped water level
+  // (riverWaterLevelAt), so the global -4 m plane can't render them — each
+  // chunk that contains submerged riverbed gets a second height field: the
+  // pool level over wet vertices, tucked below the terrain elsewhere (those
+  // triangles end up depth-occluded by the opaque ground).
+  let waterPositions = null;
+  {
+    // Cheap reject: the channel field |n| is Lipschitz (|∇n| ≤ ~2.5·scale),
+    // so if every corner + the centre are far from a channel, the whole
+    // chunk is. Most chunks skip the per-vertex water pass entirely.
+    const probes = [
+      [chunkOriginX - CHUNK_SIZE / 2, chunkOriginZ - CHUNK_SIZE / 2],
+      [chunkOriginX + CHUNK_SIZE / 2, chunkOriginZ - CHUNK_SIZE / 2],
+      [chunkOriginX - CHUNK_SIZE / 2, chunkOriginZ + CHUNK_SIZE / 2],
+      [chunkOriginX + CHUNK_SIZE / 2, chunkOriginZ + CHUNK_SIZE / 2],
+      [chunkOriginX, chunkOriginZ],
+    ];
+    let near = false;
+    for (const [px, pz] of probes) {
+      if (riverWaterLevelAt(px, pz) != null) { near = true; break; }
+    }
+    if (!near) {
+      // Wider net: the analytic bound above is loose, so confirm with a
+      // mid-edge sweep before fully skipping.
+      for (const t of [-0.25, 0.25]) {
+        if (riverWaterLevelAt(chunkOriginX + t * CHUNK_SIZE, chunkOriginZ) != null ||
+            riverWaterLevelAt(chunkOriginX, chunkOriginZ + t * CHUNK_SIZE) != null) { near = true; break; }
+      }
+    }
+    if (near) {
+      let hasWater = false;
+      const wp = new Float32Array(N * 3);
+      for (let iy = 0; iy < RES; iy++) {
+        const localZ = startLocal + iy * step;
+        const worldZ = chunkOriginZ + localZ;
+        for (let ix = 0; ix < RES; ix++) {
+          const idx = iy * RES + ix;
+          const localX = startLocal + ix * step;
+          const worldX = chunkOriginX + localX;
+          const h = heights[idx];
+          const lw = riverWaterLevelAt(worldX, worldZ);
+          let wy = h - 0.8; // default: hide beneath the ground
+          if (lw != null && lw > WATER_LEVEL + 0.05 && h < lw - 0.15) {
+            wy = lw;
+            hasWater = true;
+            if (lw > maxY) maxY = lw; // keep the bounding sphere covering the pools
+          }
+          wp[idx * 3 + 0] = localX;
+          wp[idx * 3 + 1] = wy;
+          wp[idx * 3 + 2] = localZ;
+        }
+      }
+      if (hasWater) waterPositions = wp;
+    }
+  }
+
   const cxLocal = (minX + maxX) * 0.5;
   const cyLocal = (minY + maxY) * 0.5;
   const czLocal = (minZ + maxZ) * 0.5;
@@ -210,6 +266,7 @@ export function computeTerrainData(cx, cz, villages, detail) {
     positions,
     normals,
     colors,
+    waterPositions,
     boundingSphereCenter: [cxLocal, cyLocal, czLocal],
     boundingSphereRadius: radius,
   };

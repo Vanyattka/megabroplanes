@@ -33,6 +33,7 @@ import {
 } from '../config.js';
 import { getVillage } from './Villages.js';
 import { groundHeight } from './Ground.js';
+import { riverWaterLevelAt } from './TerrainShape.js';
 import { profiler } from '../debug/Profiler.js';
 
 // One MeshStandardMaterial shared across every road mesh in the world.
@@ -100,12 +101,18 @@ function sampleAndValidate(controlPoints) {
   const stepLen = approxLen / steps;
   const n = samples.length;
 
+  // "Wet" is judged against the LOCAL water level — rivers carry their own
+  // stepped pools that often sit well above the global sea level.
   const ys = new Array(n);
   const wet = new Array(n);
+  const waterAt = new Array(n);
   for (let i = 0; i < n; i++) {
     const y = groundHeight(samples[i].x, samples[i].z);
+    const rw = riverWaterLevelAt(samples[i].x, samples[i].z);
+    const w = rw != null && rw > WATER_LEVEL ? rw : WATER_LEVEL;
     ys[i] = y;
-    wet[i] = y < WATER_LEVEL + WATER_CLEARANCE;
+    waterAt[i] = w;
+    wet[i] = y < w + WATER_CLEARANCE;
   }
   // Endpoints are airport aprons — if one is wet something else is wrong.
   if (wet[0] || wet[n - 1]) return null;
@@ -129,7 +136,10 @@ function sampleAndValidate(controlPoints) {
     const b = Math.min(n - 1, j + EXTEND);      // first ground sample after the deck
     const y0 = ys[a - 1];
     const y1 = ys[b];
-    const deckMin = WATER_LEVEL + BRIDGE_DECK_CLEARANCE;
+    // Clear the HIGHEST water in the span (local river pools vary in level).
+    let spanWater = WATER_LEVEL;
+    for (let k = i; k < j; k++) if (waterAt[k] > spanWater) spanWater = waterAt[k];
+    const deckMin = spanWater + BRIDGE_DECK_CLEARANCE;
     for (let k = a; k < b; k++) {
       if (isBridge[k]) continue; // overlapping span already decked
       const t = (k - (a - 1)) / (b - (a - 1));

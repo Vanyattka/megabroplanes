@@ -44,14 +44,16 @@ import {
   CLIMATE_WARP,
   RIVER_SCALE,
   RIVER_WIDTH_N,
-  RIVER_BED,
-  RIVER_VALLEY_FLOOR,
+  RIVER_STEP,
+  RIVER_LOCAL_DROP,
+  RIVER_BED_DEPTH,
+  RIVER_MEADOW_RISE,
+  RIVER_RELIEF_LO,
+  RIVER_RELIEF_HI,
   RIVER_VALLEY_MULT,
   RIVER_CHANNEL_MULT,
   RIVER_BANK_LOW,
   RIVER_BANK_HIGH,
-  RIVER_MAX_LAND,
-  RIVER_FADE_LAND,
   SNOW_LINE,
   SNOW_LINE_VARIATION,
   SNOW_SCALE,
@@ -223,25 +225,52 @@ export function landElevation(x, z) {
   const rn = Math.abs(riverNoise(wx * RIVER_SCALE, wz * RIVER_SCALE));
   const valleyW = RIVER_WIDTH_N * RIVER_VALLEY_MULT;
   if (rn < valleyW) {
-    const lowland = 1 - smoothstep(RIVER_MAX_LAND, RIVER_FADE_LAND, h);
+    // The river's LOCAL water level: the smooth continental base, quantized
+    // to RIVER_STEP pools (so the water is always level, stepping down in
+    // discrete reaches as the land descends — never a sloped water surface).
+    const lw = riverLocalWater(wx, wz, x, z);
+    const meadow = lw + RIVER_MEADOW_RISE;
+    const bed = lw - RIVER_BED_DEPTH;
+    // Fade where the land towers over the would-be water (ridges/foothills),
+    // near the origin clearing, and as the sea takes over at the coast.
+    const relief = 1 - smoothstep(RIVER_RELIEF_LO, RIVER_RELIEF_HI, h - meadow);
     const seaHandoff = 1 - smoothstep(SEA_THRESHOLD_LOW - 0.06, SEA_THRESHOLD_LOW, seaMaskAt(x, z));
-    const fades = lowland * sf * seaHandoff;
+    const fades = relief * sf * seaHandoff;
     if (fades > 0.001) {
       // 1) Valley: ease the land down to low meadows just above the water,
       //    over a wide gentle slope (this is what makes it read as a river
       //    valley instead of a slot canyon).
       const mv = 1 - smoothstep(0, valleyW, rn);
-      if (h > RIVER_VALLEY_FLOOR) {
-        h = mix(h, RIVER_VALLEY_FLOOR, smoothstep(0.12, 0.85, mv) * fades);
+      if (h > meadow) {
+        h = mix(h, meadow, smoothstep(0.12, 0.85, mv) * fades);
       }
-      // 2) Channel: a U-shaped waterway dipping below the waterline — full
-      //    depth across most of its width so the water surface is wide.
+      // 2) Channel: a U-shaped waterway dipping below the local waterline —
+      //    full depth across most of its width so the water surface is wide.
       const mc = 1 - smoothstep(0, RIVER_WIDTH_N * RIVER_CHANNEL_MULT, rn);
       const u = smoothstep(RIVER_BANK_LOW, RIVER_BANK_HIGH, mc);
-      if (u > 0.001) h = mix(h, RIVER_BED, u * fades);
+      if (u > 0.001) h = mix(h, bed, u * fades);
     }
   }
   return h;
+}
+
+// The local river water level at warped/world coords: smooth continental base
+// (damped near origin like the carve), dropped a little and quantized to
+// RIVER_STEP pools; never below the global sea level.
+function riverLocalWater(wx, wz, x, z) {
+  const base = continentSwell(wx, wz) * spawnFlat01(x, z);
+  return Math.max(WATER_LEVEL, Math.round((base - RIVER_LOCAL_DROP) / RIVER_STEP) * RIVER_STEP);
+}
+
+// Public: the river water level at (x, z), or null when outside a channel.
+// Callers decide "is there actually water" by comparing against the terrain
+// height (water exists where ground < level). Used by the per-chunk water
+// surface, physics floor, bridges, scatter and village siting.
+export function riverWaterLevelAt(x, z) {
+  const [wx, wz] = warp(x, z);
+  const rn = Math.abs(riverNoise(wx * RIVER_SCALE, wz * RIVER_SCALE));
+  if (rn >= RIVER_WIDTH_N * RIVER_CHANNEL_MULT) return null;
+  return riverLocalWater(wx, wz, x, z);
 }
 
 // Cheap river test for the minimap (mask only — skips the lowland fade, so a

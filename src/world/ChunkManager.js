@@ -179,8 +179,12 @@ export class ChunkManager {
     for (const [key, entry] of this.chunks) {
       if (!needed.has(key)) {
         this.scene.remove(entry.group);
-        entry.terrain.geometry.dispose();
-        // Do NOT dispose terrain.material — it's SHARED_TERRAIN_MAT.
+        // Dispose the terrain geometry AND any children's (river-water pools
+        // attach their own per-chunk geometry under the terrain mesh).
+        entry.terrain.traverse((o) => {
+          if (o.isMesh && o.geometry) o.geometry.dispose();
+        });
+        // Do NOT dispose materials — they're shared across all chunks.
         if (entry.scatter) disposeScatter(entry.scatter);
         this.chunks.delete(key);
         const qi = this._scatterQueue.indexOf(entry);

@@ -79,6 +79,7 @@ export class ChunkWorkerPool {
         positions: msg.positions,
         normals: msg.normals,
         colors: msg.colors,
+        waterPositions: msg.waterPositions || null,
         boundingSphereCenter: msg.boundingSphereCenter,
         boundingSphereRadius: msg.boundingSphereRadius,
       });

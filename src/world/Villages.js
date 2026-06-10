@@ -17,8 +17,18 @@ import {
   WATER_LEVEL,
 } from '../config.js';
 import { seaMaskAt } from './SeaMask.js';
-import { landElevation } from './TerrainShape.js';
+import { landElevation, riverWaterLevelAt } from './TerrainShape.js';
 import { seedKey } from './WorldSeed.js';
+
+// A point is "wet" if it's in the sea, below the global waterline, or under a
+// river's LOCAL water level (rivers carry stepped pools above sea level).
+function isWetAt(x, z) {
+  if (seaMaskAt(x, z) >= SEA_THRESHOLD_LOW) return true;
+  const h = landElevation(x, z);
+  if (h < WATER_LEVEL + 1) return true;
+  const rw = riverWaterLevelAt(x, z);
+  return rw != null && h < rw + 1;
+}
 
 // Village center sits far enough from the runway that the village rect never
 // overlaps the runway's flat zone. Without this, cities (halfW=140) place
@@ -157,7 +167,8 @@ function buildVillage(gcx, gcz, isHome) {
     let hLo = Infinity, hHi = -Infinity;
     for (const [sx, sz] of probes) {
       const h = landElevation(sx, sz);
-      if (h > MOUNTAIN_HEIGHT_LIMIT || h < WATER_LEVEL + 1) return null;
+      if (h > MOUNTAIN_HEIGHT_LIMIT) return null;
+      if (isWetAt(sx, sz)) return null;
       if (h < hLo) hLo = h;
       if (h > hHi) hHi = h;
     }
@@ -171,10 +182,7 @@ function buildVillage(gcx, gcz, isHome) {
     const ahw = RUNWAY_WIDTH / 2 + RUNWAY_MARGIN + 40;
     for (const la of [-ahl, 0, ahl]) {
       for (const pw of [-ahw, 0, ahw]) {
-        const cx = airportX + afx * la + apx * pw;
-        const cz = airportZ + afz * la + apz * pw;
-        if (seaMaskAt(cx, cz) >= SEA_THRESHOLD_LOW) return null;
-        if (landElevation(cx, cz) < WATER_LEVEL + 1) return null;
+        if (isWetAt(airportX + afx * la + apx * pw, airportZ + afz * la + apz * pw)) return null;
       }
     }
   }
@@ -194,8 +202,7 @@ function buildVillage(gcx, gcz, isHome) {
       const a = (k / samples) * Math.PI * 2;
       const sx = airportX + Math.cos(a) * ringR;
       const sz = airportZ + Math.sin(a) * ringR;
-      if (seaMaskAt(sx, sz) >= SEA_THRESHOLD_LOW) waterHits++;
-      else if (landElevation(sx, sz) < WATER_LEVEL + 1) waterHits++; // river channel
+      if (isWetAt(sx, sz)) waterHits++;
     }
     // Mostly-wet surroundings = a spit/islet — reject. (The precise "no house
     // in water" guarantee is the village-rect check further down; requiring a
@@ -221,10 +228,7 @@ function buildVillage(gcx, gcz, isHome) {
     for (const [la, pw] of [[0, 0],
       [size.halfL + m, size.halfW + m], [size.halfL + m, -size.halfW - m],
       [-size.halfL - m, size.halfW + m], [-size.halfL - m, -size.halfW - m]]) {
-      const sx = villageCx + fx * la + px * pw;
-      const sz = villageCz + fz * la + pz * pw;
-      if (seaMaskAt(sx, sz) >= SEA_THRESHOLD_LOW) return null;
-      if (landElevation(sx, sz) < WATER_LEVEL + 1) return null;
+      if (isWetAt(villageCx + fx * la + px * pw, villageCz + fz * la + pz * pw)) return null;
     }
   }
 

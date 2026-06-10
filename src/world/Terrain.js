@@ -15,6 +15,7 @@ import {
   AERIAL_STRENGTH,
   AERIAL_DESATURATION,
   HORIZON_COLOR,
+  WATER_COLOR_SHALLOW,
 } from '../config.js';
 import { villagesAffectingArea } from './Villages.js';
 import { villagesToWorkerData } from './VillageData.js';
@@ -90,6 +91,30 @@ export function updateAerialPerspective(horizonColor) {
   AERIAL_UNIFORMS.uAerialColor.value.copy(horizonColor);
 }
 
+// River pools — a translucent water surface per chunk that contains
+// submerged riverbed (rivers carry a local stepped water level the global
+// water plane can't represent). One shared material; per-chunk only the
+// position buffer differs. depthWrite off so the terrain bed shows through.
+const RIVER_WATER_MAT = new MeshStandardMaterial({
+  color: WATER_COLOR_SHALLOW,
+  transparent: true,
+  opacity: 0.84,
+  roughness: 0.28,
+  metalness: 0.0,
+  depthWrite: false,
+});
+
+// All river-water vertices share the same "straight up" normal.
+let SHARED_UP_NORMALS = null;
+function getSharedUpNormals() {
+  if (SHARED_UP_NORMALS) return SHARED_UP_NORMALS;
+  const RES = CHUNK_RESOLUTION;
+  const arr = new Float32Array(RES * RES * 3);
+  for (let i = 0; i < RES * RES; i++) arr[i * 3 + 1] = 1;
+  SHARED_UP_NORMALS = new BufferAttribute(arr, 1 * 3);
+  return SHARED_UP_NORMALS;
+}
+
 // Shared, reused index buffer. Every terrain mesh has the same topology
 // (RES×RES grid), so we compute the pattern once and every BufferGeometry
 // references it — saves allocating + uploading a fresh index buffer per
@@ -135,6 +160,20 @@ export function finalizeTerrainMesh(data, cx, cz, shadowTerrain) {
   mesh.position.set(chunkOriginX, 0, chunkOriginZ);
   mesh.receiveShadow = true;
   mesh.castShadow = !!shadowTerrain;
+
+  // River pools — only present when the chunk has submerged riverbed.
+  if (data.waterPositions) {
+    const wgeo = new BufferGeometry();
+    wgeo.setIndex(getSharedIndex());
+    wgeo.setAttribute('position', new BufferAttribute(data.waterPositions, 3));
+    wgeo.setAttribute('normal', getSharedUpNormals());
+    wgeo.boundingSphere = new Sphere(
+      new Vector3(sx, sy, sz), data.boundingSphereRadius
+    );
+    const wmesh = new Mesh(wgeo, RIVER_WATER_MAT);
+    wmesh.renderOrder = 1; // after the opaque terrain
+    mesh.add(wmesh);
+  }
   return mesh;
 }
 

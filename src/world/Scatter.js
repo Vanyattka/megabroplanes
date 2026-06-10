@@ -29,7 +29,7 @@ import {
   RUNWAY_MARGIN,
   VILLAGE_CELL_SIZE,
 } from '../config.js';
-import { landElevation, biomeAt, spawnFlat01 } from './TerrainShape.js';
+import { landElevation, biomeAt, spawnFlat01, riverWaterLevelAt } from './TerrainShape.js';
 import { seaMaskAt } from './SeaMask.js';
 import { seedKey } from './WorldSeed.js';
 import {
@@ -199,6 +199,8 @@ export function buildScatter(cx, cz) {
     const y = groundHeightFast(x, z, villages);
     if (y < TREE_MIN_HEIGHT || y > TREE_MAX_HEIGHT) continue;
     if (y <= WATER_LEVEL + 0.5) continue;
+    const rwT = riverWaterLevelAt(x, z); // no trees in river pools
+    if (rwT != null && y <= rwT + 0.5) continue;
     if (slopeAt(x, z) > TREE_MAX_SLOPE) continue;
 
     const s = 0.8 + prng() * 0.7;
@@ -242,6 +244,8 @@ export function buildScatter(cx, cz) {
     const y = groundHeightFast(x, z, villages);
     if (y < 0.3) continue;
     if (y <= WATER_LEVEL + 0.5) continue;
+    const rwR = riverWaterLevelAt(x, z); // no rocks in river pools
+    if (rwR != null && y <= rwR + 0.5) continue;
 
     const s = 0.4 + prng() * 1.2;
     _pos.set(x, y - s * 0.3, z);

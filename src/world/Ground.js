@@ -1,4 +1,4 @@
-import { landElevation, spawnFlat01 } from './TerrainShape.js';
+import { landElevation, spawnFlat01, riverWaterLevelAt } from './TerrainShape.js';
 import { villageFlatFactor, lastFlatPadY } from './Villages.js';
 import { seaMaskAt } from './SeaMask.js';
 import {
@@ -47,7 +47,12 @@ export function groundHeight(x, z) {
 // too so they sit on the water surface rather than sink to the seabed.
 export function physicsFloor(x, z) {
   const g = groundHeight(x, z);
-  return g < WATER_LEVEL ? WATER_LEVEL : g;
+  // Rivers carry a local (often higher) water level — the plane lands on the
+  // pool surface, not on the riverbed beneath it.
+  let w = WATER_LEVEL;
+  const rw = riverWaterLevelAt(x, z);
+  if (rw != null && rw > w) w = rw;
+  return g < w ? w : g;
 }
 
 // Exposed so the minimap can color sea cells distinctly from lake-biome cells.
