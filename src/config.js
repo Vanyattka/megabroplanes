@@ -7,10 +7,21 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.3';
+export const GAME_VERSION = '0.3.1';
 export const GAME_CODENAME = 'Charlie';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.3.1',
+    codename: 'Charlie',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-10',
+    notes: [
+      'Rivers are proper valleys now — a wide gentle depression with low meadows and a broad waterway, instead of a slot canyon with a creek at the bottom.',
+      'Fixed the real cause of runways/roads "buried under earth": on some seeds the home airport settled outside its own grid cell, so terrain chunks never applied its flat pad while physics did. Verified flat on both build paths.',
+      'Village dirt streets no longer sink underground on elevated village pads (they sat at a fixed world height).',
+    ],
+  },
   {
     version: '0.3',
     codename: 'Charlie',
@@ -372,10 +383,16 @@ export const CLIMATE_WARP = 0.0006;
 // the world origin (dry spawn clearing), and inside the sea.
 export const RIVER_SCALE = 0.0009;        // meander wavelength ~1–2 km
 export const RIVER_WIDTH_N = 0.022;       // |noise| half-width of the channel
-export const RIVER_BED = -12;             // channel bed elevation (m)
+// Rivers are VALLEYS, not slot canyons: a wide gentle depression first eases
+// the land down to low meadows just above the waterline (VALLEY_FLOOR), and
+// only the inner channel dips below the water. Carving a deep bed straight
+// into high plains made a narrow gorge with a "creek at the bottom".
+export const RIVER_BED = -6.5;            // channel bed elevation (m) — ~2.5 m of water
+export const RIVER_VALLEY_FLOOR = -2.2;   // meadow level beside the water (water is at -4)
+export const RIVER_VALLEY_MULT = 3.2;     // valley half-width = WIDTH_N × this
+export const RIVER_CHANNEL_MULT = 1.3;    // waterway half-width = WIDTH_N × this
 // U-shaped channel profile: carve saturates to full depth once the bank mask
-// passes BANK_HIGH, so most of the channel floor sits well below the water
-// line (a V-profile left only a thin central strip wet → "empty" rivers).
+// passes BANK_HIGH, so most of the channel floor sits below the water line.
 export const RIVER_BANK_LOW = 0.18;
 export const RIVER_BANK_HIGH = 0.6;
 export const RIVER_MAX_LAND = 16;         // rivers fade out as land rises to this

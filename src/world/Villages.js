@@ -82,9 +82,18 @@ function buildVillage(gcx, gcz, isHome) {
     // player spawned half-buried. Measuring the height range over the whole
     // runway-plus-blend footprint finds genuinely level ground. Runs once at
     // module load — cost is a few ms.
+    // IMPORTANT: candidates must stay inside cell (0,0)'s GEOMETRIC bounds
+    // ([0..1800]² — the origin is the cell's corner, not its centre). The
+    // home village is cached under cell (0,0); when the search picked a spot
+    // with negative coordinates, the airport physically sat in a NEIGHBOUR
+    // cell, so the per-chunk village enumeration (villagesAffectingArea)
+    // never found it — chunks rendered UNflattened terrain over the runway
+    // while physics (3×3 cell scan around the query point) still saw the
+    // pad: the "runway buried under a thin layer of earth" bug. Kept well
+    // under SPAWN_FLAT_RADIUS so the strip stays in the level dry clearing.
     const candidates = [];
-    for (let dx = -600; dx <= 600; dx += 200) {
-      for (let dz = -600; dz <= 600; dz += 200) {
+    for (let dx = 120; dx <= 680; dx += 140) {
+      for (let dz = 120; dz <= 680; dz += 140) {
         for (const a of [0, Math.PI / 2]) {
           candidates.push({ x: dx, z: dz, angle: a });
         }

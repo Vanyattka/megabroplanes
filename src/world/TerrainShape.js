@@ -45,6 +45,9 @@ import {
   RIVER_SCALE,
   RIVER_WIDTH_N,
   RIVER_BED,
+  RIVER_VALLEY_FLOOR,
+  RIVER_VALLEY_MULT,
+  RIVER_CHANNEL_MULT,
   RIVER_BANK_LOW,
   RIVER_BANK_HIGH,
   RIVER_MAX_LAND,
@@ -218,15 +221,25 @@ export function landElevation(x, z) {
   // Because the carve lives inside landElevation, physics, the chunk worker,
   // scatter and village placement all see identical riverbeds.
   const rn = Math.abs(riverNoise(wx * RIVER_SCALE, wz * RIVER_SCALE));
-  if (rn < RIVER_WIDTH_N) {
-    const m = 1 - smoothstep(0, RIVER_WIDTH_N, rn);
-    // U-shaped profile: full-depth floor across most of the channel, banks
-    // only at the edges — so the waterline strip is wide and reads as a river.
-    const u = smoothstep(RIVER_BANK_LOW, RIVER_BANK_HIGH, m);
+  const valleyW = RIVER_WIDTH_N * RIVER_VALLEY_MULT;
+  if (rn < valleyW) {
     const lowland = 1 - smoothstep(RIVER_MAX_LAND, RIVER_FADE_LAND, h);
     const seaHandoff = 1 - smoothstep(SEA_THRESHOLD_LOW - 0.06, SEA_THRESHOLD_LOW, seaMaskAt(x, z));
-    const carve = u * lowland * sf * seaHandoff;
-    if (carve > 0.001) h = mix(h, RIVER_BED, carve);
+    const fades = lowland * sf * seaHandoff;
+    if (fades > 0.001) {
+      // 1) Valley: ease the land down to low meadows just above the water,
+      //    over a wide gentle slope (this is what makes it read as a river
+      //    valley instead of a slot canyon).
+      const mv = 1 - smoothstep(0, valleyW, rn);
+      if (h > RIVER_VALLEY_FLOOR) {
+        h = mix(h, RIVER_VALLEY_FLOOR, smoothstep(0.12, 0.85, mv) * fades);
+      }
+      // 2) Channel: a U-shaped waterway dipping below the waterline — full
+      //    depth across most of its width so the water surface is wide.
+      const mc = 1 - smoothstep(0, RIVER_WIDTH_N * RIVER_CHANNEL_MULT, rn);
+      const u = smoothstep(RIVER_BANK_LOW, RIVER_BANK_HIGH, mc);
+      if (u > 0.001) h = mix(h, RIVER_BED, u * fades);
+    }
   }
   return h;
 }

@@ -157,6 +157,11 @@ const roadMat = new MeshStandardMaterial({
   color: ROAD_COLOR,
   roughness: 1,
   metalness: 0,
+  // Streets lie a few cm above the perfectly flat village pad — bias the
+  // depth test so the pad terrain can't z-fight over them.
+  polygonOffset: true,
+  polygonOffsetFactor: -2,
+  polygonOffsetUnits: -2,
 });
 const windowMat = new MeshStandardMaterial({
   color: WINDOW_COLOR,
@@ -301,7 +306,10 @@ function windowLocalPlacements(variant) {
   return out;
 }
 
-function buildRoadStrip(road) {
+// `padY` — the village pad height. Streets used to sit at the fixed world
+// height RUNWAY_Y, which buried them metres underground on any village whose
+// pad levels above 0 (visible as patchy/missing dirt streets).
+function buildRoadStrip(road, padY) {
   const dx = road.x2 - road.x1;
   const dz = road.z2 - road.z1;
   const length = Math.sqrt(dx * dx + dz * dz);
@@ -311,7 +319,7 @@ function buildRoadStrip(road) {
   const mesh = new Mesh(geo, roadMat);
   mesh.position.set(
     (road.x1 + road.x2) / 2,
-    RUNWAY_Y,
+    padY + RUNWAY_Y,
     (road.z1 + road.z2) / 2
   );
   mesh.rotation.y = -Math.atan2(dz, dx);
@@ -474,7 +482,7 @@ export function buildVillageGroup(village) {
   }
 
   for (const r of village.roads) {
-    const mesh = buildRoadStrip(r);
+    const mesh = buildRoadStrip(r, village.padY || 0);
     if (mesh) group.add(mesh);
   }
 
