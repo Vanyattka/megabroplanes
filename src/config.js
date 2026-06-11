@@ -7,10 +7,19 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.3.3';
+export const GAME_VERSION = '0.3.4';
 export const GAME_CODENAME = 'Charlie';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.3.4',
+    codename: 'Charlie',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-10',
+    notes: [
+      'Rivers are about half as frequent and ~2.5× wider, with longer lazier meanders. Bridges span the wider waterways.',
+    ],
+  },
   {
     version: '0.3.3',
     codename: 'Charlie',
@@ -399,8 +408,11 @@ export const CLIMATE_WARP = 0.0006;
 // (|n| < width). They cut below WATER_LEVEL so the global water plane fills
 // them. Faded out on high ground (no canyon-rivers through mountains), near
 // the world origin (dry spawn clearing), and inside the sea.
-export const RIVER_SCALE = 0.0009;        // meander wavelength ~1–2 km
-export const RIVER_WIDTH_N = 0.022;       // |noise| half-width of the channel
+// Halving the field frequency makes rivers ~2× rarer AND ~2× physically
+// wider at the same noise width (width ≈ W/|∇n|, gradient ∝ scale) — with
+// longer, lazier meanders as a bonus.
+export const RIVER_SCALE = 0.00045;       // meander wavelength ~2–4 km
+export const RIVER_WIDTH_N = 0.026;       // |noise| half-width of the channel
 // Rivers carry their own LOCAL water level. The global water plane sits at
 // WATER_LEVEL (-4), but rivers often run through land well above it — carving
 // to a fixed depth left dry gullies up high. Instead the river's water level
@@ -850,7 +862,7 @@ export const ROAD_BUILDS_PER_UPDATE = 2;                // per-frame build cap (
 // Bridges — when a road crosses a river it continues over the water on a
 // deck with piers. Stretches of water longer than BRIDGE_MAX_SPAN still
 // reject the route (that's a lake/sea, not a river crossing).
-export const BRIDGE_MAX_SPAN = 120;                     // longest waterway a road will bridge (m)
+export const BRIDGE_MAX_SPAN = 220;                     // longest waterway a road will bridge (m) — rivers are ~2× wider since v0.3.4
 export const BRIDGE_DECK_CLEARANCE = 2.4;               // deck height above water level (m)
 export const BRIDGE_ARCH = 1.2;                         // extra rise at mid-span (m)
 export const BRIDGE_PIER_SPACING = 3;                   // pier every N wet samples

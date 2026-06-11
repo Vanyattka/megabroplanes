@@ -262,6 +262,17 @@ function riverLocalWater(wx, wz, x, z) {
   return Math.max(WATER_LEVEL, Math.round((base - RIVER_LOCAL_DROP) / RIVER_STEP) * RIVER_STEP);
 }
 
+// True when (x, z) is within `marginMeters` of a river channel, judged by a
+// Lipschitz bound on the warped channel noise (|∇| ≤ ~3.5·scale including the
+// domain-warp stretch). Used by the chunk water pass to skip whole chunks
+// SAFELY — an under-margined probe net used to be able to miss channel
+// slivers near chunk edges.
+export function nearRiverChannel(x, z, marginMeters) {
+  const [wx, wz] = warp(x, z);
+  const rn = Math.abs(riverNoise(wx * RIVER_SCALE, wz * RIVER_SCALE));
+  return rn < RIVER_WIDTH_N * RIVER_CHANNEL_MULT + 3.5 * RIVER_SCALE * marginMeters;
+}
+
 // Public: the river water level at (x, z), or null when outside a channel.
 // Callers decide "is there actually water" by comparing against the terrain
 // height (water exists where ground < level). Used by the per-chunk water

@@ -22,7 +22,7 @@ import {
   RUNWAY_BLEND,
   VILLAGE_BLEND,
 } from '../config.js';
-import { landElevation, surfaceColor, spawnFlat01, riverWaterLevelAt } from './TerrainShape.js';
+import { landElevation, surfaceColor, spawnFlat01, riverWaterLevelAt, nearRiverChannel } from './TerrainShape.js';
 import { seaMaskAt } from './SeaMask.js';
 
 // Deterministic per-vertex hash in [0, 1). Used to perturb vertex colors
@@ -205,28 +205,10 @@ export function computeTerrainData(cx, cz, villages, detail) {
   // triangles end up depth-occluded by the opaque ground).
   let waterPositions = null;
   {
-    // Cheap reject: the channel field |n| is Lipschitz (|∇n| ≤ ~2.5·scale),
-    // so if every corner + the centre are far from a channel, the whole
-    // chunk is. Most chunks skip the per-vertex water pass entirely.
-    const probes = [
-      [chunkOriginX - CHUNK_SIZE / 2, chunkOriginZ - CHUNK_SIZE / 2],
-      [chunkOriginX + CHUNK_SIZE / 2, chunkOriginZ - CHUNK_SIZE / 2],
-      [chunkOriginX - CHUNK_SIZE / 2, chunkOriginZ + CHUNK_SIZE / 2],
-      [chunkOriginX + CHUNK_SIZE / 2, chunkOriginZ + CHUNK_SIZE / 2],
-      [chunkOriginX, chunkOriginZ],
-    ];
-    let near = false;
-    for (const [px, pz] of probes) {
-      if (riverWaterLevelAt(px, pz) != null) { near = true; break; }
-    }
-    if (!near) {
-      // Wider net: the analytic bound above is loose, so confirm with a
-      // mid-edge sweep before fully skipping.
-      for (const t of [-0.25, 0.25]) {
-        if (riverWaterLevelAt(chunkOriginX + t * CHUNK_SIZE, chunkOriginZ) != null ||
-            riverWaterLevelAt(chunkOriginX, chunkOriginZ + t * CHUNK_SIZE) != null) { near = true; break; }
-      }
-    }
+    // Cheap SAFE reject: one centre probe with a Lipschitz margin covering
+    // the chunk's half-diagonal — if the channel noise is provably far from
+    // a channel everywhere in the chunk, skip the per-vertex water pass.
+    const near = nearRiverChannel(chunkOriginX, chunkOriginZ, CHUNK_SIZE * 0.72);
     if (near) {
       let hasWater = false;
       const wp = new Float32Array(N * 3);
