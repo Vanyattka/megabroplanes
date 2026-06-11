@@ -266,10 +266,19 @@ function riverLocalWater(wx, wz, x, z) {
 // Callers decide "is there actually water" by comparing against the terrain
 // height (water exists where ground < level). Used by the per-chunk water
 // surface, physics floor, bridges, scatter and village siting.
+//
+// CRITICAL: this must apply the SAME fade gates as the carve. Near the sea
+// (and the spawn clearing) the carve fades out, but the terrain there is low
+// for OTHER reasons (the sea carve) — without these gates the pool surface
+// rendered as huge sheets floating over beaches and out across the open
+// ocean wherever the channel noise happened to cross.
 export function riverWaterLevelAt(x, z) {
   const [wx, wz] = warp(x, z);
   const rn = Math.abs(riverNoise(wx * RIVER_SCALE, wz * RIVER_SCALE));
   if (rn >= RIVER_WIDTH_N * RIVER_CHANNEL_MULT) return null;
+  if (spawnFlat01(x, z) < 0.6) return null; // spawn clearing is river-free
+  const seaHandoff = 1 - smoothstep(SEA_THRESHOLD_LOW - 0.06, SEA_THRESHOLD_LOW, seaMaskAt(x, z));
+  if (seaHandoff < 0.6) return null;        // the sea owns the water from here
   return riverLocalWater(wx, wz, x, z);
 }
 

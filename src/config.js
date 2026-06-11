@@ -7,10 +7,19 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.3.2';
+export const GAME_VERSION = '0.3.3';
 export const GAME_CODENAME = 'Charlie';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.3.3',
+    codename: 'Charlie',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-10',
+    notes: [
+      'Bugfix: river pools no longer render as huge floating water sheets at river mouths or out over the open ocean — the local river water now fades out exactly where the sea takes over.',
+    ],
+  },
   {
     version: '0.3.2',
     codename: 'Charlie',
