@@ -185,6 +185,21 @@
       body.touch #hint { display: none; }
       body.touch #horizon { width: 140px; height: 140px; }
       body.touch #minimap { top: 100px; width: 130px !important; height: 130px !important; }
+      /* Race-combat trigger — a big thumb button beside the throttle, only
+         shown while actually in a race (body.in-race set by main.js). */
+      #btn-fire {
+        position: absolute;
+        bottom: 46px; right: 106px;
+        width: 80px; height: 80px;
+        display: none;
+        border-radius: 50%;
+        background: rgba(205, 45, 40, 0.5);
+        border: 2px solid rgba(255, 130, 105, 0.95);
+        font-size: 15px;
+        letter-spacing: 1px;
+      }
+      body.in-race #btn-fire { display: block; }
+      #btn-fire:active, #btn-fire.down { background: rgba(255, 85, 50, 0.85); color: #fff; }
       /* Main menu */
       #menu {
         position: absolute;
@@ -708,6 +723,9 @@
         <button class="tbtn" id="btn-reset">R</button>
         <button class="tbtn" id="btn-brake">BRK</button>
       </div>
+      <!-- Race-combat trigger — absolutely positioned beside the throttle,
+           visible only while body.in-race (set by main.js during a race). -->
+      <button class="tbtn" id="btn-fire">FIRE</button>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>

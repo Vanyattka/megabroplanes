@@ -370,6 +370,8 @@ function updateMpPhase() {
     document.body.classList.remove('in-lobby');
   }
   if (hintEl) hintEl.textContent = phase === 'race' ? RACE_HINT : DEFAULT_HINT;
+  // Race-only UI (e.g. the touch FIRE button) keys off this class.
+  document.body.classList.toggle('in-race', phase === 'race');
   refreshRaceButton();
 }
 

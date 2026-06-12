@@ -7,10 +7,19 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.6.2';
+export const GAME_VERSION = '0.6.3';
 export const GAME_CODENAME = 'Foxtrot';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.6.3',
+    codename: 'Foxtrot',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-12',
+    notes: [
+      'Mobile racers get a proper FIRE button — a big red trigger appears next to the throttle during races, so phones shoot just like desktops (it was hidden inside the BRK button before; BRK is now brakes only).',
+    ],
+  },
   {
     version: '0.6.2',
     codename: 'Foxtrot',
