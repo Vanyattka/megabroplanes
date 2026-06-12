@@ -72,6 +72,16 @@ const _landingHitPos = new Vector3();
 // _tmpVec3 so the per-frame computeWaterExtras() bundle doesn't alias
 // jet.position with landing.position (water.update reads both).
 const _jetReflPos = new Vector3();
+// Zero-velocity stand-in fed to JetExhaust while photo mode freezes physics,
+// so the plume streams from the nozzle instead of inheriting flight speed.
+const _photoExhaustPlane = {
+  type: '',
+  crashed: false,
+  throttle: 0,
+  position: null,
+  quaternion: null,
+  velocity: new Vector3(0, 0, 0),
+};
 
 // Photo mode state. When on, plane physics and day-night clock pause and
 // OrbitControls takes over so the player can frame a shot freely.
@@ -307,6 +317,12 @@ const raceManager = new RaceManager({
 // Let the minimap read the race's local checkpoint cursor so its "next gate"
 // highlight advances in lockstep with the in-world ring (not a round-trip late).
 minimap.raceManager = raceManager;
+if (import.meta.env && import.meta.env.DEV) {
+  // Dev-only verification hooks (stripped from prod by the build flag).
+  window.__tp = (x, y, z) =>
+    plane.spawnAirborne(new Vector3(x, y, z), plane.quaternion.clone(), new Vector3(0, 0, 0), 0.2);
+  window.__gh = (x, z) => groundHeight(x, z);
+}
 
 let inLobby = false;
 let lastMpPhase = 'free';
@@ -856,7 +872,8 @@ function renderStep(alpha) {
     waterExtras
   );
   // Real mirrored-plane reflection on the water (replaces the old glint disc).
-  if (!photoMode) waterReflection.update(plane);
+  // Runs in photo mode too — the ripple wobble keeps the water alive in shots.
+  waterReflection.update(plane);
   clouds.update(
     renderDt,
     plane.position,
@@ -871,16 +888,23 @@ function renderStep(alpha) {
   const realPlaneShadow = gfx.settings.shadows > 0 && gfx.settings.shadowTerrain;
   if (!plane.crashed && !realPlaneShadow) planeShadow.update(plane, getPhysicsFloor);
   else planeShadow.mesh.visible = false;
-  // Freeze particle systems in photo mode. Jet exhaust in particular was
-  // shooting forward ahead of the frozen plane — each spawned particle
-  // inherits plane.velocity, which is still large (flight speed) even
-  // though physics is paused, so they'd jet forward then stop. Skipping
-  // update() keeps currently-rendered particles in place; entry clears
-  // the existing plume so there's no stale trail.
+  // Particle systems in photo mode: explosions and contrails freeze (they only
+  // make sense with motion), but the jet exhaust — the signature — keeps
+  // running. Spawned particles normally inherit plane.velocity so they trail
+  // a MOVING plane; with physics frozen that velocity would shoot them ahead
+  // of the parked airframe, so we feed the exhaust a zero-velocity proxy and
+  // the plume streams backward from the nozzle like an engine run-up.
   if (!photoMode) {
     explosion.update(renderDt);
     jetExhaust.update(renderDt, plane);
     contrails.update(renderDt, plane);
+  } else {
+    _photoExhaustPlane.type = plane.type;
+    _photoExhaustPlane.crashed = plane.crashed;
+    _photoExhaustPlane.throttle = plane.throttle;
+    _photoExhaustPlane.position = plane.position;
+    _photoExhaustPlane.quaternion = plane.quaternion;
+    jetExhaust.update(renderDt, _photoExhaustPlane);
   }
   remotes.update(renderDt);
   if (!photoMode) raceManager.update(renderDt);

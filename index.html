@@ -4,6 +4,35 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>megabroplanes</title>
+    <script>
+      // Headless-verification aid (opt-in, off for players): when the
+      // mbp:forceRaf flag is set and the tab is hidden — an automated preview
+      // tab, where Chrome suspends requestAnimationFrame AND clamps page
+      // timers to ~1 Hz — drive rAF from a Web Worker interval instead
+      // (worker timers aren't visibility-throttled), so the game loop still
+      // ticks at ~60 fps for screenshots/tests.
+      try {
+        if (localStorage.getItem('mbp:forceRaf') === '1') {
+          const nativeRaf = window.requestAnimationFrame.bind(window);
+          const src = URL.createObjectURL(new Blob(
+            ['setInterval(function(){ postMessage(0); }, 16);'],
+            { type: 'text/javascript' }
+          ));
+          const ticker = new Worker(src);
+          const queue = [];
+          ticker.onmessage = () => {
+            if (!document.hidden || queue.length === 0) return;
+            const cbs = queue.splice(0);
+            for (const cb of cbs) cb(performance.now());
+          };
+          window.requestAnimationFrame = (cb) => {
+            if (!document.hidden) return nativeRaf(cb);
+            queue.push(cb);
+            return 0;
+          };
+        }
+      } catch (e) { /* storage blocked — shim stays off */ }
+    </script>
     <style>
       html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #88bbee; font-family: monospace; touch-action: none; -webkit-user-select: none; user-select: none; }
       canvas { display: block; touch-action: none; }

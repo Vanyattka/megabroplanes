@@ -7,10 +7,20 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.6';
+export const GAME_VERSION = '0.6.1';
 export const GAME_CODENAME = 'Foxtrot';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.6.1',
+    codename: 'Foxtrot',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-12',
+    notes: [
+      'Photo mode keeps the Jet\'s engines burning — the exhaust plume and afterburner now stream from the nozzle while the world is frozen (they used to vanish the moment you pressed P).',
+      'Water reflections are no longer a perfect mirror: they shimmer, drift and softly double like real wind-ruffled water.',
+    ],
+  },
   {
     version: '0.6',
     codename: 'Foxtrot',
