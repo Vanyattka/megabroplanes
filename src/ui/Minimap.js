@@ -1,15 +1,14 @@
 import { Vector3 } from 'three';
 import { biomeAt } from '../world/Biome.js';
-import { riverMaskAt } from '../world/TerrainShape.js';
-import { seaMaskAt } from '../world/SeaMask.js';
+import { riverWaterLevelAt } from '../world/TerrainShape.js';
+import { terrainHeightAt } from '../world/Ground.js';
 import { getVillage } from '../world/Villages.js';
 import { getRuin } from '../world/Ruins.js';
 import { listRoadSegmentsNear } from '../world/Roads.js';
 import {
   VILLAGE_CELL_SIZE,
   RUIN_CELL_SIZE,
-  SEA_THRESHOLD_LOW,
-  SEA_THRESHOLD_HIGH,
+  WATER_LEVEL,
 } from '../config.js';
 
 const WORLD_RADIUS = 900;
@@ -28,6 +27,7 @@ const TERRAIN_COLORS = {
   alpine:  [150, 144, 138],
 };
 const SEA_COLOR = [28, 64, 116]; // deep ocean blue
+const SEA_SHALLOW_COLOR = [44, 92, 144]; // coastal shallows — reads as shore
 const RIVER_COLOR = [62, 118, 170]; // lighter than the sea so channels read as rivers
 const BORDER_COLOR = 'rgba(255,255,255,0.55)';
 
@@ -100,22 +100,25 @@ export class Minimap {
   _redrawTerrain(plane) {
     const data = this.terrainImage.data;
     const wpp = (WORLD_RADIUS * 2) / GRID;
-    const seaMid = (SEA_THRESHOLD_LOW + SEA_THRESHOLD_HIGH) * 0.5;
     for (let py = 0; py < GRID; py++) {
       const wz = plane.position.z + (py - GRID / 2) * wpp;
       for (let px = 0; px < GRID; px++) {
         const wx = plane.position.x + (px - GRID / 2) * wpp;
+        // Decide water/land EXACTLY as the world does, from the real terrain
+        // height — NOT a raw sea-mask threshold (that painted ocean over high
+        // coastal land where the sea carve didn't reach the waterline). The
+        // global water plane covers terrain below WATER_LEVEL; river pools
+        // cover it below their (higher) local level.
+        const g = terrainHeightAt(wx, wz);
         let c;
-        if (seaMaskAt(wx, wz) > seaMid) {
-          c = SEA_COLOR;
+        if (g < WATER_LEVEL) {
+          c = WATER_LEVEL - g > 8 ? SEA_COLOR : SEA_SHALLOW_COLOR;
         } else {
-          const b = biomeAt(wx, wz);
-          // Rivers only flow through lowlands — skip the high/cold biomes
-          // where the carve fades out, so the map matches the terrain.
-          if (b.type !== 'alpine' && b.type !== 'tundra' && riverMaskAt(wx, wz) > 0.45) {
+          const rw = riverWaterLevelAt(wx, wz);
+          if (rw != null && g < rw) {
             c = RIVER_COLOR;
           } else {
-            c = TERRAIN_COLORS[b.type] || [85, 85, 85];
+            c = TERRAIN_COLORS[biomeAt(wx, wz).type] || [85, 85, 85];
           }
         }
         const i = (py * GRID + px) * 4;

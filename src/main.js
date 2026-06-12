@@ -200,12 +200,32 @@ const mp = new MultiplayerClient(serverUrl);
 // references it, and although the socket opens asynchronously, keeping the
 // declaration first avoids any temporal-dead-zone risk.
 const bullets = new Bullets(renderer.scene, mp.id);
+// Player name — persisted locally, shown in the lobby/leaderboard/results.
+let playerName = '';
+try { playerName = (localStorage.getItem('mbp:name') || '').slice(0, 16); } catch {}
+let _namedId = null;
 mp.onStatusChange(({ connected, count, id }) => {
   if (id != null) bullets.setLocalId(id);
+  // Send our name once per connection (a fresh id == a new/re-connect). Status
+  // fires ~20×/s on snapshots, so guard on the id changing to avoid spamming.
+  if (connected && id != null && id !== _namedId) {
+    _namedId = id;
+    if (playerName.trim()) mp.setName(playerName.trim());
+  }
+  if (!connected) _namedId = null;
   if (!mpStatusEl) return;
   if (!connected) mpStatusEl.textContent = 'mp: offline';
   else mpStatusEl.textContent = `mp: P${id ?? '?'} · ${count} other${count === 1 ? '' : 's'}`;
 });
+const nameInputEl = document.getElementById('name-input');
+if (nameInputEl) {
+  nameInputEl.value = playerName;
+  nameInputEl.addEventListener('input', () => {
+    playerName = nameInputEl.value.slice(0, 16);
+    try { localStorage.setItem('mbp:name', playerName); } catch {}
+    if (playerName.trim()) mp.setName(playerName.trim());
+  });
+}
 const remotes = new RemotePlaneManager(renderer.scene, mp);
 const touch = new TouchControls();
 const minimap = new Minimap(mp);
@@ -291,6 +311,13 @@ minimap.raceManager = raceManager;
 let inLobby = false;
 let lastMpPhase = 'free';
 
+// Control-hint bar text — swapped in a race so players know SPACE fires (not
+// brakes) and R respawns at the next gate. Captured once so we can restore it.
+const hintEl = document.getElementById('hint');
+const DEFAULT_HINT = hintEl ? hintEl.textContent : '';
+const RACE_HINT =
+  'S/W nose · A/D roll · Q/E yaw · Shift/Ctrl throttle · SPACE fire · R respawn at gate · L lights · drag to look';
+
 function currentMpPhase() {
   if (raceManager.inRace) return 'race';
   if (mp.lobby && mp.lobby.members && mp.id != null &&
@@ -312,6 +339,7 @@ function updateMpPhase() {
     lobby.hide();
     document.body.classList.remove('in-lobby');
   }
+  if (hintEl) hintEl.textContent = phase === 'race' ? RACE_HINT : DEFAULT_HINT;
   refreshRaceButton();
 }
 

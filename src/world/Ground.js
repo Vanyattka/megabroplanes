@@ -59,3 +59,14 @@ export function physicsFloor(x, z) {
 export function isSeaAt(x, z) {
   return seaMaskAt(x, z) > (SEA_THRESHOLD_LOW + SEA_THRESHOLD_HIGH) * 0.5;
 }
+
+// Terrain surface height IGNORING village pads — for the minimap, which samples
+// thousands of points and doesn't care about sub-pixel airport flattening. It
+// matches groundHeight everywhere except inside a village pad, so the minimap
+// can decide water/land from the SAME height the world renders (rather than a
+// raw sea-mask threshold, which painted ocean over high coastal land).
+export function terrainHeightAt(x, z) {
+  let h = landElevation(x, z);
+  const seaStrength = smoothstep(SEA_THRESHOLD_LOW, SEA_THRESHOLD_HIGH, seaMaskAt(x, z)) * spawnFlat01(x, z);
+  return h - seaStrength * SEA_DEPTH;
+}

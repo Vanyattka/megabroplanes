@@ -7,10 +7,21 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.4';
+export const GAME_VERSION = '0.4.1';
 export const GAME_CODENAME = 'Delta';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.4.1',
+    codename: 'Delta',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-12',
+    notes: [
+      'Minimap now matches the world: fixed it drawing ocean where there\'s actually land (and other biome mismatches) — the map now reads the real terrain height instead of a rough sea estimate.',
+      'You can set your name on the main menu — it shows up in the race lobby, leaderboard and results instead of "P3".',
+      'In a race the control hint now reminds you that SPACE fires your guns and R respawns at your next gate (it used to only mention braking).',
+    ],
+  },
   {
     version: '0.4',
     codename: 'Delta',
