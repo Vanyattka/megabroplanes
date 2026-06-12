@@ -235,7 +235,12 @@ export function landElevation(x, z) {
     // near the origin clearing, and as the sea takes over at the coast.
     const relief = 1 - smoothstep(RIVER_RELIEF_LO, RIVER_RELIEF_HI, h - meadow);
     const seaHandoff = 1 - smoothstep(SEA_THRESHOLD_LOW - 0.06, SEA_THRESHOLD_LOW, seaMaskAt(x, z));
-    const fades = relief * sf * seaHandoff;
+    // Gate the carve on the SAME spawn threshold the water uses (riverWaterLevelAt
+    // returns null below sf 0.6), but smoothly so there's no terrain cliff. The
+    // raw `sf` ramp let the channel dig a DRY bed in the annulus where sf<0.6 yet
+    // no water surface is rendered. Pure deterministic fn → physics + worker agree.
+    const spawnGate = smoothstep(0.5, 0.7, sf);
+    const fades = relief * spawnGate * seaHandoff;
     if (fades > 0.001) {
       // 1) Valley: ease the land down to low meadows just above the water,
       //    over a wide gentle slope (this is what makes it read as a river
@@ -263,14 +268,15 @@ function riverLocalWater(wx, wz, x, z) {
 }
 
 // True when (x, z) is within `marginMeters` of a river channel, judged by a
-// Lipschitz bound on the warped channel noise (|∇| ≤ ~3.5·scale including the
-// domain-warp stretch). Used by the chunk water pass to skip whole chunks
-// SAFELY — an under-margined probe net used to be able to miss channel
-// slivers near chunk edges.
+// Lipschitz bound on the warped channel noise. The domain warp stretches the
+// gradient, so the effective |∇(rn)| in world space reaches ~10·RIVER_SCALE —
+// the old 3.5 constant under-estimated it and could mark a chunk "far" when a
+// channel sliver actually clipped its edge, dropping that water. 11 is a safe
+// over-estimate (only costs an occasional extra per-vertex water pass).
 export function nearRiverChannel(x, z, marginMeters) {
   const [wx, wz] = warp(x, z);
   const rn = Math.abs(riverNoise(wx * RIVER_SCALE, wz * RIVER_SCALE));
-  return rn < RIVER_WIDTH_N * RIVER_CHANNEL_MULT + 3.5 * RIVER_SCALE * marginMeters;
+  return rn < RIVER_WIDTH_N * RIVER_CHANNEL_MULT + 11 * RIVER_SCALE * marginMeters;
 }
 
 // Public: the river water level at (x, z), or null when outside a channel.

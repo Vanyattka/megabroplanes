@@ -10,6 +10,7 @@ import {
 } from 'three';
 import {
   EXPLOSION_PARTICLE_COUNT,
+  EXPLOSION_POOL_COUNT,
   EXPLOSION_GRAVITY,
   EXPLOSION_DRAG,
   EXPLOSION_LIFE_MIN,
@@ -41,14 +42,14 @@ export class Explosion {
     const mat = new MeshBasicMaterial({
       toneMapped: false,
     });
-    this.mesh = new InstancedMesh(geo, mat, EXPLOSION_PARTICLE_COUNT);
+    this.mesh = new InstancedMesh(geo, mat, EXPLOSION_POOL_COUNT);
     this.mesh.frustumCulled = false;
     this.mesh.visible = false;
     scene.add(this.mesh);
 
     this.particles = [];
     const tmp = new Color();
-    for (let i = 0; i < EXPLOSION_PARTICLE_COUNT; i++) {
+    for (let i = 0; i < EXPLOSION_POOL_COUNT; i++) {
       this.particles.push({
         pos: new Vector3(),
         vel: new Vector3(),
@@ -67,7 +68,7 @@ export class Explosion {
   }
 
   _hideAll() {
-    for (let i = 0; i < EXPLOSION_PARTICLE_COUNT; i++) {
+    for (let i = 0; i < EXPLOSION_POOL_COUNT; i++) {
       _m.compose(_zero, _q.identity(), _s.set(0, 0, 0));
       this.mesh.setMatrixAt(i, _m);
     }
@@ -78,8 +79,14 @@ export class Explosion {
     this.active = true;
     this.mesh.visible = true;
     const tmp = new Color();
-    for (let i = 0; i < EXPLOSION_PARTICLE_COUNT; i++) {
+    let seeded = 0;
+    for (let i = 0; i < EXPLOSION_POOL_COUNT && seeded < EXPLOSION_PARTICLE_COUNT; i++) {
       const p = this.particles[i];
+      // Only seed a FREE slot — a second blast must never relocate the
+      // particles of one that's still burning (e.g. two racers dying close
+      // together). With a pool larger than one blast, each gets its own.
+      if (p.life < p.maxLife) continue;
+      seeded++;
       p.pos.copy(position);
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
@@ -129,7 +136,7 @@ export class Explosion {
   update(dt) {
     if (!this.active) return;
     let anyAlive = false;
-    for (let i = 0; i < EXPLOSION_PARTICLE_COUNT; i++) {
+    for (let i = 0; i < EXPLOSION_POOL_COUNT; i++) {
       const p = this.particles[i];
       if (p.life >= p.maxLife) {
         _m.compose(_zero, _q.identity(), _s.set(0, 0, 0));

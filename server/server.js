@@ -145,6 +145,18 @@ function recomputeHost() {
   }
 }
 
+// Single removal path for BOTH a socket close and an idle-kick, so lobby
+// bookkeeping (host reassignment, launch timer, broadcast) can never diverge
+// between the two — previously the idle-kick deleted a client raw, orphaning
+// lobby.hostId and leaving the launch countdown stuck on a stale member count.
+function removeClient(id) {
+  const c = clients.get(id);
+  if (!c) return;
+  const wasLobby = c.room === 'lobby';
+  clients.delete(id);
+  if (wasLobby) { recomputeHost(); updateLaunchTimer(); sendLobbyState(); }
+}
+
 function lobbyMessage() {
   const members = membersIn('lobby').map(([id, c]) => ({
     id, name: c.name || `P${id}`,
@@ -168,6 +180,10 @@ function sendLobbyState() {
 
 // Re-evaluate the auto-launch countdown whenever lobby membership/size changes.
 function updateLaunchTimer() {
+  // A single global race object exists, so never arm a launch while one is
+  // already running — it would clobber the in-progress race. The countdown is
+  // (re)armed when the race returns to idle (see endRaceToFree).
+  if (race.phase !== 'idle') { lobby.launchAt = null; return; }
   const n = membersIn('lobby').length;
   if (n >= LOBBY_FULL) {
     const soon = Date.now() + LOBBY_FULL_LAUNCH_MS;
@@ -228,6 +244,10 @@ function endRaceToFree() {
     c.room = 'free';
     c.race = null;
   }
+  // A lobby may have filled while this race ran; now that we're idle again,
+  // (re)arm its launch countdown and refresh the waiting room.
+  updateLaunchTimer();
+  sendLobbyState();
 }
 
 function standings() {
@@ -306,6 +326,10 @@ wss.on('connection', (ws, req) => {
         if (typeof msg.name === 'string') c.name = msg.name.slice(0, 16);
         break;
       case 'join_lobby': {
+        // Only a free-flight player may enter the lobby. Without this guard an
+        // active racer that (re)sends join_lobby — e.g. a client bug or a tap
+        // on a stale button — would yank itself out of the running race.
+        if (c.room !== 'free') break;
         c.room = 'lobby';
         c.lobby.ready = false;
         if (msg.plane) c.lobby.plane = msg.plane;
@@ -336,7 +360,7 @@ wss.on('connection', (ws, req) => {
         }
         break;
       case 'lobby_start':
-        if (c.room === 'lobby' && id === lobby.hostId && membersIn('lobby').length >= 1) {
+        if (race.phase === 'idle' && c.room === 'lobby' && id === lobby.hostId && membersIn('lobby').length >= 1) {
           lobby.launchAt = Date.now() + HOST_LAUNCH_MS;
           sendLobbyState();
         }
@@ -349,6 +373,17 @@ wss.on('connection', (ws, req) => {
               c.race.finishMs = Date.now() - race.startAt;
             }
           }
+        }
+        break;
+      case 'down':
+        // Self-reported crash (e.g. flew into terrain). A client can only down
+        // itself, and damage is server-authoritative anyway, so trust it: mark
+        // dead + schedule the respawn so other racers stop scoring/shooting the
+        // wreck and the server clock stays roughly in step with the client.
+        if (race.phase === 'racing' && c.room === 'race' && c.race && !c.dead) {
+          c.hp = 0;
+          c.dead = true;
+          c.respawnAt = Date.now() + RESPAWN_MS;
         }
         break;
       case 'fire':
@@ -380,10 +415,7 @@ wss.on('connection', (ws, req) => {
   });
 
   ws.on('close', () => {
-    const c = clients.get(id);
-    const wasLobby = c && c.room === 'lobby';
-    clients.delete(id);
-    if (wasLobby) { recomputeHost(); updateLaunchTimer(); sendLobbyState(); }
+    removeClient(id);
     console.log(`[-] player ${id} disconnected (total: ${clients.size})`);
   });
   ws.on('error', () => {});
@@ -392,11 +424,13 @@ wss.on('connection', (ws, req) => {
 setInterval(() => {
   const now = Date.now();
   for (const [id, c] of clients) {
-    if (now - c.lastSeen > IDLE_KICK_MS) { try { c.ws.close(); } catch {} clients.delete(id); }
+    if (now - c.lastSeen > IDLE_KICK_MS) { try { c.ws.close(); } catch {} removeClient(id); }
   }
 
-  // Lobby launch.
-  if (lobby.launchAt != null && now >= lobby.launchAt) launchRace();
+  // Lobby launch — only while no race is active (the global race object would
+  // otherwise be clobbered mid-flight). updateLaunchTimer keeps launchAt null
+  // during a race, but guard here too in case of clock/edge races.
+  if (race.phase === 'idle' && lobby.launchAt != null && now >= lobby.launchAt) launchRace();
 
   // Race clock.
   let raceChanged = false;

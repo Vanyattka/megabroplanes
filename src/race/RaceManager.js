@@ -28,6 +28,8 @@ import {
 const _fwd = new Vector3();
 const _mz = new Vector3();
 const _v = new Vector3();
+const _seg = new Vector3();
+const _proj = new Vector3();
 
 export class RaceManager {
   constructor(opts) {
@@ -45,6 +47,7 @@ export class RaceManager {
     this.restoreFreeTime = opts.restoreFreeTime;   // () => void
     this.getMyColor = opts.getMyColor;             // () => hex
     this.onRaceEnd = opts.onRaceEnd;               // () => void (back to free flight)
+    this.snapCamera = null;                        // () => void, set by main.js after camera init
 
     this.group = new Group();
     this.group.visible = false;
@@ -55,9 +58,22 @@ export class RaceManager {
     this.phase = 'idle';
     this.inRace = false;       // I'm a participant in an active race
     this._courseKey = null;
-    this._pendingCp = -1;
+    // Local checkpoint cursor — the gate we're flying toward. Advanced the
+    // instant we pass a gate (then reported to the server), instead of waiting
+    // for the server to echo the previous gate back. That round-trip lag was
+    // dropping gates for fast planes / closely-spaced gates on a laggy link.
+    this._localCp = 0;
+    // Plane position on the previous update frame — the gate sweep tests the
+    // segment between it and the current position so a fast plane can't tunnel
+    // past a gate between frames.
+    this._lastPos = new Vector3();
     this._fireCd = 0;
     this._localDowned = false;
+    // Death by gunfire is only armed once the server has reported us alive
+    // (hp > 0). After we go down we disarm until the server's snapshot shows
+    // a healed plane again — otherwise a stale hp<=0 snapshot that's still in
+    // flight when we respawn would instantly re-kill us in a loop.
+    this._hpArmed = false;
     this._respawnAt = 0;
     this._deadRemotes = new Set();
 
@@ -89,6 +105,10 @@ export class RaceManager {
     return r.standings.find((s) => s.id === this.client.id) || null;
   }
   _localNextCp() { const row = this._localRow(); return row ? row.n : 0; }
+  // The gate the local player is currently chasing — drives the in-world rings,
+  // the HUD counter and the minimap so they all advance together the instant a
+  // gate is passed, instead of waiting a network round-trip.
+  get localCp() { return this._localCp; }
 
   _onRace(r) {
     if (!r || r.phase === 'idle') {
@@ -107,8 +127,9 @@ export class RaceManager {
       this.course = r.course || [];
       this._courseKey = this._key(r);
       this._buildRings();
-      this._pendingCp = -1;
+      this._localCp = 0;
       this._localDowned = false;
+      this._hpArmed = false;
       this._deadRemotes.clear();
       this.bullets.clear();
       // Spawn first (most important), then apply cosmetics — so a hiccup in
@@ -121,6 +142,7 @@ export class RaceManager {
       this.applyLoadout(r.plane, myColor);
       this.applyRaceTime(r.timeKey);
       this.plane.spawnAirborne(pose.pos, pose.q, pose.vel, 1); // re-assert after loadout rebuild
+      if (this.snapCamera) this.snapCamera();
       if (this.elCross) this.elCross.style.display = 'block';
     } else if (amPart && wasIn) {
       // Course shouldn't change mid-race, but keep it fresh just in case.
@@ -211,10 +233,12 @@ export class RaceManager {
   // R during a race respawns at the next gate (airborne), NOT the home runway.
   respawnAtGate() {
     if (!this.inRace) return;
-    const pose = this._gatePose(this._localNextCp(), 0, 1, 300);
+    const target = this._localNextCp();
+    const pose = this._gatePose(target, 0, 1, 300);
     this.plane.spawnAirborne(pose.pos, pose.q, pose.vel, 1);
+    if (this.snapCamera) this.snapCamera();
     this._localDowned = false;
-    this._pendingCp = -1;
+    this._localCp = target;
   }
 
   update(dt) {
@@ -223,7 +247,13 @@ export class RaceManager {
     const racing = this.phase === 'racing';
     this.group.visible = this.rings.length > 0;
 
-    const nextCp = this._localNextCp();
+    // The server is authoritative for the standings, but local detection drives
+    // its own cursor (this._localCp) so a gate pass registers instantly. Pull
+    // the cursor forward if the server is somehow ahead (defensive — the server
+    // only advances it in response to our own cp messages).
+    const serverCp = this._localNextCp();
+    if (serverCp > this._localCp) this._localCp = serverCp;
+    const nextCp = this._localCp;
     // Gate colors + spin.
     for (let i = 0; i < this.rings.length; i++) {
       const ring = this.rings[i];
@@ -238,16 +268,28 @@ export class RaceManager {
     // Local HP / death / respawn.
     const row = this._localRow();
     if (row) this.plane.hp = row.hp != null ? row.hp : this.plane.maxHp;
-    if (racing && !this._localDowned && row && row.hp <= 0 && !this.plane.crashed) {
-      this._die(now);
+    // Arm gunfire-death only once the server reports us alive again, so a
+    // stale hp<=0 snapshot still in flight at respawn can't re-kill us.
+    if (row && row.hp != null && row.hp > 0) this._hpArmed = true;
+    // Downed either by gunfire (the server drove HP to 0) OR by flying into the
+    // terrain (physics set plane.crashed and main.js already played the
+    // explosion). Both funnel into the same downed→respawn flow, so a terrain
+    // crash mid-race no longer hides the plane forever with no way back.
+    if (racing && !this._localDowned) {
+      if (this._hpArmed && row && row.hp <= 0 && !this.plane.crashed) {
+        this._die(now);
+      } else if (this.plane.crashed) {
+        this._enterDowned(now);
+      }
     }
     if (this._localDowned && now >= this._respawnAt) {
-      const pose = this._gatePose(nextCp, 0, 1, 300);
+      const pose = this._gatePose(serverCp, 0, 1, 300);
       this.plane.spawnAirborne(pose.pos, pose.q, pose.vel, 1);
+      if (this.snapCamera) this.snapCamera();
       this._localDowned = false;
-      // Re-arm the checkpoint guard, else if we died mid-gate-pass the guard
-      // could still equal nextCp and block re-reporting it → stuck on a gate.
-      this._pendingCp = -1;
+      // Re-sync the cursor to the server's authoritative gate, so a death
+      // mid-pass can't leave us aiming at the wrong gate.
+      this._localCp = serverCp;
     }
 
     // Remote deaths → explosions (once per death).
@@ -277,26 +319,57 @@ export class RaceManager {
     const targets = this.getRemoteTargets ? this.getRemoteTargets() : null;
     this.bullets.update(dt, combat ? targets : null);
 
-    // Local checkpoint detection.
-    if (racing && !this._localDowned && nextCp < this.course.length) {
-      const cp = this.course[nextCp];
-      const d = _v.set(cp.x - this.plane.position.x, cp.y - this.plane.position.y, cp.z - this.plane.position.z).length();
-      if (d < RACE_PASS_RADIUS && this._pendingCp !== nextCp) {
-        this._pendingCp = nextCp;
-        this.client.sendCheckpoint(nextCp);
+    // Local checkpoint detection. Advance the cursor the instant we pass a gate
+    // and report it — without waiting for the server to echo the previous gate
+    // back. The server still validates ordering, and because we send strictly
+    // increasing indices over an ordered (TCP) socket it stays in lockstep.
+    // This is what fixes "rings sometimes not counted" on a laggy link.
+    // The test is SWEPT (gate centre vs the segment from last frame's position
+    // to this one) so a fast plane can't tunnel past a gate between frames.
+    if (racing && !this._localDowned && this._localCp < this.course.length) {
+      const cp = this.course[this._localCp];
+      _v.set(cp.x, cp.y, cp.z);
+      const moved = this._lastPos.distanceTo(this.plane.position);
+      // Sweep over a normal frame's travel; a teleport (respawn) is too big to
+      // sweep meaningfully, so fall back to a point test that frame.
+      let d;
+      if (moved > 0.001 && moved < 120) {
+        _seg.subVectors(this.plane.position, this._lastPos);
+        const len2 = _seg.lengthSq();
+        let t = _proj.subVectors(_v, this._lastPos).dot(_seg) / len2;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        _proj.copy(this._lastPos).addScaledVector(_seg, t);
+        d = _proj.distanceTo(_v);
+      } else {
+        d = _v.distanceTo(this.plane.position);
+      }
+      if (d < RACE_PASS_RADIUS) {
+        this.client.sendCheckpoint(this._localCp);
+        this._localCp++;
       }
     }
 
+    this._lastPos.copy(this.plane.position);
     this._updateDom(now);
   }
 
-  _die(now) {
+  // Shared "go down" transition for both gunfire deaths and terrain crashes.
+  // Tells the server we're out (so it stops scoring us as a live target and
+  // runs its own respawn timer roughly in lockstep), disarms gunfire-death
+  // until the server heals us, and schedules the local respawn.
+  _enterDowned(now) {
     this._localDowned = true;
     this._respawnAt = now + RACE_RESPAWN_MS;
+    this._hpArmed = false;
+    this.client.sendDown();
+  }
+
+  _die(now) {
     this.explosion.trigger(this.plane.position, this.plane.velocity);
     this.audio.boom();
     this.plane.crashed = true;
     this.plane.mesh.visible = false;
+    this._enterDowned(now);
   }
 
   _fire() {
@@ -340,7 +413,10 @@ export class RaceManager {
       if (this.phase === 'racing') {
         const elapsed = Math.max(0, now - r.startAt);
         const finished = row && row.f != null;
-        const gate = finished ? total : (row ? row.n : 0);
+        // Use the local cursor for my own gate counter so it ticks up the
+        // instant I pass, not a network round-trip later (the leaderboard still
+        // shows the server-authoritative count for everyone).
+        const gate = finished ? total : this._localCp;
         this.elStatus.style.display = 'block';
         this.elStatus.innerHTML = finished
           ? `<span class="rs-fin">FINISHED · ${this._fmt(row.f)}</span>`

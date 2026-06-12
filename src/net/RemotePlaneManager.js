@@ -6,6 +6,11 @@ import { DEFAULT_PLANE_TYPE, DEFAULT_BODY_COLOR } from '../config.js';
 
 const LERP = 0.22;
 const SLERP = 0.22;
+// Cap on the velocity we estimate from a remote's position deltas. A 20 Hz
+// network snap (big jump in one packet) would otherwise yield a huge velocity
+// that flings the jet's exhaust particles kilometres across the sky for a
+// frame. ~400 m/s is well past any plane's real top speed.
+const MAX_REMOTE_EST_SPEED = 400;
 
 // Used only when the remote hasn't broadcast pt/pc yet — fall back to the
 // hue the server assigned so the plane still has a distinct color.
@@ -126,6 +131,7 @@ export class RemotePlaneManager {
       // dutifully amplify into a 1-frame plume across the world.
       if (dt > 0) {
         v.estVel.subVectors(v.mesh.position, v.prevPos).divideScalar(dt);
+        v.estVel.clampLength(0, MAX_REMOTE_EST_SPEED);
       }
 
       const prop = v.mesh.getObjectByName('propeller');

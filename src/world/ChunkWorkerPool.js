@@ -51,6 +51,12 @@ export class ChunkWorkerPool {
     for (let i = 1; i < this.workers.length; i++) {
       if (this.inFlight[i] < minLoad) { minLoad = this.inFlight[i]; workerIdx = i; }
     }
+    // A dead worker carries inFlight = Infinity (see _onError). If even the
+    // least-busy one is dead, every worker is dead — reject so ChunkManager
+    // falls back to the synchronous build path instead of posting into the void.
+    if (!Number.isFinite(minLoad)) {
+      return Promise.reject(new Error('all chunk workers are dead'));
+    }
     this.inFlight[workerIdx]++;
 
     return new Promise((resolve, reject) => {
@@ -100,7 +106,10 @@ export class ChunkWorkerPool {
         this.pending.delete(reqId);
       }
     }
-    this.inFlight[workerIdx] = 0;
+    // Mark the worker dead (Infinity) rather than idle (0). With 0 the
+    // least-busy router would PREFER this crashed worker for every subsequent
+    // request and keep posting into the void, stalling streaming.
+    this.inFlight[workerIdx] = Infinity;
   }
 
   // Current total in-flight count — used by ChunkManager to cap how many

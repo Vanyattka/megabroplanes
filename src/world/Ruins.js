@@ -52,7 +52,7 @@ export function getRuin(rcx, rcz) {
         z: best.z,
         y: best.h,
         rot: prng() * Math.PI * 2,
-        seed: `ruin-mesh:${rcx}:${rcz}`,
+        seed: seedKey(`ruin-mesh:${rcx}:${rcz}`),
       };
     }
   }

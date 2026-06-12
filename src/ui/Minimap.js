@@ -242,8 +242,13 @@ export class Minimap {
     if (r.phase !== 'countdown' && r.phase !== 'racing') return;
     const ctx = this.ctx;
     const course = r.course;
+    // Prefer the local cursor (advances instantly on a pass) so the minimap's
+    // "next gate" highlight stays in lockstep with the in-world ring + HUD;
+    // fall back to the server-authoritative count when not the participant.
     let nextCp = 0;
-    if (r.standings && this.mp.id != null) {
+    if (this.raceManager && this.raceManager.inRace) {
+      nextCp = this.raceManager.localCp;
+    } else if (r.standings && this.mp.id != null) {
       const row = r.standings.find((s) => s.id === this.mp.id);
       if (row) nextCp = row.n;
     }
@@ -309,11 +314,11 @@ export class Minimap {
     const cx = this.canvas.width / 2;
     const cy = this.canvas.height / 2;
     const r = Math.min(this.canvas.width, this.canvas.height) / 2 - 14;
-    // After ctx.rotate(-yaw) the displayed world-north vector sits at
-    // (sin(yaw), -cos(yaw)) on the canvas. Place the "N" badge at that edge
-    // point so the compass always points at true north regardless of
-    // heading.
-    const nx = cx + Math.sin(yaw) * r;
+    // After ctx.rotate(-yaw) the displayed world-north vector (-Z, straight up
+    // in the unrotated map) sits at (-sin(yaw), -cos(yaw)) on the canvas — so
+    // when heading east the "N" badge correctly lands on the LEFT. Place the
+    // badge at that edge point so it always points at true north.
+    const nx = cx - Math.sin(yaw) * r;
     const ny = cy - Math.cos(yaw) * r;
     ctx.fillStyle = 'rgba(200, 40, 40, 0.9)';
     ctx.beginPath();

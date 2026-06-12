@@ -22,6 +22,15 @@ export class ChaseCamera {
     this.pitch = 0;
   }
 
+  // Force the next update() to jump straight onto the plane instead of lerping
+  // toward it. Call after any teleport (reset to runway, race spawn, post-death
+  // respawn) — otherwise the camera swoops across the whole map to catch up.
+  snap() {
+    this.initialized = false;
+    this.yaw = 0;
+    this.pitch = 0;
+  }
+
   // Call once per render frame. `input` drives mouse look; `dt` in seconds.
   update(plane, input, dt) {
     if (input) {

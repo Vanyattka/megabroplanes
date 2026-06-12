@@ -71,6 +71,11 @@ export class ChunkManager {
     // at once, producing a 20+ ms GPU-upload spike even though CPU work
     // is tiny. Draining 2 per frame keeps frame time flat.
     this._terrainResults = []; // [{ cx, cz, key, data }]
+    // Mirror of the keys currently buffered in _terrainResults, for O(1)
+    // membership in _rebuildNeeded — without it, a chunk whose worker result is
+    // computed and waiting to install gets re-queued and recomputed every time
+    // the player re-crosses into its radius.
+    this._resultKeys = new Set();
     // Cached sort state; rebuilt lazily when pending changes.
     this._pendingSorted = null;
     this._pendingSortedIndex = 0;
@@ -142,7 +147,8 @@ export class ChunkManager {
         if (
           !this.chunks.has(key) &&
           !this._pendingTerrain.has(key) &&
-          !this._inFlight.has(key)
+          !this._inFlight.has(key) &&
+          !this._resultKeys.has(key)
         ) {
           this._pendingTerrain.set(key, { cx, cz });
           pendingChanged = true;
@@ -166,6 +172,7 @@ export class ChunkManager {
     // finalizing a Mesh for a chunk that's about to be out of range.
     for (let i = this._terrainResults.length - 1; i >= 0; i--) {
       if (!needed.has(this._terrainResults[i].key)) {
+        this._resultKeys.delete(this._terrainResults[i].key);
         this._terrainResults.splice(i, 1);
       }
     }
@@ -288,6 +295,7 @@ export class ChunkManager {
     if (!this._inFlight.has(key)) return; // cancelled
     this._inFlight.delete(key);
     this._terrainResults.push({ cx, cz, key, data });
+    this._resultKeys.add(key);
   }
 
   // Drain buffered worker results into Three.js meshes, capped at
@@ -297,6 +305,7 @@ export class ChunkManager {
     const max = Math.min(MAX_TERRAIN_INSTALLS_PER_FRAME, this._terrainResults.length);
     for (let i = 0; i < max; i++) {
       const { cx, cz, key, data } = this._terrainResults.shift();
+      this._resultKeys.delete(key);
       // Double-check: chunk might have been pruned between message
       // receipt and this frame (rare race after a long turn).
       if (this.chunks.has(key)) continue;

@@ -27,6 +27,7 @@ export class TouchControls {
     this.yawLeft = false;
     this.yawRight = false;
     this.brake = false;
+    this.fire = false;            // race-combat trigger (shares the brake button)
     this.resetRequested = false;  // consumed by main.js
 
     if (!this.enabled) return;
@@ -176,10 +177,13 @@ export class TouchControls {
       () => { this.yawRight = true; },
       () => { this.yawRight = false; }
     );
+    // The brake button doubles as the race-combat trigger: braking only does
+    // anything on the ground (Physics.js), while firing is gated to airborne
+    // combat (RaceManager), so the two never collide.
     this._bindHoldButton(
       'btn-brake',
-      () => { this.brake = true; },
-      () => { this.brake = false; }
+      () => { this.brake = true; this.fire = true; },
+      () => { this.brake = false; this.fire = false; }
     );
     this._bindHoldButton(
       'btn-reset',

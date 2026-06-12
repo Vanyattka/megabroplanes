@@ -20,7 +20,8 @@ import {
 } from '../config.js';
 import { getRunwayMaterial } from './Runway.js';
 import { groundHeight } from './Ground.js';
-import { buildPlaneMesh } from '../plane/PlaneMesh.js';
+import { buildPlaneMesh, disposePlaneMesh } from '../plane/PlaneMesh.js';
+import { seedKey } from './WorldSeed.js';
 import { RUNWAY_LIGHT_GEOM, runwayLightMat } from './NightLights.js';
 import { makeShadowTexture } from './Shadow.js';
 import { gfx } from '../ui/GraphicsSettings.js';
@@ -384,6 +385,11 @@ function buildAirportStructures(village) {
     const plane = buildPlaneMesh();
     plane.position.set(p.x, pad + PLANE_BOTTOM_OFFSET, p.z);
     plane.rotation.y = -Math.PI / 2 - village.angle;
+    // Tag so disposeVillageGroup frees it via disposePlaneMesh — these reuse
+    // the GLOBAL shared plane geometry pool, which must NOT be geometry-
+    // disposed when this village unloads (it's still used by the player, every
+    // remote plane, the menu preview and the water reflection).
+    plane.userData.parkedPlane = true;
     out.push(plane);
   }
 
@@ -437,7 +443,7 @@ const _yAxis = new Vector3(0, 1, 0);
 
 export function buildVillageGroup(village) {
   const group = new Group();
-  const prng = alea(`village-mesh:${village.gcx}:${village.gcz}`);
+  const prng = alea(seedKey(`village-mesh:${village.gcx}:${village.gcz}`));
 
   group.add(buildRunwayMeshFor(village));
 
@@ -490,6 +496,17 @@ export function buildVillageGroup(village) {
 }
 
 export function disposeVillageGroup(group) {
+  // Parked planes share the GLOBAL plane-geometry pool. Detach them and free
+  // them via disposePlaneMesh (per-instance materials only) BEFORE the generic
+  // pass — otherwise traversing into them would geometry-dispose buffers still
+  // used by the player, every remote plane, the menu preview and the water
+  // reflection, corrupting all of them the moment a city village unloads.
+  const parked = [];
+  group.traverse((obj) => { if (obj.userData && obj.userData.parkedPlane) parked.push(obj); });
+  for (const p of parked) {
+    if (p.parent) p.parent.remove(p);
+    disposePlaneMesh(p);
+  }
   group.traverse((obj) => {
     if (obj.isInstancedMesh) {
       obj.dispose();

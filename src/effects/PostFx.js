@@ -294,6 +294,15 @@ export class PostFx {
     this._setFxaaResolution(w, h);
   }
 
+  // Push the renderer's pixel ratio into the composer. EffectComposer caches
+  // its own pixel ratio at construction, so after a graphics-preset change
+  // (which calls renderer.setPixelRatio) its internal render targets + FXAA
+  // would otherwise stay at the old resolution. Caller follows with setSize()
+  // to refresh the dependent passes at the new effective resolution.
+  setPixelRatio(pr) {
+    this.composer.setPixelRatio(pr);
+  }
+
   setBloomEnabled(on) {
     this.bloomEnabled = !!on;
     this.bloomPass.enabled = this.bloomEnabled;

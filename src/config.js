@@ -7,10 +7,26 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.3.4';
-export const GAME_CODENAME = 'Charlie';
+export const GAME_VERSION = '0.4';
+export const GAME_CODENAME = 'Delta';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.4',
+    codename: 'Delta',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-12',
+    notes: [
+      'Race checkpoints now count reliably — a gate registers the instant you fly through it, even on a laggy connection or at high speed. No more "the ring didn\'t count" while racing a friend.',
+      'Crashing into the ground mid-race now respawns you at your next gate (like being shot down) instead of leaving you stuck with no way back.',
+      'Touch / mobile players can finally fire their guns in combat races.',
+      'Race & lobby stability: you can no longer be yanked out of a running race, a forming lobby can\'t hijack a race already in progress, the host can reliably solo-start, and a dropped connection cleanly leaves the race instead of stranding you in a ghost course.',
+      'The chase camera no longer swoops across the whole map when you respawn or reset — it snaps straight to the plane.',
+      'Fixed a bug where flying near a city could corrupt aircraft models (your own, other players\', and the menu preview).',
+      'Graphics-quality changes now correctly re-apply to the post-processing, so switching presets no longer leaves a blurry or mismatched image.',
+      'World fixes: no more dry carved riverbeds near the spawn area, the minimap compass now points the right way on east/west headings, and smoother chunk streaming.',
+    ],
+  },
   {
     version: '0.3.4',
     codename: 'Charlie',
@@ -534,7 +550,11 @@ export const CRASH_MIN_DOWN_SPEED = 18;   // downward component of velocity
 export const CRASH_MIN_DIVE_DOT = 0.5;    // -velY / |vel|  — 0.5 ≈ 30° below horizon
 
 // Explosion particles
-export const EXPLOSION_PARTICLE_COUNT = 80;
+export const EXPLOSION_PARTICLE_COUNT = 80;   // particles seeded per blast
+// Total shared particle pool — bigger than one blast so several near-
+// simultaneous deaths (a busy combat race) each get a full burst from free
+// slots instead of stomping each other's still-burning particles. ~3 blasts.
+export const EXPLOSION_POOL_COUNT = 240;
 export const EXPLOSION_GRAVITY = 12;
 export const EXPLOSION_DRAG = 0.9;
 export const EXPLOSION_LIFE_MIN = 0.9;
@@ -615,13 +635,14 @@ export const CHUNK_BUILD_BUDGET_PER_PENDING_MS = 0.15;
 export const PRIME_RADIUS_CHUNKS = 5;
 
 // ---------------------------------------------------------------------------
-// Debug profiler — flip DEBUG_PROFILER to true, run `npm run dev`, fly around
+// Debug profiler — auto-ON in `npm run dev`, auto-OFF in production builds
+// (Vite replaces import.meta.env.DEV with a literal at build time). Fly around
 // for ~30 s crossing chunk boundaries, then check the DevTools console.
 // A summary prints every DEBUG_PROFILER_REPORT_INTERVAL_MS; every frame
 // longer than DEBUG_PROFILER_LONG_FRAME_MS is logged inline with breakdown.
-// Zero runtime cost when DEBUG_PROFILER = false.
+// Zero runtime cost when off. Hardcode `true` to force-profile a prod build.
 // ---------------------------------------------------------------------------
-export const DEBUG_PROFILER = true;
+export const DEBUG_PROFILER = !!(import.meta.env && import.meta.env.DEV);
 export const DEBUG_PROFILER_LONG_FRAME_MS = 20;
 export const DEBUG_PROFILER_REPORT_INTERVAL_MS = 5000;
 export const VILLAGE_BUILD_BUDGET_MS = 3;

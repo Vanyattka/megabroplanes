@@ -126,6 +126,11 @@ window.addEventListener('resize', () => {
 // chunks keep their existing look until they unload, which is fine.
 function applyGfx(settings) {
   renderer.renderer.setPixelRatio(settings.pixelRatio);
+  // The composer caches its pixel ratio at construction; push the new one
+  // through (and resize) so the post-FX render targets + FXAA actually follow
+  // a preset change instead of staying stuck at the startup resolution.
+  postfx.setPixelRatio(settings.pixelRatio);
+  postfx.setSize(window.innerWidth, window.innerHeight);
   renderer.renderer.toneMappingExposure = settings.toneMappingExposure;
   sky.setShadowMapSize(settings.shadows);
   sky.setShadowFrustumHalf(settings.shadowFrustumHalf);
@@ -272,12 +277,16 @@ const raceManager = new RaceManager({
     const sel = menu.getSelection();
     plane.setLoadout(sel.type, sel.color);
     plane.reset();
+    chaseCamera.snap(); // teleported home from the race course — don't swoop
     jetExhaust.clear();
     contrails.clear();
     explosion.clear();
     refreshRaceButton();
   },
 });
+// Let the minimap read the race's local checkpoint cursor so its "next gate"
+// highlight advances in lockstep with the in-world ring (not a round-trip late).
+minimap.raceManager = raceManager;
 
 let inLobby = false;
 let lastMpPhase = 'free';
@@ -358,13 +367,17 @@ function regenerateSeed() {
 
 menu.onChange = ({ type, color }) => {
   plane.setLoadout(type, color);
-  plane.mesh.visible = true;
+  // Only reveal the live plane when actually flying. While the menu is open its
+  // background is translucent, so forcing the gameplay plane visible here pops
+  // it in behind the menu — the menu already shows a PlanePreview for loadout.
+  if (gameState === 'playing') plane.mesh.visible = !plane.crashed;
 };
 menu.onStart = ({ type, color, timePreset, mode }) => {
   plane.setLoadout(type, color);
   applyMode(mode);
   applyModeTime(timePreset);
   plane.reset();
+  chaseCamera.snap(); // start fresh on the runway, no swoop from the menu cam
   plane.mesh.visible = true;
   jetExhaust.clear();
   contrails.clear();
@@ -428,6 +441,13 @@ function setPhotoMode(on) {
   if (on) {
     _prevDayPaused = dayNight.paused;
     dayNight.paused = true;
+    // Clear the particle systems on entry — renderStep skips their update while
+    // frozen, so a live jet plume / contrail / explosion would otherwise hang
+    // motionless in the air for the whole photo (the comment in renderStep
+    // claimed this already happened; it didn't).
+    jetExhaust.clear();
+    contrails.clear();
+    explosion.clear();
     // Collapse the 60 Hz render-interpolation snapshots so updateRender(alpha)
     // lerps from position → position every frame. Without this, _prevPosition
     // still holds the position from one physics step ago, and the mesh visibly
@@ -462,7 +482,10 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyL' && gameState === 'playing') {
     plane.toggleLandingLight();
   }
-  if (e.code === 'KeyP' && gameState === 'playing') {
+  if (e.code === 'KeyP' && gameState === 'playing' && !raceManager.inRace) {
+    // Photo mode freezes local physics + skips raceManager.update while still
+    // broadcasting your pose — fine in free flight, but mid-race it would
+    // freeze you out of the race. Disallow it during an active race.
     setPhotoMode(!photoMode);
   }
 });
@@ -475,6 +498,9 @@ window.addEventListener('keydown', (e) => {
 }
 
 const chaseCamera = new ChaseCamera(renderer.camera);
+// RaceManager teleports the plane on spawn/respawn; let it snap the camera too
+// so a respawn at the next gate doesn't swoop the camera across the course.
+raceManager.snapCamera = () => chaseCamera.snap();
 const hud = new Hud();
 
 const getGroundHeight = groundHeight;
@@ -514,7 +540,11 @@ function updateSunPostFx() {
     uy,
     GODRAYS_STRENGTH * visibility,
     LENS_FLARE_STRENGTH * visibility,
-    LENS_FLARE_STREAK_STRENGTH * visibility
+    // Streak strength stays unscaled by visibility — the shader multiplies the
+    // whole flare accumulator (which includes the streak) by uFlareStrength,
+    // which is already visibility-gated. Scaling here too made the streak fade
+    // as visibility² and drop out faster than the ghosts.
+    LENS_FLARE_STREAK_STRENGTH
   );
 }
 
@@ -663,6 +693,7 @@ function physicsStep(dt) {
         raceManager.respawnAtGate();
       } else {
         plane.reset();
+        chaseCamera.snap();
       }
       explosion.clear();
       if (crashBannerEl) crashBannerEl.style.display = 'none';

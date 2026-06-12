@@ -86,6 +86,18 @@ export class MultiplayerClient {
     ws.onclose = () => {
       this.connected = false;
       this.remotes.clear();
+      // If the socket drops while we're in a race or lobby, tear that down
+      // locally — otherwise we'd keep flying a "zombie" course that nobody is
+      // scoring (the server assigns a fresh id on reconnect and drops us back
+      // into free flight, so the old session is gone regardless).
+      if (this.race && this.race.phase && this.race.phase !== 'idle') {
+        this.race = null;
+        if (this._raceListener) this._raceListener(null);
+      }
+      if (this.lobby) {
+        this.lobby = null;
+        if (this._lobbyListener) this._lobbyListener(null);
+      }
       this._notify();
       // Only auto-reconnect while enabled. setEnabled(false) clears this
       // timer + nulls the socket so a stale handler can't queue retries.
@@ -150,6 +162,10 @@ export class MultiplayerClient {
 
   // Report clearing the next checkpoint. The server validates ordering.
   sendCheckpoint(idx) { this._send({ type: 'cp', idx }); }
+  // Self-reported "I went down" (e.g. flew into terrain). The server marks us
+  // dead so other racers stop scoring/shooting us and its respawn timer runs
+  // roughly in lockstep with the client's local respawn.
+  sendDown() { this._send({ type: 'down' }); }
   // Combat: broadcast a tracer + claim a hit (server is HP authority).
   sendFire(o, d) { this._send({ type: 'fire', o, d }); }
   sendHit(target) { this._send({ type: 'hit', target }); }
