@@ -312,6 +312,13 @@ const raceManager = new RaceManager({
     contrails.clear();
     explosion.clear();
     refreshRaceButton();
+    // Drop everyone straight back into a WORKING lobby so the group can
+    // immediately vote and launch the next race (the server has already moved
+    // us to the free room, so join_lobby is accepted and fresh lobby state
+    // flows again). Skip if the player parked in the menu meanwhile.
+    if (currentMode === 'multiplayer' && mp.connected && gameState === 'playing') {
+      lobby.join(menu.getSelection());
+    }
   },
 });
 // Let the minimap read the race's local checkpoint cursor so its "next gate"
@@ -322,6 +329,13 @@ if (import.meta.env && import.meta.env.DEV) {
   window.__tp = (x, y, z) =>
     plane.spawnAirborne(new Vector3(x, y, z), plane.quaternion.clone(), new Vector3(0, 0, 0), 0.2);
   window.__gh = (x, z) => groundHeight(x, z);
+  window.__cp = (i) => mp.sendCheckpoint(i);
+  window.__dbg = () => ({
+    pos: plane.position.toArray(),
+    course: mp.race && mp.race.course,
+    phase: mp.race && mp.race.phase,
+    lobby: mp.lobby && mp.lobby.members && mp.lobby.members.length,
+  });
 }
 
 let inLobby = false;
@@ -370,6 +384,10 @@ if (raceBtn) {
 }
 lobby.onLeave = () => {
   mp.leaveLobby();
+  // The server only broadcasts lobby updates to remaining members, so our
+  // cached snapshot (still listing us) would never refresh — clear it, or
+  // currentMpPhase() stays 'lobby' forever and the RACE button never returns.
+  mp.clearLobby();
   inLobby = false;
   lobby.hide();
   document.body.classList.remove('in-lobby');

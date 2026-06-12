@@ -158,6 +158,15 @@ export class MultiplayerClient {
   setName(name) { this._send({ type: 'set_name', name }); }
   joinLobby(plane, time, color, gates) { this._send({ type: 'join_lobby', plane, time, color, gates }); }
   leaveLobby() { this._send({ type: 'leave_lobby' }); }
+  // Drop the cached lobby snapshot. The server scopes lobby broadcasts to
+  // CURRENT lobby members, so after we leave (or get moved into a race) no
+  // fresh message ever overwrites the stale one — and the stale member list
+  // still contains us, wedging currentMpPhase() in 'lobby' forever (dead
+  // overlay, missing RACE button). Call on race entry and on leaving.
+  clearLobby() {
+    this.lobby = null;
+    if (this._lobbyListener) this._lobbyListener(null);
+  }
   lobbySet(patch) { this._send({ type: 'lobby_set', ...patch }); }
   lobbyStart() { this._send({ type: 'lobby_start' }); }
 

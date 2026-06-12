@@ -7,10 +7,20 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.6.1';
+export const GAME_VERSION = '0.6.2';
 export const GAME_CODENAME = 'Foxtrot';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.6.2',
+    codename: 'Foxtrot',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-12',
+    notes: [
+      'Race respawns are fair now: after a crash, shoot-down or R, you restart at the LAST ring you cleared (facing the next one) — respawning can no longer teleport you ahead and shortcut the course.',
+      'After a race everyone lands back in a live lobby together — vote and launch the next race right away. Leaving the lobby properly returns you to free flight with the RACE LOBBY button intact (it used to strand you in a dead lobby with no way to race again).',
+    ],
+  },
   {
     version: '0.6.1',
     codename: 'Foxtrot',

@@ -122,7 +122,11 @@ export class RaceManager {
 
     if (amPart && !wasIn) {
       // Entering a race: rebuild course, apply voted plane + my color + voted
-      // time, and spawn airborne at the start line.
+      // time, and spawn airborne at the start line. Drop the cached lobby
+      // snapshot — we're no longer a member, and the server stops sending us
+      // lobby updates, so the stale list (still naming us) would wedge the
+      // post-race UI in a dead lobby state.
+      this.client.clearLobby();
       this.inRace = true;
       this.course = r.course || [];
       this._courseKey = this._key(r);
@@ -204,6 +208,28 @@ export class RaceManager {
     }
   }
 
+  // Respawn pose after a death/reset: AT the last cleared gate (or the race
+  // start line if none), facing the next one — the whole leg must be reflown.
+  // Spawning short of the NEXT gate (the old behavior) let players crash on
+  // purpose right after a ring and teleport most of the way to the next one.
+  _respawnPose(nextIdx) {
+    const cps = this.course;
+    if (nextIdx <= 0 || cps.length === 0) return this._gatePose(0, 0, 1, 380);
+    const prev = cps[Math.min(nextIdx, cps.length) - 1];
+    const aim = cps[Math.min(nextIdx, cps.length - 1)];
+    let dx = aim.x - prev.x, dz = aim.z - prev.z;
+    if (dx * dx + dz * dz < 1) {
+      // Already finished (no next gate) — keep flying along the last leg.
+      const before = cps[Math.max(0, Math.min(nextIdx, cps.length) - 2)];
+      dx = prev.x - before.x; dz = prev.z - before.z;
+    }
+    const len = Math.hypot(dx, dz) || 1; dx /= len; dz /= len;
+    const pos = new Vector3(prev.x + dx * 40, prev.y, prev.z + dz * 40);
+    const q = new Quaternion().setFromUnitVectors(new Vector3(0, 0, -1), new Vector3(dx, 0, dz));
+    const vel = new Vector3(dx, 0, dz).multiplyScalar(75);
+    return { pos, q, vel };
+  }
+
   // Airborne pose `back` metres before gate `idx`, in lane `slot` of `total`.
   _gatePose(idx, slot, total, back) {
     const cps = this.course;
@@ -234,7 +260,7 @@ export class RaceManager {
   respawnAtGate() {
     if (!this.inRace) return;
     const target = this._localNextCp();
-    const pose = this._gatePose(target, 0, 1, 300);
+    const pose = this._respawnPose(target);
     this.plane.spawnAirborne(pose.pos, pose.q, pose.vel, 1);
     if (this.snapCamera) this.snapCamera();
     this._localDowned = false;
@@ -283,7 +309,7 @@ export class RaceManager {
       }
     }
     if (this._localDowned && now >= this._respawnAt) {
-      const pose = this._gatePose(serverCp, 0, 1, 300);
+      const pose = this._respawnPose(serverCp);
       this.plane.spawnAirborne(pose.pos, pose.q, pose.vel, 1);
       if (this.snapCamera) this.snapCamera();
       this._localDowned = false;
@@ -462,7 +488,7 @@ export class RaceManager {
           lines.push(`<div class="res-row${me ? ' me' : ''}">— ${s.name || 'P' + s.id}${me ? ' (you)' : ''} — DNF (${s.n}/${total})</div>`);
         }
         this.elResults.style.display = 'block';
-        this.elResults.innerHTML = `<div class="res-title">🏁 RESULTS</div>${lines.join('')}<div class="res-foot">returning to free flight…</div>`;
+        this.elResults.innerHTML = `<div class="res-title">🏁 RESULTS</div>${lines.join('')}<div class="res-foot">returning to the lobby…</div>`;
       } else this.elResults.style.display = 'none';
     }
   }
