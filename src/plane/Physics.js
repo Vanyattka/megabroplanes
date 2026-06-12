@@ -14,6 +14,7 @@ import {
   STALL_PITCH_NOSE_UP_BIAS,
   STALL_LIFT_CUTOFF,
   ROLLING_FRICTION,
+  GEAR_DRAG_FRAC,
   COUPLING_COEFF,
   ANGULAR_DAMPING,
   PLANE_BOTTOM_OFFSET,
@@ -67,10 +68,14 @@ export function step(plane, dt, getHeight, isOnRunway, braking, crashesEnabled) 
 
   const speed = plane.velocity.length();
   if (speed > 0.01) {
+    // Extended landing gear hangs in the airstream — a touch more parasite
+    // drag, so a clean (gear-up) plane is slightly faster. gearT animates
+    // 0..1, so the penalty fades in/out with the legs.
+    const gearDrag = 1 + GEAR_DRAG_FRAC * (plane.gearT || 0);
     _drag
       .copy(plane.velocity)
       .normalize()
-      .multiplyScalar(-DRAG_COEFFICIENT * tc.dragMult * speed * speed);
+      .multiplyScalar(-DRAG_COEFFICIENT * tc.dragMult * gearDrag * speed * speed);
   } else {
     _drag.set(0, 0, 0);
   }

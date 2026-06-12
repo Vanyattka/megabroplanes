@@ -316,7 +316,7 @@ let lastMpPhase = 'free';
 const hintEl = document.getElementById('hint');
 const DEFAULT_HINT = hintEl ? hintEl.textContent : '';
 const RACE_HINT =
-  'S/W nose · A/D roll · Q/E yaw · Shift/Ctrl throttle · SPACE fire · R respawn at gate · L lights · drag to look';
+  'S/W nose · A/D roll · Q/E yaw · Shift/Ctrl throttle · SPACE fire · G gear · R respawn at gate · L lights · drag to look';
 
 function currentMpPhase() {
   if (raceManager.inRace) return 'race';
@@ -509,6 +509,9 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.code === 'KeyL' && gameState === 'playing') {
     plane.toggleLandingLight();
+  }
+  if (e.code === 'KeyG' && gameState === 'playing' && !photoMode) {
+    plane.toggleGear();
   }
   if (e.code === 'KeyP' && gameState === 'playing' && !raceManager.inRace) {
     // Photo mode freezes local physics + skips raceManager.update while still
@@ -711,6 +714,9 @@ function physicsStep(dt) {
   // doesn't fly forward and overshoot the first gate before the clock starts.
   if (raceManager.holdAtStart) return;
 
+  // Touch GEAR button (toggle semantics, consumed once per tap).
+  if (touch.consumeGear()) plane.toggleGear();
+
   const resetKey = input.isPressed('KeyR');
   const resetBtn = touch.consumeReset();
   if (resetKey || resetBtn) {
@@ -858,7 +864,12 @@ function renderStep(alpha) {
     renderer.camera,
     worldTime.horizonColor
   );
-  if (!plane.crashed) planeShadow.update(plane, getPhysicsFloor);
+  // The soft blob shadow is only a stand-in for presets where the real sun
+  // shadow can't land on the terrain (Low: no shadow map; or terrain shadows
+  // off). With real shadows on, the plane casts a true silhouette and the
+  // blob underneath it just reads as a second, fake shadow.
+  const realPlaneShadow = gfx.settings.shadows > 0 && gfx.settings.shadowTerrain;
+  if (!plane.crashed && !realPlaneShadow) planeShadow.update(plane, getPhysicsFloor);
   else planeShadow.mesh.visible = false;
   // Freeze particle systems in photo mode. Jet exhaust in particular was
   // shooting forward ahead of the frozen plane — each spawned particle

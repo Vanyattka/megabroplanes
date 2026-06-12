@@ -1,8 +1,8 @@
 import { Color, Quaternion, Vector3 } from 'three';
-import { buildPlaneMesh, disposePlaneMesh } from '../plane/PlaneMesh.js';
+import { buildPlaneMesh, disposePlaneMesh, applyGearPose } from '../plane/PlaneMesh.js';
 import { JetExhaust } from '../effects/JetExhaust.js';
 import { Contrails } from '../effects/Contrails.js';
-import { DEFAULT_PLANE_TYPE, DEFAULT_BODY_COLOR } from '../config.js';
+import { DEFAULT_PLANE_TYPE, DEFAULT_BODY_COLOR, GEAR_ANIM_SPEED } from '../config.js';
 
 const LERP = 0.22;
 const SLERP = 0.22;
@@ -35,6 +35,7 @@ export class RemotePlaneManager {
     v.mesh = this._buildMesh(type, color);
     v.mesh.position.copy(v.targetPos);
     v.mesh.quaternion.copy(v.targetQuat);
+    applyGearPose(v.mesh, v.gearT ?? 1); // fresh mesh is gear-down by default
     this.scene.add(v.mesh);
     v.type = type;
     v.color = color;
@@ -101,6 +102,8 @@ export class RemotePlaneManager {
           // Used by JetExhaust to seed particle velocity at spawn.
           prevPos: new Vector3().fromArray(r.pos),
           estVel: new Vector3(),
+          // Landing-gear extension, animated toward the broadcast state.
+          gearT: r.gearDown === false ? 0 : 1,
           // Lazily-created jet effects — only allocated for jet remotes,
           // and reused even if the local frame doesn't include this remote.
           exhaust: null,
@@ -136,6 +139,17 @@ export class RemotePlaneManager {
 
       const prop = v.mesh.getObjectByName('propeller');
       if (prop) prop.rotation.z += v.throttle * 30 * dt;
+
+      // Animate the remote's landing gear toward its broadcast state, same
+      // transit speed as the local plane so everyone sees the same fold.
+      const gearTarget = r.gearDown === false ? 0 : 1;
+      if (v.gearT !== gearTarget) {
+        const step = GEAR_ANIM_SPEED * dt;
+        v.gearT = gearTarget > v.gearT
+          ? Math.min(gearTarget, v.gearT + step)
+          : Math.max(gearTarget, v.gearT - step);
+        applyGearPose(v.mesh, v.gearT);
+      }
 
       // Jet-only effects: lazily allocate and update the exhaust + contrail
       // for remote jets. Other plane types skip this entirely. JetExhaust's

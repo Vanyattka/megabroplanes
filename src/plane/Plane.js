@@ -1,5 +1,5 @@
 import { Object3D, PointLight, Quaternion, SpotLight, Vector3 } from 'three';
-import { buildPlaneMesh, disposePlaneMesh } from './PlaneMesh.js';
+import { buildPlaneMesh, disposePlaneMesh, applyGearPose } from './PlaneMesh.js';
 import { step as physicsStep } from './Physics.js';
 import { applyControls } from './Controls.js';
 import { getSpawnPose } from '../world/Runway.js';
@@ -19,6 +19,7 @@ import {
   JET_LIGHT_DECAY,
   JET_EXHAUST_OFFSET_Z,
   PLANE_MAX_HP,
+  GEAR_ANIM_SPEED,
 } from '../config.js';
 
 export class Plane {
@@ -46,6 +47,10 @@ export class Plane {
     // Combat (race mode). Full health outside combat.
     this.maxHp = PLANE_MAX_HP;
     this.hp = PLANE_MAX_HP;
+    // Landing gear (v0.6). gearDown is the commanded state (G toggles it);
+    // gearT is the animated extension 0..1 that physics reads for drag.
+    this.gearDown = true;
+    this.gearT = 1;
 
     this.type = DEFAULT_PLANE_TYPE;
     this.color = DEFAULT_BODY_COLOR;
@@ -115,6 +120,14 @@ export class Plane {
     return this.landingLightOn;
   }
 
+  // G key. Refuses to retract while the wheels are carrying the plane —
+  // physically that's a belly-flop, and the floor offset assumes gear legs.
+  toggleGear() {
+    if (this.onGround && this.gearDown) return false;
+    this.gearDown = !this.gearDown;
+    return true;
+  }
+
   // Swap the visible mesh when the player picks a different plane / color.
   // Physics state (position, velocity, throttle) is preserved.
   setLoadout(type, color) {
@@ -137,6 +150,9 @@ export class Plane {
     if (this._landingLight) {
       this._landingLight.intensity = wasOn ? LANDING_LIGHT_INTENSITY : 0;
     }
+    // The fresh mesh is built gear-down; restore the live gear pose so a
+    // loadout swap mid-flight doesn't visually drop the wheels.
+    applyGearPose(this.mesh, this.gearT);
     if (this.scene) this.scene.add(this.mesh);
     this.syncMesh();
   }
@@ -157,6 +173,9 @@ export class Plane {
     this.crashed = false;
     this.crashImpact = null;
     this.hp = this.maxHp;
+    this.gearDown = true;
+    this.gearT = 1;
+    applyGearPose(this.mesh, 1);
     this.mesh.visible = true;
     this.syncMesh();
   }
@@ -179,6 +198,10 @@ export class Plane {
     this.crashed = false;
     this.crashImpact = null;
     this.hp = this.maxHp;
+    // Airborne spawns (race start / respawn) come out clean, wheels up.
+    this.gearDown = false;
+    this.gearT = 0;
+    applyGearPose(this.mesh, 0);
     this.mesh.visible = true;
     this.syncMesh();
   }
@@ -219,21 +242,56 @@ export class Plane {
     const prop = this.mesh.getObjectByName('propeller');
     if (prop) prop.rotation.z += this.throttle * 30 * dt;
 
+    // Landing gear transit — gearT chases the commanded state; physics reads
+    // gearT for the extra drag, the mesh legs fold via applyGearPose.
+    const gearTarget = this.gearDown ? 1 : 0;
+    if (this.gearT !== gearTarget) {
+      const step = GEAR_ANIM_SPEED * dt;
+      this.gearT = gearTarget > this.gearT
+        ? Math.min(gearTarget, this.gearT + step)
+        : Math.max(gearTarget, this.gearT - step);
+      applyGearPose(this.mesh, this.gearT);
+    }
+
     // Animate control surfaces from the latest pilot input. Elevator pivots
-    // about its leading edge (pitch), rudder about its leading edge (yaw).
+    // about its leading edge (pitch), rudder about its leading edge (yaw),
+    // ailerons deflect opposite ways for roll.
     const ci = this.controlInputs;
     if (ci) {
       const elev = this.mesh.getObjectByName('elevator');
       if (elev) elev.rotation.x = ci.pitch * 0.4;
       const rudd = this.mesh.getObjectByName('rudder');
       if (rudd) rudd.rotation.y = ci.yaw * 0.4;
+      const ailL = this.mesh.getObjectByName('aileron-left');
+      const ailR = this.mesh.getObjectByName('aileron-right');
+      if (ailL) ailL.rotation.x = ci.roll * 0.45;
+      if (ailR) ailR.rotation.x = -ci.roll * 0.45;
     }
 
-    // Tail strobe — blink the white nav light twice a second.
+    // Strobes — white tail flash and the red beacon blink on opposite phases.
     this._blinkT += dt;
+    const phase = Math.floor(this._blinkT * NAV_TAIL_BLINK_HZ) % 2;
     const tail = this.mesh.getObjectByName('nav-tail');
-    if (tail) {
-      tail.visible = (Math.floor(this._blinkT * NAV_TAIL_BLINK_HZ) % 2) === 0;
+    if (tail) tail.visible = phase === 0;
+    const beacon = this.mesh.getObjectByName('beacon');
+    if (beacon) beacon.visible = phase === 1;
+
+    // Afterburner — the jet's signature. Lights up past ~65% throttle with a
+    // subtle flicker; both cones stretch with thrust.
+    if (this.type === 'jet') {
+      const ab = Math.max(0, (this.throttle - 0.65) / 0.35);
+      const core = this.mesh.getObjectByName('ab-core');
+      const outer = this.mesh.getObjectByName('ab-outer');
+      const flick = 1 + Math.sin(this._blinkT * 47) * 0.08;
+      if (core) {
+        core.visible = ab > 0.01;
+        core.scale.set(1, 1, (0.35 + 0.65 * ab) * flick);
+      }
+      if (outer) {
+        outer.visible = ab > 0.01;
+        outer.scale.set(1, 1, (0.3 + 0.7 * ab) * flick);
+        outer.material.opacity = 0.18 + 0.32 * ab;
+      }
     }
 
     // Jet engine light — glows orange on ground, wings, water surface when

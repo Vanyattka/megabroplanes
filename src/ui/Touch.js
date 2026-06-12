@@ -29,6 +29,7 @@ export class TouchControls {
     this.brake = false;
     this.fire = false;            // race-combat trigger (shares the brake button)
     this.resetRequested = false;  // consumed by main.js
+    this.gearRequested = false;   // gear toggle taps, consumed by main.js
 
     if (!this.enabled) return;
 
@@ -45,6 +46,12 @@ export class TouchControls {
     const r = this.resetRequested;
     this.resetRequested = false;
     return r;
+  }
+
+  consumeGear() {
+    const g = this.gearRequested;
+    this.gearRequested = false;
+    return g;
   }
 
   _initJoystick() {
@@ -188,6 +195,11 @@ export class TouchControls {
     this._bindHoldButton(
       'btn-reset',
       () => { this.resetRequested = true; },
+      null
+    );
+    this._bindHoldButton(
+      'btn-gear',
+      () => { this.gearRequested = true; },
       null
     );
   }

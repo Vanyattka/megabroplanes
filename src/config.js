@@ -7,10 +7,23 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.5';
-export const GAME_CODENAME = 'Echo';
+export const GAME_VERSION = '0.6';
+export const GAME_CODENAME = 'Foxtrot';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.6',
+    codename: 'Foxtrot',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-12',
+    notes: [
+      'All three aircraft rebuilt in far more detail: the Cessna got its signature high wing on V-struts, the Piper a sleek low-wing airframe with a cabin stripe, and the Jet a pointed nose, bubble canopy, side intakes, swept wings and an engine nozzle.',
+      'Retractable landing gear! Press G (or the new touch button) to raise/lower the wheels. Extended gear drags a little — clean up for top speed, drop it for landing. A HUD light shows DOWN / transit / UP, and other players see your gear too.',
+      'Planes are alive in the air: ailerons deflect when you roll, the elevator and rudder move with your inputs, the propeller spins on its cone — and everything casts real sun shadows now.',
+      'Better lighting: glossier paint with real sun highlights, glowing cockpit glass at night, and a red rotating beacon blinking opposite the white tail strobe.',
+      'The Jet\'s signature exhaust got an upgrade — a blazing afterburner cone ignites past ~65% throttle and stretches with thrust.',
+    ],
+  },
   {
     version: '0.5',
     codename: 'Echo',
@@ -386,8 +399,16 @@ export const COUPLING_COEFF = 1.0;
 export const THROTTLE_RATE = 0.5;
 
 // Plane
-export const PLANE_BOTTOM_OFFSET = 0.5;
+// Raised from 0.5 in v0.6: the detailed models stand on real landing-gear legs,
+// so the origin sits higher above the ground. Gear geometry is authored so the
+// wheel bottoms reach exactly -PLANE_BOTTOM_OFFSET when extended.
+export const PLANE_BOTTOM_OFFSET = 0.95;
 export const BRAKE_STRENGTH = 1.5;
+
+// Landing gear (v0.6) — retractable on G. Extended gear adds a little drag
+// (slightly lower top speed), retracting cleans the plane up.
+export const GEAR_ANIM_SPEED = 1.6;     // gearT units/sec (~0.6 s transit)
+export const GEAR_DRAG_FRAC = 0.18;     // drag multiplier at full extension (+18%)
 
 // Aircraft types. Each multiplier scales the global constant above for
 // physics / control, and selects a mesh silhouette.

@@ -457,6 +457,7 @@ setInterval(() => {
       id, hue: c.hue,
       p: c.state.p, q: c.state.q, t: c.state.t ?? 0,
       c: (c.dead ? 1 : 0) || (c.state.c ? 1 : 0),
+      g: c.state.g ? 1 : 0, // landing gear extended
       pt: c.plane.pt, pc: c.plane.pc,
       hp: c.hp ?? MAX_HP,
     });

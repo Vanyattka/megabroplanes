@@ -13,6 +13,7 @@ export class Hud {
     this.speedEl = document.getElementById('hud-speed');
     this.altEl = document.getElementById('hud-alt');
     this.thrEl = document.getElementById('hud-thr');
+    this.gearEl = document.getElementById('hud-gear');
     this.canvas = document.getElementById('horizon');
     this.ctx = this.canvas ? this.canvas.getContext('2d') : null;
   }
@@ -24,6 +25,13 @@ export class Hud {
     if (this.speedEl) this.speedEl.textContent = `${Math.round(speed)} kt`;
     if (this.altEl) this.altEl.textContent = `${Math.round(alt)} ft`;
     if (this.thrEl) this.thrEl.textContent = `${thr}%`;
+    if (this.gearEl) {
+      const t = plane.gearT ?? 1;
+      const transit = t > 0.02 && t < 0.98;
+      this.gearEl.textContent = transit ? '· · ·' : t >= 0.98 ? 'DOWN' : 'UP';
+      // Green when locked down, amber in transit, dim when tucked away.
+      this.gearEl.style.color = transit ? '#ffd23a' : t >= 0.98 ? '#39ff8a' : 'rgba(255,255,255,0.55)';
+    }
 
     if (this.ctx) this.drawHorizon(plane);
   }

@@ -132,6 +132,7 @@ export class MultiplayerClient {
         r.type = s.pt;
         r.color = s.pc;
         r.hp = s.hp;
+        r.gearDown = s.g === 1;
       }
       for (const id of this.remotes.keys()) {
         if (!seen.has(id)) this.remotes.delete(id);
@@ -185,6 +186,7 @@ export class MultiplayerClient {
         q: [q.x, q.y, q.z, q.w],
         t: plane.throttle,
         c: plane.crashed ? 1 : 0,
+        g: plane.gearDown ? 1 : 0, // landing gear, so remotes show it too
         pt: plane.type,   // plane type (cessna/piper/jet)
         pc: plane.color,  // body color hex int
       },
