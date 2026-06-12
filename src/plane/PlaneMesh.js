@@ -192,7 +192,13 @@ export function disposePlaneMesh(group) {
   group.traverse((obj) => {
     if (!obj.isMesh || !obj.material) return;
     const m = obj.material;
-    if (m !== DEFAULT_BODY_MAT && m !== ACCENT_MAT && m !== DARK_MAT) {
+    // Skip every SHARED singleton material — the per-plane body material is the
+    // only clone. The nav-light mats are module-level singletons reused by the
+    // player, remotes, preview and reflection; disposing them (e.g. when a city
+    // unloads its parked planes) would force a GLSL recompile / flicker on every
+    // plane in the scene.
+    if (m !== DEFAULT_BODY_MAT && m !== ACCENT_MAT && m !== DARK_MAT &&
+        m !== navLeftMat && m !== navRightMat && m !== navTailMat) {
       m.dispose();
     }
   });

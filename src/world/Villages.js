@@ -15,10 +15,50 @@ import {
   PLANE_BOTTOM_OFFSET,
   SEA_THRESHOLD_LOW,
   WATER_LEVEL,
+  VILLAGE_STYLES,
+  VILLAGE_BIOME_STYLE,
+  VILLAGE_JITTER_ALONG,
+  VILLAGE_JITTER_PERP,
+  VILLAGE_JITTER_ROT,
+  VILLAGE_L_SHAPE_CHANCE,
+  VILLAGE_DORMER_CHANCE,
+  VILLAGE_PLAZA_HALF,
+  FARM_CHANCE,
+  COASTAL_RING_PAD,
+  COASTAL_SEAHITS_MIN,
+  COASTAL_SEAHITS_MAX,
 } from '../config.js';
 import { seaMaskAt } from './SeaMask.js';
-import { landElevation, riverWaterLevelAt } from './TerrainShape.js';
+import { landElevation, riverWaterLevelAt, biomeAt } from './TerrainShape.js';
 import { seedKey } from './WorldSeed.js';
+
+const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+
+// Style key for a world position (biome → architectural style).
+function styleAt(x, z) {
+  return VILLAGE_BIOME_STYLE[biomeAt(x, z).type] || 'classic';
+}
+
+// Weighted roof-type pick for a house. Apartments (variant 3) are restricted
+// to flat/mansard so they read urban; everyone else uses the style's weights.
+function pickRoof(styleKey, variant, prng) {
+  if (variant === 3) return 'flat'; // apartments read urban with a flat roof
+  const w = (VILLAGE_STYLES[styleKey] || VILLAGE_STYLES.classic).roofWeights;
+  const keys = Object.keys(w);
+  const r = prng();
+  let acc = 0;
+  for (const k of keys) { acc += w[k]; if (r < acc) return k; }
+  return keys[keys.length - 1];
+}
+
+// Place a landmark at rect-local (along, perp), clamped inside the rect minus
+// its footprint radius so it always lands on the flat pad and off the runway.
+function placeInRect(rect, along, perp, footR) {
+  const a = clamp(along, -(rect.halfL - footR), rect.halfL - footR);
+  const p = clamp(perp, -(rect.halfW - footR), rect.halfW - footR);
+  const c = Math.cos(rect.angle), s = Math.sin(rect.angle);
+  return { x: rect.cx + a * c - p * s, z: rect.cz + a * s + p * c };
+}
 
 // A point is "wet" if it's in the sea, below the global waterline, or under a
 // river's LOCAL water level (rivers carry stepped pools above sea level).
@@ -239,6 +279,9 @@ function buildVillage(gcx, gcz, isHome) {
   // Parallel main streets. Offsets centered on the village.
   const streetOffsets = computeStreetOffsets(size.streets);
   const spacing = size.spacing;
+  // Central square (medium+): an open plaza at the village center that hosts
+  // the centerpiece landmark. Houses landing inside it are skipped.
+  const plazaHalf = VILLAGE_PLAZA_HALF[sizeName] || 0;
 
   // Split houses across the streets.
   const streetHouseCounts = streetOffsets.map(() => 0);
@@ -255,13 +298,18 @@ function buildVillage(gcx, gcz, isHome) {
     for (let i = 0; i < n; i++) {
       const slot = Math.floor(i / 2);
       const sideOfStreet = i % 2 === 0 ? -1 : 1;
-      const along = rowStart + slot * spacing;
+      // Jitter (3 draws, fixed order) breaks up the surveyed-rows look without
+      // letting houses collide or leave the rect.
+      const jAlong = (prng() * 2 - 1) * VILLAGE_JITTER_ALONG;
+      const jPerp = (prng() * 2 - 1) * VILLAGE_JITTER_PERP;
+      const jRot = (prng() * 2 - 1) * VILLAGE_JITTER_ROT;
+      const along = rowStart + slot * spacing + jAlong;
       const offsetFromStreet = sideOfStreet * VILLAGE_STREET_SIDE_OFFSET;
-      const totalPerp = streetOffset + offsetFromStreet;
+      const totalPerp = streetOffset + offsetFromStreet + jPerp;
       const hx = villageCx + fx * along + px * sideSign * totalPerp;
       const hz = villageCz + fz * along + pz * sideSign * totalPerp;
       const K = sideSign * sideOfStreet;
-      const rot = Math.atan2(px * K, pz * K);
+      const rot = Math.atan2(px * K, pz * K) + jRot;
 
       // Variant pick — biased by size tier. Streets closer to the center bias
       // toward apartments (where applicable) to form a city core.
@@ -275,7 +323,24 @@ function buildVillage(gcx, gcz, isHome) {
       else if (r < apartmentProb + size.tallChance + 0.45) variant = 0;
       else variant = 1;
 
-      houses.push({ x: hx, z: hz, rot, variant });
+      // Style/roof/features (drawn in a fixed order so the village stays
+      // deterministic). Style follows the LOCAL biome so transition towns mix.
+      const styleKey = styleAt(hx, hz);
+      const def = VILLAGE_STYLES[styleKey] || VILLAGE_STYLES.classic;
+      const roof = pickRoof(styleKey, variant, prng);
+      const lshape = variant === 1 && prng() < VILLAGE_L_SHAPE_CHANCE;
+      const porch = (variant === 0 || variant === 1 || lshape) && prng() < def.porchChance;
+      const dormer = (roof === 'gable' || roof === 'hip') && prng() < VILLAGE_DORMER_CHANCE;
+      const chimney = (variant === 1 || variant === 2) && prng() < def.chimneyChance;
+      const colorSeed = prng();
+
+      // Keep the central square open.
+      if (plazaHalf > 0) {
+        const ddx = hx - villageCx, ddz = hz - villageCz;
+        if (ddx * ddx + ddz * ddz < (plazaHalf + 5) * (plazaHalf + 5)) continue;
+      }
+
+      houses.push({ x: hx, z: hz, rot, variant, style: styleKey, roof, lshape, porch, dormer, chimney, colorSeed });
     }
   }
 
@@ -338,6 +403,77 @@ function buildVillage(gcx, gcz, isHome) {
   // "under a hill". Clamped above water so a coastal pad never sinks.
   const padY = Math.max(WATER_LEVEL + 2, landElevation(airportX, airportZ));
 
+  const villageRect = { cx: villageCx, cz: villageCz, halfL: size.halfL, halfW: size.halfW, angle };
+
+  // --- v0.5 content: biome flavour, coastal/farm flags, plaza, landmarks ---
+  const biome = biomeAt(villageCx, villageCz).type;
+  const style = VILLAGE_BIOME_STYLE[biome] || 'classic';
+
+  // Coastal: count sea hits on a ring just past the settlement. A village
+  // partly ringed by sea (not fully, not none) sits on a real coastline.
+  let coastal = false;
+  let seaDir = 0;
+  {
+    const ringR = perpOffset + size.halfL + COASTAL_RING_PAD;
+    let hits = 0, sx = 0, sz = 0;
+    const N = 12;
+    for (let k = 0; k < N; k++) {
+      const a = (k / N) * Math.PI * 2;
+      const dxs = Math.cos(a), dzs = Math.sin(a);
+      if (seaMaskAt(airportX + dxs * ringR, airportZ + dzs * ringR) >= SEA_THRESHOLD_LOW) {
+        hits++; sx += dxs; sz += dzs;
+      }
+    }
+    if (hits >= COASTAL_SEAHITS_MIN && hits <= COASTAL_SEAHITS_MAX) {
+      coastal = true;
+      seaDir = Math.atan2(sz, sx);
+    }
+  }
+
+  // Farm hamlet: a small/medium plains/savanna village, by a coin flip.
+  const farm = !isHome && (sizeName === 'small' || sizeName === 'medium') &&
+    (biome === 'plains' || biome === 'savanna') && prng() < FARM_CHANCE;
+
+  const plaza = plazaHalf > 0 ? { x: villageCx, z: villageCz, half: plazaHalf } : null;
+
+  // Landmarks — world coords, clamped inside the rect minus their footprint so
+  // they always land on the flat pad and clear of the runway. One-off per
+  // village; the mesh builder draws them from shared geoms (no instancing).
+  const landmarks = [];
+  const tierRank = { small: 0, medium: 1, large: 2, city: 3 }[sizeName];
+  if (plaza) {
+    landmarks.push({ kind: tierRank >= 2 ? 'fountain' : 'well', x: plaza.x, z: plaza.z, rot: angle });
+  }
+  if (tierRank >= 1) {
+    const anchorKind = tierRank >= 2 ? 'townhall'
+      : style === 'adobe' ? 'dome' : style === 'outpost' ? 'mast' : 'church';
+    const p = placeInRect(villageRect, -size.halfL * 0.55, size.halfW * 0.45, 12);
+    landmarks.push({ kind: anchorKind, x: p.x, z: p.z, rot: angle });
+  }
+  if (tierRank >= 2 || (tierRank === 1 && prng() < 0.5)) {
+    const windmill = (biome === 'plains' || biome === 'savanna') && prng() < 0.5;
+    const p = placeInRect(villageRect, size.halfL * 0.6, -size.halfW * 0.55, 8);
+    landmarks.push({ kind: windmill ? 'windmill' : 'watertower', x: p.x, z: p.z, rot: angle });
+  }
+  if (farm) {
+    const p = placeInRect(villageRect, size.halfL * 0.5, -size.halfW * 0.4, 12);
+    landmarks.push({ kind: 'barn', x: p.x, z: p.z, rot: angle });
+    const ns = 1 + Math.floor(prng() * 3);
+    for (let s = 0; s < ns; s++) {
+      const sp = placeInRect(villageRect, size.halfL * 0.5 + 9, -size.halfW * 0.4 + 6 + s * 5, 3);
+      landmarks.push({ kind: 'silo', x: sp.x, z: sp.z, rot: angle });
+    }
+  }
+  if (coastal) {
+    // Lighthouse on the seaward edge of the pad (a beacon, not over water).
+    const c = Math.cos(angle), s = Math.sin(angle);
+    const sdx = Math.cos(seaDir), sdz = Math.sin(seaDir);
+    const lAlong = sdx * c + sdz * s;     // seaward component along rect L
+    const lPerp = -sdx * s + sdz * c;     // along rect W
+    const p = placeInRect(villageRect, lAlong * size.halfL, lPerp * size.halfW, 6);
+    landmarks.push({ kind: 'lighthouse', x: p.x, z: p.z, rot: seaDir });
+  }
+
   return {
     gcx,
     gcz,
@@ -350,13 +486,14 @@ function buildVillage(gcx, gcz, isHome) {
     padY,
     houses,
     roads,
-    villageRect: {
-      cx: villageCx,
-      cz: villageCz,
-      halfL: size.halfL,
-      halfW: size.halfW,
-      angle,
-    },
+    villageRect,
+    biome,
+    style,
+    coastal,
+    seaDir,
+    farm,
+    plaza,
+    landmarks,
     isHome,
   };
 }

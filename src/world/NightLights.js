@@ -1,4 +1,4 @@
-import { Color, MeshBasicMaterial, SphereGeometry } from 'three';
+import { Color, MeshBasicMaterial, MeshStandardMaterial, SphereGeometry } from 'three';
 import {
   RUNWAY_LIGHT_COLOR,
   RUNWAY_LIGHT_RADIUS,
@@ -6,6 +6,8 @@ import {
   NAV_LIGHT_COLOR_LEFT,
   NAV_LIGHT_COLOR_RIGHT,
   NAV_LIGHT_COLOR_TAIL,
+  VILLAGE_LAMP_GLOW_FULL,
+  VILLAGE_WINDOW_NIGHT_EMISSIVE,
 } from '../config.js';
 import { worldTime } from './WorldTime.js';
 
@@ -43,12 +45,35 @@ export const navLeftMat = new MeshBasicMaterial({ color: 0x000000 });
 export const navRightMat = new MeshBasicMaterial({ color: 0x000000 });
 export const navTailMat = new MeshBasicMaterial({ color: 0x000000 });
 
+// Village street-lamp glow (v0.5). Same opacity-ramp trick as the runway lamps:
+// invisible by day, blooming warm at night. Shared world-wide → O(1)/frame.
+export const VILLAGE_LAMP_GEOM = new SphereGeometry(0.32, 8, 6);
+export const villageLampMat = new MeshBasicMaterial({
+  color: new Color().setRGB(VILLAGE_LAMP_GLOW_FULL[0], VILLAGE_LAMP_GLOW_FULL[1], VILLAGE_LAMP_GLOW_FULL[2]),
+  transparent: true,
+  opacity: 0,
+  depthWrite: false,
+  toneMapped: false,
+});
+
+// Window glass, shared by every village house. emissiveIntensity is ramped at
+// night so windows glow at dusk world-wide for one extra line in updateLights.
+const WINDOW_DAY_EMISSIVE = 0.32;
+export const windowMat = new MeshStandardMaterial({
+  color: 0x2a3a5a,
+  emissive: 0x153060,
+  emissiveIntensity: WINDOW_DAY_EMISSIVE,
+  flatShading: true,
+});
+
 // 0.45 during the day, ramped up to 1.0 at midnight.
 const NAV_DAY_LEVEL = 0.45;
 
 export function updateLights() {
   const n = worldTime.nightFactor ?? 0;
   runwayLightMat.opacity = n;
+  villageLampMat.opacity = n;
+  windowMat.emissiveIntensity = WINDOW_DAY_EMISSIVE + (VILLAGE_WINDOW_NIGHT_EMISSIVE - WINDOW_DAY_EMISSIVE) * n;
   const navLevel = NAV_DAY_LEVEL + (1 - NAV_DAY_LEVEL) * n;
   navLeftMat.color.copy(NAV_FULL_LEFT).multiplyScalar(navLevel);
   navRightMat.color.copy(NAV_FULL_RIGHT).multiplyScalar(navLevel);

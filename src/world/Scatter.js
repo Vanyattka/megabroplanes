@@ -61,7 +61,10 @@ function makeSpecies(trunk, canopy) {
     canopyMat: new MeshStandardMaterial({ color: canopy.color, flatShading: true, roughness: 1 }),
   };
 }
-const SPECIES = {
+// Exported so village yard/street trees (VillageProps) can reuse the shared
+// trunk/canopy geometry — they're always InstancedMesh, so the shared geoms
+// are never disposed.
+export const SPECIES = {
   // Classic pine — the original tree.
   conifer: makeSpecies(
     { geom: new CylinderGeometry(0.25, 0.35, 2, 6), y: 1, color: 0x5a3a20 },

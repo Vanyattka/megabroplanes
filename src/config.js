@@ -7,10 +7,25 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.4.1';
-export const GAME_CODENAME = 'Delta';
+export const GAME_VERSION = '0.5';
+export const GAME_CODENAME = 'Echo';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.5',
+    codename: 'Echo',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-12',
+    notes: [
+      'Villages & cities are far more varied and alive — no two settlements feel the same now.',
+      'Real roofs! Houses get pitched (gabled), hipped, pyramid and flat roofs instead of identical boxes — and roofs in cold regions wear snow caps.',
+      'Regional architecture: desert adobe, sun-bleached savanna, classic plains, timber forest & taiga log cabins, stone alpine chalets, and bleak tundra outposts — each with its own colours, roof styles and signature touches.',
+      'Landmarks to spot from the air: churches & town halls, a fountain or well on the town square, water towers, windmills, desert domes, coastal lighthouses, and barns + silos on farm hamlets.',
+      'Streets feel lived-in: yard trees & hedges, woodpiles, vegetable gardens, hay bales, benches — and street lamps that glow at night (windows light up at dusk too).',
+      'Houses no longer stand in ruler-straight rows — they sit at natural angles, some L-shaped, some with porches, around an open central square in bigger towns.',
+      'Fixes: village plane models near cities no longer cause a brief flicker; the porch awnings render at the right thickness.',
+    ],
+  },
   {
     version: '0.4.1',
     codename: 'Delta',
@@ -233,6 +248,81 @@ export const VILLAGE_SIZES = {
 };
 // Per-cell size distribution. Must sum to 1. Cities are rare landmarks.
 export const VILLAGE_SIZE_WEIGHTS = { small: 0.28, medium: 0.47, large: 0.20, city: 0.05 };
+
+// ---------------------------------------------------------------------------
+// Village content (v0.5 "Echo") — variety + liveliness. Houses gain roof types
+// + biome architectural styles; settlements gain jitter, central squares,
+// landmarks/POIs and instanced street props. All of this is main-thread
+// cosmetic content INSIDE the flat village pad — it never reaches the terrain
+// worker (villageToWorkerData only carries the airport + rect), so it can't
+// affect chunk seams or determinism beyond its own seeded streams.
+// ---------------------------------------------------------------------------
+// Roof geometry (unit roofs, scaled per house). Rises are fractions of the
+// footprint scaled at build time.
+export const ROOF_GABLE_RISE = 1.9;
+export const ROOF_HIP_RISE = 1.6;
+export const ROOF_PYRAMID_RISE = 2.6;
+export const ROOF_MANSARD_RISE = 2.4;
+export const ROOF_FLAT_RISE = 0.5;
+export const ROOF_OVERHANG = 0.35;          // eaves spill this far past the walls (m)
+export const ROOF_SNOW_COLOR = 0xeae8ea;    // pitched roofs above the snow line in cold styles
+export const ROOF_SNOW_MARGIN = 40;         // padY > SNOW_LINE - this → snowy roof
+
+// Biome architectural styles. Each: wall colors, roof-type weights, roof
+// colors, porch/chimney chances, and the centerpiece landmark kind. Materials
+// are built once from this table (like the legacy WALL_COLORS).
+export const VILLAGE_STYLES = {
+  adobe:    { walls: [0xd8c098, 0xcaa878, 0xc89a6a, 0xe0c9a0, 0xd2b48c],
+              roofWeights: { flat: 0.7, pyramid: 0.2, hip: 0.1 },
+              roofColors: [0xeee8dc, 0xd8c8a8, 0xcaa878], porchChance: 0.10, chimneyChance: 0.0, landmark: 'dome' },
+  colonial: { walls: [0xe8e0d0, 0xd2c093, 0xd8b28a, 0xe0d4b8],
+              roofWeights: { hip: 0.5, gable: 0.3, flat: 0.2 },
+              roofColors: [0x8a3320, 0x884a2b, 0x7a4a30], porchChance: 0.55, chimneyChance: 0.30, landmark: 'church' },
+  classic:  { walls: [0xeadfc6, 0xe8c8d2, 0xc4d4e8, 0xd4e4b8, 0xe8e0d0, 0xd8c8b0],
+              roofWeights: { gable: 0.6, hip: 0.25, flat: 0.15 },
+              roofColors: [0x8a3320, 0x6b3a3a, 0x3a4f5c, 0x6a4b3a], porchChance: 0.30, chimneyChance: 0.50, landmark: 'church' },
+  cabin:    { walls: [0x6b4a2a, 0x7a5a30, 0x8a6a40, 0x9a7a50, 0x6b6a4a],
+              roofWeights: { gable: 0.7, hip: 0.2, flat: 0.1 },
+              roofColors: [0x3a4f3a, 0x2f3a30, 0x4a3a30], porchChance: 0.40, chimneyChance: 0.70, landmark: 'church' },
+  logSteep: { walls: [0x5a4530, 0x6b4a2a, 0x4a3a2a, 0x7a5a3a],
+              roofWeights: { gable: 0.6, hip: 0.2, pyramid: 0.2 },
+              roofColors: [0x3a3030, 0x2a2422, 0x3a4040], porchChance: 0.20, chimneyChance: 0.70, landmark: 'church' },
+  outpost:  { walls: [0x8a8a7a, 0x9a9488, 0x7a7468, 0xa0a090],
+              roofWeights: { gable: 0.4, flat: 0.4, hip: 0.2 },
+              roofColors: [0x3a4048, 0x4a4a44, 0x2a3038], porchChance: 0.10, chimneyChance: 0.50, landmark: 'mast' },
+  chalet:   { walls: [0xb8b0a4, 0xd8c8a8, 0xc8b89a, 0xa8a090],
+              roofWeights: { gable: 0.7, hip: 0.3 },
+              roofColors: [0x4a3a30, 0x3a3030, 0x5a4838], porchChance: 0.30, chimneyChance: 0.60, landmark: 'church' },
+};
+export const VILLAGE_BIOME_STYLE = {
+  desert: 'adobe', savanna: 'colonial', plains: 'classic',
+  forest: 'cabin', taiga: 'logSteep', tundra: 'outpost', alpine: 'chalet',
+};
+
+// Layout variety. Jitter de-rigidifies the surveyed rows; the plaza opens a
+// central square for medium+ tiers (hosts the centerpiece landmark).
+export const VILLAGE_JITTER_ALONG = 2.0;   // ± m along the street
+export const VILLAGE_JITTER_PERP = 1.5;    // ± m toward/away from the street
+export const VILLAGE_JITTER_ROT = 0.12;    // ± rad on the house heading
+export const VILLAGE_L_SHAPE_CHANCE = 0.18; // chance a footprint-1 house gets an L wing
+export const VILLAGE_DORMER_CHANCE = 0.25;  // reserved: the per-house dormer roll exists (kept for a stable PRNG stream) but dormer meshes aren't built yet
+export const VILLAGE_PLAZA_HALF = { small: 0, medium: 14, large: 20, city: 30 };
+export const PLAZA_COLOR = 0x9a948a;
+
+// Landmarks + special cases.
+export const FARM_CHANCE = 0.40;            // chance a small/medium plains/savanna village is a farm
+export const COASTAL_RING_PAD = 130;        // sample this far past the village for sea
+export const COASTAL_SEAHITS_MIN = 2;       // of 12 ring samples in the sea → coastal
+export const COASTAL_SEAHITS_MAX = 9;
+
+// Street props (instanced per village). Density + caps keep cities cozy not
+// cluttered; the MIX shifts urban↔rural per tier (cities favor lamps/benches,
+// hamlets favor gardens/woodpiles).
+export const VILLAGE_LAMP_SPACING = { small: 0, medium: 0, large: 22, city: 16 };
+export const VILLAGE_PROP_PAD_MARGIN = 6;   // keep props this far inside the rect
+export const VILLAGE_MAX_PROPS = { small: 90, medium: 180, large: 320, city: 460 };
+export const VILLAGE_LAMP_GLOW_FULL = [2.6, 2.2, 1.2]; // HDR warm — blooms at night
+export const VILLAGE_WINDOW_NIGHT_EMISSIVE = 0.95;     // window emissive at full night (day ≈ 0.32)
 
 // Ruins — monumental castle ruins on mountain peaks: crumbling ring walls
 // with crenellations, corner towers, a keep, a gatehouse and rubble. Every
