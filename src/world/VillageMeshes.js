@@ -523,6 +523,11 @@ function buildRunwayMeshFor(village) {
   const geo = new PlaneGeometry(RUNWAY_LENGTH, RUNWAY_WIDTH);
   geo.rotateX(-Math.PI / 2);
   const mesh = new Mesh(geo, getRunwayMaterial());
+  // Receive shadows — without this a plane parked on the strip cast its shadow
+  // onto the terrain BELOW the runway plane, which then drew on top and hid it,
+  // so the plane looked shadowless on the runway (roads/plaza/structures
+  // already receive; the runway was the one surface that didn't).
+  mesh.receiveShadow = true;
   mesh.position.set(village.airportX, (village.padY || 0) + RUNWAY_Y, village.airportZ);
   mesh.rotation.y = village.angle;
   buildRunwayLights(mesh);
