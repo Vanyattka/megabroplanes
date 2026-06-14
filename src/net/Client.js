@@ -1,5 +1,8 @@
 const RECONNECT_MS = 3000;
 const SEND_INTERVAL_MS = 50; // 20 Hz
+// If we can't reconnect+resume within this window, give up and tear the race/
+// lobby down locally. Slightly longer than the server's resume grace (45 s).
+const RESUME_GIVEUP_MS = 50000;
 
 export class MultiplayerClient {
   constructor(url) {
@@ -18,6 +21,12 @@ export class MultiplayerClient {
     this.lobby = null;
     this._enabled = true;
     this._reconnectTimer = null;
+    // Session resume: the server issues a token per session; we present it on
+    // reconnect (?rt=) to reclaim the same id + room + race progress. prevId
+    // lets a welcome tell a resume (same id) from a fresh session (new id).
+    this.token = null;
+    this.prevId = null;
+    this._giveUpTimer = null;
     this._connect();
   }
 
@@ -40,12 +49,15 @@ export class MultiplayerClient {
         clearTimeout(this._reconnectTimer);
         this._reconnectTimer = null;
       }
+      this._clearGiveUp();
       if (this.ws) {
         try { this.ws.onclose = null; this.ws.close(); } catch {}
         this.ws = null;
       }
       this.connected = false;
       this.id = null;
+      this.token = null;
+      this.prevId = null;
       this.remotes.clear();
       this.race = null;
       this.lobby = null;
@@ -53,6 +65,17 @@ export class MultiplayerClient {
       if (this._lobbyListener) this._lobbyListener(null);
       this._notify();
     }
+  }
+
+  _clearGiveUp() {
+    if (this._giveUpTimer) { clearTimeout(this._giveUpTimer); this._giveUpTimer = null; }
+  }
+
+  // Abandon a race/lobby we couldn't restore — falls the player cleanly back
+  // to free flight (RaceManager tears down on a null race).
+  _dropSession() {
+    if (this.race) { this.race = null; if (this._raceListener) this._raceListener(null); }
+    if (this.lobby) { this.lobby = null; if (this._lobbyListener) this._lobbyListener(null); }
   }
 
   _notify() {
@@ -68,8 +91,12 @@ export class MultiplayerClient {
   _connect() {
     if (!this._enabled) return;
     let ws;
+    // Carry the resume token so a reconnect reclaims the same session.
+    const url = this.token
+      ? this.url + (this.url.includes('?') ? '&' : '?') + 'rt=' + encodeURIComponent(this.token)
+      : this.url;
     try {
-      ws = new WebSocket(this.url);
+      ws = new WebSocket(url);
     } catch (e) {
       console.warn('[net] connect failed, retry in', RECONNECT_MS, 'ms', e);
       this._reconnectTimer = setTimeout(() => this._connect(), RECONNECT_MS);
@@ -86,23 +113,20 @@ export class MultiplayerClient {
     ws.onclose = () => {
       this.connected = false;
       this.remotes.clear();
-      // If the socket drops while we're in a race or lobby, tear that down
-      // locally — otherwise we'd keep flying a "zombie" course that nobody is
-      // scoring (the server assigns a fresh id on reconnect and drops us back
-      // into free flight, so the old session is gone regardless).
-      if (this.race && this.race.phase && this.race.phase !== 'idle') {
-        this.race = null;
-        if (this._raceListener) this._raceListener(null);
-      }
-      if (this.lobby) {
-        this.lobby = null;
-        if (this._lobbyListener) this._lobbyListener(null);
-      }
       this._notify();
       // Only auto-reconnect while enabled. setEnabled(false) clears this
       // timer + nulls the socket so a stale handler can't queue retries.
-      if (this._enabled) {
-        this._reconnectTimer = setTimeout(() => this._connect(), RECONNECT_MS);
+      if (!this._enabled) return;
+      // Keep the race/lobby ALIVE locally and try to reconnect+resume the same
+      // session (token in the URL) — a brief drop (alt-tab, wifi blip) should
+      // not eject the player. Only if we can't restore it within the grace
+      // window do we tear it down (give-up timer).
+      this._reconnectTimer = setTimeout(() => this._connect(), RECONNECT_MS);
+      if (!this._giveUpTimer && (this.race || this.lobby)) {
+        this._giveUpTimer = setTimeout(() => {
+          this._giveUpTimer = null;
+          this._dropSession();
+        }, RESUME_GIVEUP_MS);
       }
     };
     ws.onerror = () => { /* close will fire next */ };
@@ -112,8 +136,17 @@ export class MultiplayerClient {
     let msg;
     try { msg = JSON.parse(data); } catch { return; }
     if (msg.type === 'welcome') {
+      // Same id as before a drop == the server resumed our session; a new id
+      // means a fresh one (first connect, or the resume window lapsed).
+      const resumed = this.prevId != null && msg.id === this.prevId;
       this.id = msg.id;
       this.hue = msg.hue;
+      if (msg.token) this.token = msg.token;
+      this.prevId = msg.id;
+      this._clearGiveUp();
+      // Fresh identity → abandon any stale race/lobby so we land cleanly in
+      // free flight. Resume → keep them; the server re-sends the race state.
+      if (!resumed) this._dropSession();
       this._notify();
     } else if (msg.type === 'snapshot') {
       const seen = new Set();

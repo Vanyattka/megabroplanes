@@ -1,11 +1,23 @@
 import { WebSocketServer } from 'ws';
 import http from 'http';
+import { randomUUID } from 'crypto';
 import { readFile } from 'fs/promises';
 import { join, normalize, extname } from 'path';
 
 const PORT = Number(process.env.PORT) || 3030;
 const TICK_HZ = 20;
-const IDLE_KICK_MS = 20000;
+// Liveness: the server pings every PING_MS; browsers auto-reply with a pong at
+// the protocol level EVEN WHEN THE TAB IS BACKGROUNDED (no JS needed), so a
+// player who alt-tabs no longer looks "idle". A connection is dropped only if
+// neither a pong nor a message arrives for IDLE_KICK_MS. (Was a flat 20 s
+// app-message timeout — that kicked anyone whose render loop paused on a
+// backgrounded tab, the root cause of the mid-session disconnects.)
+const PING_MS = 15000;
+const IDLE_KICK_MS = 50000;
+// When a racer's socket drops, hold their race slot (id, progress, HP) this
+// long so a quick reconnect resumes the SAME race instead of dumping them to
+// free flight as a brand-new player.
+const RESUME_GRACE_MS = 45000;
 // When set, the same server also serves the built game (static dist) over HTTP,
 // so one container/process can host both the page and the WebSocket relay
 // behind a single reverse-proxy host. Unset = WebSocket-only (legacy nginx box).
@@ -157,6 +169,40 @@ function removeClient(id) {
   if (wasLobby) { recomputeHost(); updateLaunchTimer(); sendLobbyState(); }
 }
 
+// Resume token carried in the reconnect URL (?rt=...). Parsing it in the
+// connection handler lets us re-adopt the old session BEFORE sending any
+// welcome, so there's no welcome-ordering race between a fresh id and a
+// resumed one.
+function parseResumeToken(url) {
+  if (!url) return null;
+  const q = url.indexOf('?');
+  if (q < 0) return null;
+  try { return new URLSearchParams(url.slice(q + 1)).get('rt'); } catch { return null; }
+}
+
+function findResumable(token) {
+  if (!token) return null;
+  const now = Date.now();
+  for (const [, c] of clients) {
+    if (c.disconnected && c.token === token && now - c.dcAt <= RESUME_GRACE_MS) return c;
+  }
+  return null;
+}
+
+// A socket went away (close or idle). Mid-race players keep their slot for a
+// grace window so a reconnect can resume; everyone else is removed at once.
+function dropClient(c, reason) {
+  if (!c || c.disconnected) return;
+  if (c.room === 'race' && race.phase !== 'idle') {
+    c.disconnected = true;
+    c.dcAt = Date.now();
+    console.log(`[~] player ${c.id} ${reason} — holding race slot ${Math.round(RESUME_GRACE_MS / 1000)}s`);
+  } else {
+    removeClient(c.id);
+    console.log(`[-] player ${c.id} ${reason} (total: ${clients.size})`);
+  }
+}
+
 function lobbyMessage() {
   const members = membersIn('lobby').map(([id, c]) => ({
     id, name: c.name || `P${id}`,
@@ -291,25 +337,20 @@ function broadcastToRoom(room, payload, exceptId = null) {
   }
 }
 
-wss.on('connection', (ws, req) => {
-  const id = nextId++;
-  const hue = ((id * 137.508) % 360) / 360;
-  clients.set(id, {
-    ws, hue, lastSeen: Date.now(),
-    name: null,
-    room: 'free',
-    state: null,
-    plane: { pt: DEFAULT_PLANE, pc: null },
-    hp: MAX_HP, dead: false, respawnAt: 0, lastHit: {}, lastHitAny: 0,
-    race: null,
-    lobby: { plane: DEFAULT_PLANE, time: DEFAULT_TIME, color: null, gates: DEFAULT_GATES, ready: false },
+// Message/close/pong handlers resolve the client via ws._cid (NOT a captured
+// id) so a resumed socket routes to the adopted session.
+function attachClientHandlers(ws) {
+  ws.on('pong', () => { const c = clients.get(ws._cid); if (c) c.lastSeen = Date.now(); });
+  ws.on('error', () => {});
+  ws.on('close', () => {
+    const c = clients.get(ws._cid);
+    if (!c || c.ws !== ws) return; // stale socket — a newer one already resumed this session
+    dropClient(c, 'disconnected');
   });
-  const addr = req?.socket?.remoteAddress || 'unknown';
-  console.log(`[+] player ${id} connected from ${addr} (total: ${clients.size})`);
-  ws.send(JSON.stringify({ type: 'welcome', id, hue }));
 
   ws.on('message', (data) => {
     let msg; try { msg = JSON.parse(data.toString()); } catch { return; }
+    const id = ws._cid;
     const c = clients.get(id);
     if (!c) return;
     c.lastSeen = Date.now();
@@ -367,8 +408,12 @@ wss.on('connection', (ws, req) => {
         break;
       case 'cp':
         if (race.phase === 'racing' && c.room === 'race' && c.race && !c.dead) {
-          if (typeof msg.idx === 'number' && msg.idx === c.race.nextCp) {
-            c.race.nextCp++;
+          // Accept idx >= expected (not just ==): if a cp message was lost
+          // (packet loss, or a gate passed during a brief reconnect), the
+          // client — which is authoritative for its own gate-passing — can
+          // still advance the server instead of desyncing forever.
+          if (typeof msg.idx === 'number' && msg.idx >= c.race.nextCp && msg.idx < race.course.length) {
+            c.race.nextCp = msg.idx + 1;
             if (c.race.nextCp >= race.course.length && c.race.finishMs == null) {
               c.race.finishMs = Date.now() - race.startAt;
             }
@@ -413,18 +458,56 @@ wss.on('connection', (ws, req) => {
       }
     }
   });
+}
 
-  ws.on('close', () => {
-    removeClient(id);
-    console.log(`[-] player ${id} disconnected (total: ${clients.size})`);
+wss.on('connection', (ws, req) => {
+  // Resume an existing (recently dropped) session if a valid token is on the
+  // reconnect URL — same id, room, race progress, HP. No fresh record is made.
+  const old = findResumable(parseResumeToken(req.url));
+  if (old) {
+    old.ws = ws;
+    old.disconnected = false;
+    old.dcAt = 0;
+    old.lastSeen = Date.now();
+    ws._cid = old.id;
+    attachClientHandlers(ws);
+    ws.send(JSON.stringify({ type: 'welcome', id: old.id, hue: old.hue, token: old.token }));
+    if (old.room === 'race') ws.send(JSON.stringify(raceMessage())); // re-sync the running race
+    console.log(`[~] player ${old.id} resumed (room=${old.room}, total: ${clients.size})`);
+    return;
+  }
+
+  const id = nextId++;
+  const hue = ((id * 137.508) % 360) / 360;
+  const token = randomUUID();
+  clients.set(id, {
+    id, ws, hue, token, lastSeen: Date.now(), disconnected: false, dcAt: 0,
+    name: null,
+    room: 'free',
+    state: null,
+    plane: { pt: DEFAULT_PLANE, pc: null },
+    hp: MAX_HP, dead: false, respawnAt: 0, lastHit: {}, lastHitAny: 0,
+    race: null,
+    lobby: { plane: DEFAULT_PLANE, time: DEFAULT_TIME, color: null, gates: DEFAULT_GATES, ready: false },
   });
-  ws.on('error', () => {});
+  ws._cid = id;
+  attachClientHandlers(ws);
+  const addr = req?.socket?.remoteAddress || 'unknown';
+  console.log(`[+] player ${id} connected from ${addr} (total: ${clients.size})`);
+  // token lets this client reclaim its session on a brief reconnect.
+  ws.send(JSON.stringify({ type: 'welcome', id, hue, token }));
 });
 
 setInterval(() => {
   const now = Date.now();
   for (const [id, c] of clients) {
-    if (now - c.lastSeen > IDLE_KICK_MS) { try { c.ws.close(); } catch {} removeClient(id); }
+    if (c.disconnected) {
+      // Held for resume — drop for good once the grace window lapses.
+      if (now - c.dcAt > RESUME_GRACE_MS) { removeClient(id); console.log(`[-] player ${id} resume window expired`); }
+      continue;
+    }
+    // No pong/message for IDLE_KICK_MS = the socket is dead.
+    if (now - c.lastSeen > IDLE_KICK_MS) { try { c.ws.terminate(); } catch {} dropClient(c, 'idle'); }
   }
 
   // Lobby launch — only while no race is active (the global race object would
@@ -441,9 +524,13 @@ setInterval(() => {
     else {
       // Respawns.
       for (const [, c] of entrants) {
-        if (c.dead && now >= c.respawnAt) { c.dead = false; c.hp = MAX_HP; }
+        if (!c.disconnected && c.dead && now >= c.respawnAt) { c.dead = false; c.hp = MAX_HP; }
       }
-      const allDone = entrants.every(([, c]) => c.race.finishMs != null);
+      // A dropped-but-held racer must not block the finish (or, if it's the
+      // only one, wrongly finish an empty race). Judge "all done" over the
+      // currently-connected racers; held slots clear via the grace window.
+      const conn = entrants.filter(([, c]) => !c.disconnected);
+      const allDone = conn.length > 0 && conn.every(([, c]) => c.race.finishMs != null);
       if (allDone || now - race.startAt > RACE_TIMEOUT_MS) { finishRace(); raceChanged = true; }
     }
   }
@@ -452,6 +539,7 @@ setInterval(() => {
   // Per-room snapshots.
   const byRoom = { free: [], race: [] };
   for (const [id, c] of clients) {
+    if (c.disconnected) continue; // held-for-resume: no fresh state, don't show as frozen
     if (!c.state || (c.room !== 'free' && c.room !== 'race')) continue;
     byRoom[c.room].push({
       id, hue: c.hue,
@@ -472,6 +560,17 @@ setInterval(() => {
 
   if (race.phase !== 'idle' || raceChanged) broadcastRace();
 }, 1000 / TICK_HZ);
+
+// Heartbeat — protocol-level WS pings. A browser answers a ping with a pong
+// from its network stack WITHOUT running page JS, so even a backgrounded /
+// minimized tab (whose requestAnimationFrame is paused) keeps its connection
+// alive. Idle-kick then only ever fires on a genuinely dead socket.
+setInterval(() => {
+  for (const [, c] of clients) {
+    if (c.disconnected || !c.ws || c.ws.readyState !== 1) continue;
+    try { c.ws.ping(); } catch {}
+  }
+}, PING_MS);
 
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`megabroplanes server listening on :${PORT}`);

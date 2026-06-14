@@ -7,10 +7,19 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.6.3';
+export const GAME_VERSION = '0.6.4';
 export const GAME_CODENAME = 'Foxtrot';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.6.4',
+    codename: 'Foxtrot',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-14',
+    notes: [
+      'Multiplayer no longer drops you mid-session: a heartbeat keeps your connection alive even when the tab is backgrounded (alt-tabbing for 20+ seconds used to kick you), and if the network does blip, a quick reconnect resumes the SAME race with your progress intact instead of dumping you to free flight as a new player. This was the cause of the random "frozen in the air / kicked to singleplayer / out of the lobby" hangs.',
+    ],
+  },
   {
     version: '0.6.3',
     codename: 'Foxtrot',
