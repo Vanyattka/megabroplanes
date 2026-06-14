@@ -7,7 +7,7 @@ import {
   AdditiveBlending,
   Color,
 } from 'three';
-import { buildPlaneMesh, disposePlaneMesh } from '../plane/PlaneMesh.js';
+import { buildPlaneMesh, disposePlaneMesh, applyGearPose } from '../plane/PlaneMesh.js';
 import {
   WATER_LEVEL,
   JET_LIGHT_COLOR,
@@ -154,6 +154,12 @@ export class WaterReflection {
     this.mesh.visible = show;
     this.ghost.visible = show;
     if (!show) return;
+
+    // Match the live landing-gear pose — both clones are built gear-down, so
+    // without this a plane with wheels up still reflected with gear extended.
+    const gearT = plane.gearT ?? 1;
+    applyGearPose(this.mesh, gearT);
+    applyGearPose(this.ghost, gearT);
 
     plane.mesh.updateMatrixWorld();
     const t = performance.now() * 0.001;
