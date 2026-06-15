@@ -20,6 +20,7 @@ import {
 import { villagesAffectingArea } from './Villages.js';
 import { villagesToWorkerData } from './VillageData.js';
 import { computeTerrainData } from './TerrainCompute.js';
+import { waterMaterial } from './Water.js';
 import { gfx } from '../ui/GraphicsSettings.js';
 import { profiler } from '../debug/Profiler.js';
 
@@ -91,18 +92,10 @@ export function updateAerialPerspective(horizonColor) {
   AERIAL_UNIFORMS.uAerialColor.value.copy(horizonColor);
 }
 
-// River pools — a translucent water surface per chunk that contains
-// submerged riverbed (rivers carry a local stepped water level the global
-// water plane can't represent). One shared material; per-chunk only the
-// position buffer differs. depthWrite off so the terrain bed shows through.
-const RIVER_WATER_MAT = new MeshStandardMaterial({
-  color: WATER_COLOR_SHALLOW,
-  transparent: true,
-  opacity: 0.84,
-  roughness: 0.28,
-  metalness: 0.0,
-  depthWrite: false,
-});
+// River pools — a water surface per chunk that contains submerged riverbed
+// (rivers carry a local stepped water level the global water plane can't
+// represent). They reuse the shared sea waterMaterial (imported above) so they
+// ripple and reflect the sun + moon exactly like the sea.
 
 // All river-water vertices share the same "straight up" normal.
 let SHARED_UP_NORMALS = null;
@@ -170,7 +163,11 @@ export function finalizeTerrainMesh(data, cx, cz, shadowTerrain) {
     wgeo.boundingSphere = new Sphere(
       new Vector3(sx, sy, sz), data.boundingSphereRadius
     );
-    const wmesh = new Mesh(wgeo, RIVER_WATER_MAT);
+    // River pools share the sea's water shader, so they ripple and catch the
+    // sun + moon glint exactly like the sea (was a flat translucent material —
+    // no reflections). The shader is world-space, so a static pool mesh at its
+    // own stepped level works fine.
+    const wmesh = new Mesh(wgeo, waterMaterial);
     wmesh.renderOrder = 1; // after the opaque terrain
     mesh.add(wmesh);
   }

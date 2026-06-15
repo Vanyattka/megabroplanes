@@ -198,16 +198,12 @@ const FRAG = /* glsl */ `
   }
 `;
 
-export class Water {
-  constructor(scene) {
-    this.scene = scene;
-
-    const size = WATER_SIZE;
-    const geo = new PlaneGeometry(size, size, 1, 1);
-    geo.rotateX(-Math.PI / 2);
-    this.geometry = geo;
-
-    this.material = new ShaderMaterial({
+// Shared so river pools (Terrain.js) reuse the EXACT same surface — animated
+// ripples, the sun glint AND the moon path — instead of a plain translucent
+// material. One instance: Water.update() mutates its uniforms each frame and
+// river-pool meshes just reference it (chunk unload never disposes shared
+// materials, so this is safe).
+export const waterMaterial = new ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
         uShallow: { value: new Color(WATER_COLOR_SHALLOW) },
@@ -241,7 +237,17 @@ export class Water {
       depthWrite: false,
       side: DoubleSide,
       fog: false,
-    });
+});
+
+export class Water {
+  constructor(scene) {
+    this.scene = scene;
+
+    const size = WATER_SIZE;
+    const geo = new PlaneGeometry(size, size, 1, 1);
+    geo.rotateX(-Math.PI / 2);
+    this.geometry = geo;
+    this.material = waterMaterial;
 
     this.mesh = new Mesh(this.geometry, this.material);
     this.mesh.position.y = WATER_LEVEL;
@@ -314,6 +320,6 @@ export class Water {
   dispose() {
     this.scene.remove(this.mesh);
     this.geometry.dispose();
-    this.material.dispose();
+    // material is the shared module singleton (also used by river pools) — don't dispose it.
   }
 }
