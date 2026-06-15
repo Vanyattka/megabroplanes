@@ -7,10 +7,19 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.6.7';
+export const GAME_VERSION = '0.6.8';
 export const GAME_CODENAME = 'Foxtrot';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.6.8',
+    codename: 'Foxtrot',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-14',
+    notes: [
+      'The chase camera no longer slips under the ground or water — when you try to look up from below, it now pulls in toward the plane and stays above the surface.',
+    ],
+  },
   {
     version: '0.6.7',
     codename: 'Foxtrot',
@@ -850,6 +859,11 @@ export const CAMERA_OFFSET = [0, 3, 12]; // behind and above in plane's local fr
 // frame took 8 ms or 40 ms.
 export const CAMERA_LERP = 0.1;
 export const CAMERA_FOLLOW_RATE = 6.2; // exponential smoothing rate in 1/s
+// Chase-camera surface collision: keep the camera at least this far above the
+// terrain/water surface. When the boom would punch below it (low pass, or
+// mouse-look aimed under the plane), the camera is pulled IN toward the plane
+// so you never see under the ground/water.
+export const CAMERA_GROUND_MARGIN = 2.2;
 
 // Mouse look
 export const MOUSE_LOOK_SENSITIVITY = 0.003; // radians per pixel of drag

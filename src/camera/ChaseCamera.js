@@ -2,6 +2,7 @@ import { Vector3, Quaternion } from 'three';
 import {
   CAMERA_OFFSET,
   CAMERA_FOLLOW_RATE,
+  CAMERA_GROUND_MARGIN,
   MOUSE_LOOK_SENSITIVITY,
   MOUSE_LOOK_RECENTER,
   MOUSE_LOOK_PITCH_LIMIT,
@@ -32,7 +33,9 @@ export class ChaseCamera {
   }
 
   // Call once per render frame. `input` drives mouse look; `dt` in seconds.
-  update(plane, input, dt) {
+  // `getFloor(x,z)` (optional) returns the terrain-or-water surface height —
+  // used to keep the camera from dipping under the world.
+  update(plane, input, dt, getFloor) {
     if (input) {
       const { dx, dy } = input.consumeMouseDelta();
       this.yaw -= dx * MOUSE_LOOK_SENSITIVITY;
@@ -77,6 +80,30 @@ export class ChaseCamera {
       const alpha = 1 - Math.exp(-clampedDt * CAMERA_FOLLOW_RATE);
       this.camera.position.lerp(_desired, alpha);
     }
+
+    // Surface collision — never let the camera slip under terrain/water. If the
+    // smoothed position is below the surface (+margin), pull the camera IN
+    // along the boom (plane → camera) to the furthest point still above it, so
+    // it "approaches" the plane instead of clipping through the ground/water.
+    if (getFloor) {
+      const cam = this.camera.position;
+      if (cam.y < getFloor(cam.x, cam.z) + CAMERA_GROUND_MARGIN) {
+        const dx = cam.x - planePos.x, dy = cam.y - planePos.y, dz = cam.z - planePos.z;
+        const STEPS = 8;
+        let okT = 0;
+        for (let i = 1; i <= STEPS; i++) {
+          const t = i / STEPS;
+          const sy = planePos.y + dy * t;
+          if (sy < getFloor(planePos.x + dx * t, planePos.z + dz * t) + CAMERA_GROUND_MARGIN) break;
+          okT = t;
+        }
+        // Keep a little boom so the camera never collapses onto the plane.
+        okT = Math.max(okT, 0.15);
+        const fx = planePos.x + dx * okT, fz = planePos.z + dz * okT;
+        cam.set(fx, Math.max(planePos.y + dy * okT, getFloor(fx, fz) + CAMERA_GROUND_MARGIN), fz);
+      }
+    }
+
     this.camera.lookAt(planePos);
   }
 }

@@ -871,7 +871,7 @@ function renderStep(alpha) {
     orbitControls.target.copy(plane.position);
     orbitControls.update();
   } else {
-    chaseCamera.update(plane, input, renderDt);
+    chaseCamera.update(plane, input, renderDt, getPhysicsFloor);
   }
   if (renderer.scene.fog) {
     renderer.scene.fog.near = fogNearFor(plane);
