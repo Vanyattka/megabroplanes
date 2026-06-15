@@ -7,10 +7,19 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.6.6';
+export const GAME_VERSION = '0.6.7';
 export const GAME_CODENAME = 'Foxtrot';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.6.7',
+    codename: 'Foxtrot',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-14',
+    notes: [
+      'The moon now lays a soft silver path across the water at night, just like the sun\'s golden one by day.',
+    ],
+  },
   {
     version: '0.6.6',
     codename: 'Foxtrot',

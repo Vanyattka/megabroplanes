@@ -46,6 +46,11 @@ const FRAG = /* glsl */ `
   uniform vec3  uSunDir;
   uniform vec3  uSunColor;
   uniform float uSunIntensity;
+  // Moon path — the silver counterpart to the sun glint. Only lit at night,
+  // and only while the moon is above the horizon (driven from JS).
+  uniform vec3  uMoonDir;
+  uniform vec3  uMoonColor;
+  uniform float uMoonIntensity;
   uniform vec3  uJetPos;
   uniform vec3  uJetColor;
   uniform float uJetIntensity;
@@ -128,6 +133,17 @@ const FRAG = /* glsl */ `
       col += uSunColor * (spec * 4.5 + glow * 0.35) * uSunIntensity;
     }
 
+    // Moon glint — same Blinn-Phong path as the sun but cooler and gentler, so
+    // a moonlit lake gets a soft shimmering silver streak. Gated to night +
+    // moon-above-horizon via uMoonIntensity, so it never fights the sun path.
+    if (uMoonIntensity > 0.02) {
+      vec3 halfM = normalize(viewDir + uMoonDir);
+      float sbM = max(dot(n, halfM), 0.0);
+      float specM = pow(sbM, 200.0);
+      float glowM = pow(sbM, 12.0);
+      col += uMoonColor * (specM * 2.4 + glowM * 0.22) * uMoonIntensity;
+    }
+
     // Jet engine reflection — falls off with distance from the engine, so
     // the hot orange smear only appears on water directly below a jet.
     if (uJetIntensity > 0.02) {
@@ -204,6 +220,11 @@ export class Water {
         uSunDir: { value: new Vector3(0, 1, 0) },
         uSunColor: { value: new Color(0xffffff) },
         uSunIntensity: { value: 1.0 },
+        // Cool silver, a touch over 1.0 on blue so the tightest glints get a
+        // faint bloom sparkle. Stays constant; direction/intensity vary.
+        uMoonDir: { value: new Vector3(0, 1, 0) },
+        uMoonColor: { value: new Color().setRGB(0.82, 0.9, 1.08) },
+        uMoonIntensity: { value: 0 },
         uJetPos: { value: new Vector3() },
         uJetColor: { value: new Color(0xff6820) },
         uJetIntensity: { value: 0 },
@@ -256,6 +277,13 @@ export class Water {
     u.uSunDir.value.copy(worldTime.sunDir);
     u.uSunColor.value.copy(worldTime.sunColor);
     u.uSunIntensity.value = worldTime.sunIntensity;
+
+    // Moon orbits opposite the sun. Show its path only at night (nightFactor)
+    // and only once it has cleared the horizon, fading in over the first ~0.2
+    // of moonDir.y so it doesn't pop on at the waterline.
+    u.uMoonDir.value.copy(worldTime.sunDir).negate();
+    const moonUp = Math.max(0, Math.min(1, u.uMoonDir.value.y / 0.2));
+    u.uMoonIntensity.value = (worldTime.nightFactor ?? 0) * moonUp;
 
     const jet = extras && extras.jet;
     if (jet && jet.intensity > 0.02) {
