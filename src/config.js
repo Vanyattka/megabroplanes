@@ -7,10 +7,19 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.6.8';
+export const GAME_VERSION = '0.6.9';
 export const GAME_CODENAME = 'Foxtrot';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.6.9',
+    codename: 'Foxtrot',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-14',
+    notes: [
+      'The chase camera now eases in smoothly when it nears the ground or water instead of snapping — still impossible to peek under the world.',
+    ],
+  },
   {
     version: '0.6.8',
     codename: 'Foxtrot',
@@ -864,6 +873,10 @@ export const CAMERA_FOLLOW_RATE = 6.2; // exponential smoothing rate in 1/s
 // mouse-look aimed under the plane), the camera is pulled IN toward the plane
 // so you never see under the ground/water.
 export const CAMERA_GROUND_MARGIN = 2.2;
+// How fast the collision pull-in/out eases (1/s, exponential). The boom length
+// is smoothed toward its safe length at this rate so the camera glides rather
+// than snapping; a final hard floor still guarantees it never dips under.
+export const CAMERA_COLLISION_RATE = 7.0;
 
 // Mouse look
 export const MOUSE_LOOK_SENSITIVITY = 0.003; // radians per pixel of drag

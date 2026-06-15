@@ -3,10 +3,13 @@ import {
   CAMERA_OFFSET,
   CAMERA_FOLLOW_RATE,
   CAMERA_GROUND_MARGIN,
+  CAMERA_COLLISION_RATE,
   MOUSE_LOOK_SENSITIVITY,
   MOUSE_LOOK_RECENTER,
   MOUSE_LOOK_PITCH_LIMIT,
 } from '../config.js';
+
+const MIN_BOOM = 0.15; // never collapse the camera fully onto the plane
 
 const _offset = new Vector3();
 const _desired = new Vector3();
@@ -21,6 +24,11 @@ export class ChaseCamera {
     this.initialized = false;
     this.yaw = 0;
     this.pitch = 0;
+    // Smoothed follow position (angle/lateral) — kept separate from the
+    // collision boom-scale so the two ease independently.
+    this._followPos = new Vector3();
+    // Smoothed collision boom fraction (1 = full length, <1 = pulled in).
+    this._collT = 1;
   }
 
   // Force the next update() to jump straight onto the plane instead of lerping
@@ -30,6 +38,7 @@ export class ChaseCamera {
     this.initialized = false;
     this.yaw = 0;
     this.pitch = 0;
+    this._collT = 1;
   }
 
   // Call once per render frame. `input` drives mouse look; `dt` in seconds.
@@ -65,43 +74,51 @@ export class ChaseCamera {
     _offset.applyQuaternion(planeQuat);
 
     _desired.copy(planePos).add(_offset);
+    const clampedDt = Math.min(0.1, dt || 0);
+    const firstFrame = !this.initialized;
 
-    if (!this.initialized) {
-      this.camera.position.copy(_desired);
+    // Follow smoothing — eases the boom's ANGLE/lateral toward the desired
+    // position at a consistent wall-clock rate (frame-rate independent).
+    if (firstFrame) {
+      this._followPos.copy(_desired);
       this.initialized = true;
     } else {
-      // Frame-rate independent exponential smoothing. With a fixed `dt`
-      // coefficient the camera would drift back visibly on slow frames
-      // (the plane catches up via multiple physics substeps but the
-      // camera only lerps by 10% once) — producing the "zooms out then
-      // back in" pattern every second or two. This converges at a
-      // consistent wall-clock rate regardless of frame time.
-      const clampedDt = Math.min(0.1, dt || 0);
       const alpha = 1 - Math.exp(-clampedDt * CAMERA_FOLLOW_RATE);
-      this.camera.position.lerp(_desired, alpha);
+      this._followPos.lerp(_desired, alpha);
     }
 
-    // Surface collision — never let the camera slip under terrain/water. If the
-    // smoothed position is below the surface (+margin), pull the camera IN
-    // along the boom (plane → camera) to the furthest point still above it, so
-    // it "approaches" the plane instead of clipping through the ground/water.
-    if (getFloor) {
-      const cam = this.camera.position;
-      if (cam.y < getFloor(cam.x, cam.z) + CAMERA_GROUND_MARGIN) {
-        const dx = cam.x - planePos.x, dy = cam.y - planePos.y, dz = cam.z - planePos.z;
-        const STEPS = 8;
-        let okT = 0;
-        for (let i = 1; i <= STEPS; i++) {
-          const t = i / STEPS;
-          const sy = planePos.y + dy * t;
-          if (sy < getFloor(planePos.x + dx * t, planePos.z + dz * t) + CAMERA_GROUND_MARGIN) break;
-          okT = t;
-        }
-        // Keep a little boom so the camera never collapses onto the plane.
-        okT = Math.max(okT, 0.15);
-        const fx = planePos.x + dx * okT, fz = planePos.z + dz * okT;
-        cam.set(fx, Math.max(planePos.y + dy * okT, getFloor(fx, fz) + CAMERA_GROUND_MARGIN), fz);
+    // Surface collision — find the longest boom fraction (plane → follow pos)
+    // that stays above the terrain/water surface, then EASE the live boom
+    // length toward it. Smoothing the fraction (rather than snapping the
+    // position) makes the pull-in/out glide; a hard floor below still
+    // guarantees the camera never actually dips under the world.
+    const dx = this._followPos.x - planePos.x;
+    const dy = this._followPos.y - planePos.y;
+    const dz = this._followPos.z - planePos.z;
+    let safeT = 1;
+    if (getFloor && this._followPos.y < getFloor(this._followPos.x, this._followPos.z) + CAMERA_GROUND_MARGIN) {
+      const STEPS = 8;
+      let okT = MIN_BOOM;
+      for (let i = 1; i <= STEPS; i++) {
+        const t = i / STEPS;
+        if (planePos.y + dy * t < getFloor(planePos.x + dx * t, planePos.z + dz * t) + CAMERA_GROUND_MARGIN) break;
+        okT = t;
       }
+      safeT = Math.max(MIN_BOOM, okT);
+    }
+    if (firstFrame) this._collT = safeT;
+    else {
+      const cAlpha = 1 - Math.exp(-clampedDt * CAMERA_COLLISION_RATE);
+      this._collT += (safeT - this._collT) * cAlpha;
+    }
+
+    // Final position: the follow boom scaled by the eased collision fraction,
+    // then a hard floor so smoothing lag can never reveal under the surface.
+    const cam = this.camera.position;
+    cam.set(planePos.x + dx * this._collT, planePos.y + dy * this._collT, planePos.z + dz * this._collT);
+    if (getFloor) {
+      const fy = getFloor(cam.x, cam.z) + CAMERA_GROUND_MARGIN;
+      if (cam.y < fy) cam.y = fy;
     }
 
     this.camera.lookAt(planePos);
