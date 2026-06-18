@@ -237,6 +237,15 @@ export const waterMaterial = new ShaderMaterial({
       depthWrite: false,
       side: DoubleSide,
       fog: false,
+      // Bias the depth test so terrain wins where the water surface is nearly
+      // coplanar with it — i.e. river banks (esp. steep mountain banks, where
+      // the slope-scaled `factor` pushes hardest) and sea shores. Without this
+      // the reflective surface z-fought against the slope and shimmered. Push
+      // is AWAY from camera (positive) so the waterline stays crisp rather than
+      // the water creeping up the bank.
+      polygonOffset: true,
+      polygonOffsetFactor: 2.0,
+      polygonOffsetUnits: 3.0,
 });
 
 export class Water {

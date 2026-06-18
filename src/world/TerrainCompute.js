@@ -221,7 +221,12 @@ export function computeTerrainData(cx, cz, villages, detail) {
           const worldX = chunkOriginX + localX;
           const h = heights[idx];
           const lw = riverWaterLevelAt(worldX, worldZ);
-          let wy = h - 0.8; // default: hide beneath the ground
+          // Dry vertices: tuck the water surface well below the ground so the
+          // wet→dry "skirt" dives under the bank quickly instead of skimming
+          // it. 0.8 m was too shallow on steep mountain banks (the skirt stayed
+          // near-coplanar with the slope → a z-fighting band that the reflective
+          // shader lit up); 3 m keeps the skirt occluded even on steep slopes.
+          let wy = h - 3.0; // default: hide beneath the ground
           if (lw != null && lw > WATER_LEVEL + 0.05 && h < lw - 0.15) {
             wy = lw;
             hasWater = true;
