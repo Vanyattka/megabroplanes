@@ -14,10 +14,15 @@ const TICK_HZ = 20;
 // backgrounded tab, the root cause of the mid-session disconnects.)
 const PING_MS = 15000;
 const IDLE_KICK_MS = 50000;
-// When a racer's socket drops, hold their race slot (id, progress, HP) this
-// long so a quick reconnect resumes the SAME race instead of dumping them to
-// free flight as a brand-new player.
-const RESUME_GRACE_MS = 45000;
+// When a socket drops in a race OR the lobby, hold that slot (id, progress,
+// HP, lobby membership) this long so a quick reconnect resumes it instead of
+// dumping the player out. Generous enough to cover an alt-tab to Discord / a
+// phone backgrounding the tab while the group coordinates.
+const RESUME_GRACE_MS = 90000;
+// A lobby member only counts toward launching a race if it was seen (a pong
+// or message) this recently — so a silent/frozen tab can't be auto-launched
+// into a race it isn't present for (which then instantly empties).
+const LOBBY_ACTIVE_MS = 20000;
 // When set, the same server also serves the built game (static dist) over HTTP,
 // so one container/process can host both the page and the WebSocket relay
 // behind a single reverse-proxy host. Unset = WebSocket-only (legacy nginx box).
@@ -99,6 +104,15 @@ function membersIn(room) {
   return out;
 }
 
+// Lobby members that currently "count": visible = present in the room (a
+// held-for-resume member is hidden until it returns or expires); active =
+// also seen recently, the bar for triggering a race launch.
+function lobbyVisible() { return membersIn('lobby').filter(([, c]) => !c.disconnected); }
+function lobbyActive() {
+  const now = Date.now();
+  return lobbyVisible().filter(([, c]) => now - c.lastSeen < LOBBY_ACTIVE_MS);
+}
+
 // Deterministic course generator (LCG, seeded → random each race). `n` is the
 // voted flag count (8/16/32). ~8 gates make one 360° loop, so bigger counts
 // wind into a longer multi-loop circuit; the radius oscillates so successive
@@ -128,7 +142,7 @@ function generateCourse(seed, n) {
 
 // Tally lobby votes (mode wins; ties fall back to host's pick, then default).
 function tallyVotes() {
-  const members = membersIn('lobby');
+  const members = lobbyVisible();
   const count = (key, def) => {
     const tally = {};
     for (const [, c] of members) {
@@ -151,9 +165,10 @@ function tallyVotes() {
 }
 
 function recomputeHost() {
-  const members = membersIn('lobby');
-  if (!members.some(([id]) => id === lobby.hostId)) {
-    lobby.hostId = members.length ? members[0][0] : null;
+  // Host must be a present (non-held) member; reassign off a dropped host.
+  const visible = lobbyVisible();
+  if (!visible.some(([id]) => id === lobby.hostId)) {
+    lobby.hostId = visible.length ? visible[0][0] : null;
   }
 }
 
@@ -193,10 +208,14 @@ function findResumable(token) {
 // grace window so a reconnect can resume; everyone else is removed at once.
 function dropClient(c, reason) {
   if (!c || c.disconnected) return;
-  if (c.room === 'race' && race.phase !== 'idle') {
+  // Hold a slot for resume if the player is mid-race OR sitting in the lobby —
+  // a brief drop/alt-tab shouldn't eject them from either.
+  const hold = (c.room === 'race' && race.phase !== 'idle') || c.room === 'lobby';
+  if (hold) {
     c.disconnected = true;
     c.dcAt = Date.now();
-    console.log(`[~] player ${c.id} ${reason} — holding race slot ${Math.round(RESUME_GRACE_MS / 1000)}s`);
+    console.log(`[~] player ${c.id} ${reason} — holding ${c.room} slot ${Math.round(RESUME_GRACE_MS / 1000)}s`);
+    if (c.room === 'lobby') { recomputeHost(); updateLaunchTimer(); sendLobbyState(); }
   } else {
     removeClient(c.id);
     console.log(`[-] player ${c.id} ${reason} (total: ${clients.size})`);
@@ -204,7 +223,7 @@ function dropClient(c, reason) {
 }
 
 function lobbyMessage() {
-  const members = membersIn('lobby').map(([id, c]) => ({
+  const members = lobbyVisible().map(([id, c]) => ({
     id, name: c.name || `P${id}`,
     plane: c.lobby.plane, time: c.lobby.time, color: c.lobby.color, gates: c.lobby.gates,
     ready: !!c.lobby.ready, host: id === lobby.hostId,
@@ -230,7 +249,7 @@ function updateLaunchTimer() {
   // already running — it would clobber the in-progress race. The countdown is
   // (re)armed when the race returns to idle (see endRaceToFree).
   if (race.phase !== 'idle') { lobby.launchAt = null; return; }
-  const n = membersIn('lobby').length;
+  const n = lobbyActive().length;
   if (n >= LOBBY_FULL) {
     const soon = Date.now() + LOBBY_FULL_LAUNCH_MS;
     if (lobby.launchAt == null || lobby.launchAt > soon) lobby.launchAt = soon;
@@ -242,7 +261,9 @@ function updateLaunchTimer() {
 }
 
 function launchRace() {
-  const members = membersIn('lobby');
+  // Only launch present (recently-seen) members — never drag a silent/held
+  // lobby slot into a race it would instantly vacate.
+  const members = lobbyActive();
   if (members.length === 0) return;
   const vote = tallyVotes();
   const seed = Math.floor(Math.random() * 0x7fffffff);
@@ -401,7 +422,7 @@ function attachClientHandlers(ws) {
         }
         break;
       case 'lobby_start':
-        if (race.phase === 'idle' && c.room === 'lobby' && id === lobby.hostId && membersIn('lobby').length >= 1) {
+        if (race.phase === 'idle' && c.room === 'lobby' && id === lobby.hostId && lobbyActive().length >= 1) {
           lobby.launchAt = Date.now() + HOST_LAUNCH_MS;
           sendLobbyState();
         }
@@ -473,6 +494,7 @@ wss.on('connection', (ws, req) => {
     attachClientHandlers(ws);
     ws.send(JSON.stringify({ type: 'welcome', id: old.id, hue: old.hue, token: old.token }));
     if (old.room === 'race') ws.send(JSON.stringify(raceMessage())); // re-sync the running race
+    else if (old.room === 'lobby') { recomputeHost(); updateLaunchTimer(); sendLobbyState(); } // back into the lobby
     console.log(`[~] player ${old.id} resumed (room=${old.room}, total: ${clients.size})`);
     return;
   }

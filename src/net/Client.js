@@ -1,8 +1,8 @@
 const RECONNECT_MS = 3000;
 const SEND_INTERVAL_MS = 50; // 20 Hz
 // If we can't reconnect+resume within this window, give up and tear the race/
-// lobby down locally. Slightly longer than the server's resume grace (45 s).
-const RESUME_GIVEUP_MS = 50000;
+// lobby down locally. Slightly longer than the server's resume grace (90 s).
+const RESUME_GIVEUP_MS = 95000;
 
 export class MultiplayerClient {
   constructor(url) {

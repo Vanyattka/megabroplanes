@@ -7,10 +7,19 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.6.11';
+export const GAME_VERSION = '0.6.12';
 export const GAME_CODENAME = 'Foxtrot';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.6.12',
+    codename: 'Foxtrot',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-18',
+    notes: [
+      'The race lobby holds together now: a brief drop or alt-tab (e.g. switching to Discord to coordinate) no longer ejects you — your spot is kept and you rejoin the same lobby automatically, so the group can actually assemble and start. Auto-launch also ignores players who have gone silent, so a race can no longer start half-empty and instantly fizzle.',
+    ],
+  },
   {
     version: '0.6.11',
     codename: 'Foxtrot',
