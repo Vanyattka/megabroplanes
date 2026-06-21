@@ -382,6 +382,19 @@ function attachClientHandlers(ws) {
           c.state = msg.state;
           if (msg.state.pc != null) c.plane.pc = msg.state.pc;
           if (c.room === 'free' && msg.state.pt) c.plane.pt = msg.state.pt;
+          // Checkpoint progress piggybacks on state (20 Hz) as a reliable
+          // backup to the one-shot `cp` message: if a cp was missed — passed
+          // while the socket was down/reconnecting, incl. the FINAL gate
+          // (which has no later gate to trigger catch-up) — this re-syncs
+          // within a frame. cp = gates cleared (== nextCp).
+          if (c.room === 'race' && c.race && race.phase === 'racing' && !c.dead &&
+              typeof msg.state.cp === 'number' &&
+              msg.state.cp > c.race.nextCp && msg.state.cp <= race.course.length) {
+            c.race.nextCp = msg.state.cp;
+            if (c.race.nextCp >= race.course.length && c.race.finishMs == null) {
+              c.race.finishMs = Date.now() - race.startAt;
+            }
+          }
         }
         break;
       case 'set_name':
@@ -542,17 +555,18 @@ setInterval(() => {
   if (race.phase === 'countdown' && now >= race.startAt) { race.phase = 'racing'; raceChanged = true; }
   if (race.phase === 'racing') {
     const entrants = membersIn('race');
-    if (entrants.length === 0) { endRaceToFree(); raceChanged = true; }
+    const conn = entrants.filter(([, c]) => !c.disconnected);
+    // End the race the moment NO CONNECTED racer remains. Held/ghost slots
+    // must not keep the single global race object alive — otherwise they block
+    // every lobby launch (auto + host START require race.phase==='idle') for
+    // the whole 90 s grace window: the "2/10, no countdown, can't start" bug.
+    // A held racer can still resume while OTHERS keep the race going.
+    if (conn.length === 0) { endRaceToFree(); raceChanged = true; }
     else {
-      // Respawns.
-      for (const [, c] of entrants) {
-        if (!c.disconnected && c.dead && now >= c.respawnAt) { c.dead = false; c.hp = MAX_HP; }
+      for (const [, c] of conn) {
+        if (c.dead && now >= c.respawnAt) { c.dead = false; c.hp = MAX_HP; }
       }
-      // A dropped-but-held racer must not block the finish (or, if it's the
-      // only one, wrongly finish an empty race). Judge "all done" over the
-      // currently-connected racers; held slots clear via the grace window.
-      const conn = entrants.filter(([, c]) => !c.disconnected);
-      const allDone = conn.length > 0 && conn.every(([, c]) => c.race.finishMs != null);
+      const allDone = conn.every(([, c]) => c.race.finishMs != null);
       if (allDone || now - race.startAt > RACE_TIMEOUT_MS) { finishRace(); raceChanged = true; }
     }
   }

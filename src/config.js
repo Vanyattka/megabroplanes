@@ -7,10 +7,20 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.6.12';
+export const GAME_VERSION = '0.6.13';
 export const GAME_CODENAME = 'Foxtrot';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.6.13',
+    codename: 'Foxtrot',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-21',
+    notes: [
+      'Fixed the lobby getting stuck on "Waiting for players" with no countdown and a dead START button: a previous racer who dropped was keeping the (single) race alive in the background and blocking every new launch. A race now ends as soon as no connected racer remains.',
+      'Race checkpoints are reliable now even on a flaky link — your gate progress (including the final gate) rides along with your position 20×/sec, so a ring missed during a hiccup re-registers within a frame instead of leaving you stuck one gate short.',
+    ],
+  },
   {
     version: '0.6.12',
     codename: 'Foxtrot',

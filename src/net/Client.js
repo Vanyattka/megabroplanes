@@ -213,7 +213,10 @@ export class MultiplayerClient {
   sendFire(o, d) { this._send({ type: 'fire', o, d }); }
   sendHit(target) { this._send({ type: 'hit', target }); }
 
-  sendState(plane) {
+  // `cp` (optional) = the local race checkpoint progress (gates cleared). Sent
+  // alongside state at 20 Hz so the server self-heals any checkpoint that the
+  // one-shot sendCheckpoint() failed to deliver (e.g. during a reconnect).
+  sendState(plane, cp) {
     if (!this._enabled) return;
     if (!this.connected || !this.ws || this.ws.readyState !== 1) return;
     const now = performance.now();
@@ -221,17 +224,16 @@ export class MultiplayerClient {
     this._lastSend = now;
     const p = plane.position;
     const q = plane.quaternion;
-    this.ws.send(JSON.stringify({
-      type: 'state',
-      state: {
-        p: [p.x, p.y, p.z],
-        q: [q.x, q.y, q.z, q.w],
-        t: plane.throttle,
-        c: plane.crashed ? 1 : 0,
-        g: plane.gearDown ? 1 : 0, // landing gear, so remotes show it too
-        pt: plane.type,   // plane type (cessna/piper/jet)
-        pc: plane.color,  // body color hex int
-      },
-    }));
+    const state = {
+      p: [p.x, p.y, p.z],
+      q: [q.x, q.y, q.z, q.w],
+      t: plane.throttle,
+      c: plane.crashed ? 1 : 0,
+      g: plane.gearDown ? 1 : 0, // landing gear, so remotes show it too
+      pt: plane.type,   // plane type (cessna/piper/jet)
+      pc: plane.color,  // body color hex int
+    };
+    if (typeof cp === 'number') state.cp = cp;
+    this.ws.send(JSON.stringify({ type: 'state', state }));
   }
 }

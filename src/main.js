@@ -928,7 +928,8 @@ function renderStep(alpha) {
   }
   remotes.update(renderDt);
   if (!photoMode) raceManager.update(renderDt);
-  mp.sendState(plane);
+  // Piggyback race checkpoint progress so the server self-heals any missed cp.
+  mp.sendState(plane, raceManager.inRace ? raceManager.localCp : undefined);
 
   // Audio tracks plane state each frame.
   audio.update(renderDt, {
