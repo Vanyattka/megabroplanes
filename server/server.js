@@ -12,7 +12,7 @@ const TICK_HZ = 20;
 // neither a pong nor a message arrives for IDLE_KICK_MS. (Was a flat 20 s
 // app-message timeout — that kicked anyone whose render loop paused on a
 // backgrounded tab, the root cause of the mid-session disconnects.)
-const PING_MS = 15000;
+const PING_MS = 10000;
 const IDLE_KICK_MS = 50000;
 // When a socket drops in a race OR the lobby, hold that slot (id, progress,
 // HP, lobby membership) this long so a quick reconnect resumes it instead of
@@ -361,7 +361,8 @@ function broadcastToRoom(room, payload, exceptId = null) {
 // Message/close/pong handlers resolve the client via ws._cid (NOT a captured
 // id) so a resumed socket routes to the adopted session.
 function attachClientHandlers(ws) {
-  ws.on('pong', () => { const c = clients.get(ws._cid); if (c) c.lastSeen = Date.now(); });
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; const c = clients.get(ws._cid); if (c) c.lastSeen = Date.now(); });
   ws.on('error', () => {});
   ws.on('close', () => {
     const c = clients.get(ws._cid);
@@ -604,6 +605,11 @@ setInterval(() => {
 setInterval(() => {
   for (const [, c] of clients) {
     if (c.disconnected || !c.ws || c.ws.readyState !== 1) continue;
+    // No pong since the last ping = a stalled/half-open socket. Drop it now
+    // (~10-20s) instead of waiting out IDLE_KICK_MS (50s) — that long gap is
+    // what froze a racer (and their plane on everyone else's screen).
+    if (c.ws.isAlive === false) { try { c.ws.terminate(); } catch {} dropClient(c, 'ping timeout'); continue; }
+    c.ws.isAlive = false;
     try { c.ws.ping(); } catch {}
   }
 }, PING_MS);

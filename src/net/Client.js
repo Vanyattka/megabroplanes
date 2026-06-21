@@ -3,6 +3,11 @@ const SEND_INTERVAL_MS = 50; // 20 Hz
 // If we can't reconnect+resume within this window, give up and tear the race/
 // lobby down locally. Slightly longer than the server's resume grace (90 s).
 const RESUME_GIVEUP_MS = 95000;
+// A healthy connection receives snapshots ~20×/s. If nothing arrives for this
+// long the socket has silently stalled (half-open) — force a reconnect+resume
+// instead of waiting for the OS/TCP timeout. This is what un-freezes a racer
+// whose connection hung mid-race.
+const STALL_MS = 7000;
 
 export class MultiplayerClient {
   constructor(url) {
@@ -27,6 +32,39 @@ export class MultiplayerClient {
     this.token = null;
     this.prevId = null;
     this._giveUpTimer = null;
+    // Stall watchdog: tracks when we last heard from the server.
+    this._lastRecvAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    this._watchdog = setInterval(() => this._checkStall(), 2000);
+    this._connect();
+  }
+
+  _now() { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
+
+  _checkStall() {
+    if (!this._enabled || !this.connected) return;
+    if (this._now() - this._lastRecvAt > STALL_MS) {
+      // Half-open socket — nothing has arrived in STALL_MS. Drop it and
+      // reconnect (with the resume token) so we rejoin the same race/lobby.
+      this._forceReconnect();
+    }
+  }
+
+  // Hard-cycle the socket without waiting for onclose (a stalled socket may
+  // never fire it). Mirrors the onclose resume path: keep race/lobby alive and
+  // reconnect immediately with the token.
+  _forceReconnect() {
+    if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
+    const old = this.ws;
+    this.ws = null;
+    this.connected = false;
+    if (old) {
+      try { old.onopen = old.onmessage = old.onclose = old.onerror = null; old.close(); } catch {}
+    }
+    this.remotes.clear();
+    this._notify();
+    if (!this._giveUpTimer && (this.race || this.lobby)) {
+      this._giveUpTimer = setTimeout(() => { this._giveUpTimer = null; this._dropSession(); }, RESUME_GIVEUP_MS);
+    }
     this._connect();
   }
 
@@ -106,10 +144,11 @@ export class MultiplayerClient {
 
     ws.onopen = () => {
       this.connected = true;
+      this._lastRecvAt = this._now();
       console.log('[net] connected to', this.url);
       this._notify();
     };
-    ws.onmessage = (ev) => this._onMessage(ev.data);
+    ws.onmessage = (ev) => { this._lastRecvAt = this._now(); this._onMessage(ev.data); };
     ws.onclose = () => {
       this.connected = false;
       this.remotes.clear();

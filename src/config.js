@@ -7,10 +7,19 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.6.13';
+export const GAME_VERSION = '0.6.14';
 export const GAME_CODENAME = 'Foxtrot';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.6.14',
+    codename: 'Foxtrot',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-22',
+    notes: [
+      'Fixed planes freezing in mid-air during a race on a hung connection: if your link silently stalls, the game now notices within seconds and reconnects you to the same race automatically (it used to sit frozen — no other planes moving, no checkpoints counting — for up to a minute). The server also drops genuinely dead connections far quicker.',
+    ],
+  },
   {
     version: '0.6.13',
     codename: 'Foxtrot',
