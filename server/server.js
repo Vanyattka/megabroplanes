@@ -425,6 +425,18 @@ function attachClientHandlers(ws) {
           sendLobbyState();
         }
         break;
+      case 'leave_race':
+        // The player bailed out of a race (e.g. hit START GAME from the menu).
+        // Drop them to free flight; the race tick recomputes standings/finish
+        // over the remaining CONNECTED racers (and ends the race if they were
+        // the last one), so no extra bookkeeping is needed here.
+        if (c.room === 'race') {
+          c.room = 'free';
+          c.race = null;
+          c.dead = false;
+          c.hp = MAX_HP;
+        }
+        break;
       case 'lobby_set':
         if (c.room === 'lobby') {
           if (msg.plane) c.lobby.plane = msg.plane;

@@ -62,7 +62,7 @@ function placeInRect(rect, along, perp, footR) {
 
 // A point is "wet" if it's in the sea, below the global waterline, or under a
 // river's LOCAL water level (rivers carry stepped pools above sea level).
-function isWetAt(x, z) {
+export function isWetAt(x, z) {
   if (seaMaskAt(x, z) >= SEA_THRESHOLD_LOW) return true;
   const h = landElevation(x, z);
   if (h < WATER_LEVEL + 1) return true;

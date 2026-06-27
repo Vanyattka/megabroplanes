@@ -39,6 +39,7 @@ import {
   rectFlatFactor,
   getVillage,
 } from './Villages.js';
+import { farmsAffectingArea, isInFarmAreaFast } from './Farms.js';
 import { gfx } from '../ui/GraphicsSettings.js';
 import { profiler } from '../debug/Profiler.js';
 
@@ -175,6 +176,14 @@ export function buildScatter(cx, cz) {
     chunkOriginZ,
     chunkOriginZ + CHUNK_SIZE
   );
+  // Farms/fields that could reach this chunk — trees/rocks are suppressed
+  // inside their footprints so nothing grows through the crops or farmyard.
+  const farms = farmsAffectingArea(
+    chunkOriginX,
+    chunkOriginX + CHUNK_SIZE,
+    chunkOriginZ,
+    chunkOriginZ + CHUNK_SIZE
+  );
 
   const slopeAt = (x, z) => {
     const d = 2;
@@ -199,6 +208,7 @@ export function buildScatter(cx, cz) {
     const b = biomeAt(x, z);
     if (prng() > b.trees / MAX_TREE_FACTOR) continue;
     if (isInVillageAreaFast(x, z, villages)) continue;
+    if (isInFarmAreaFast(x, z, farms)) continue;
     const y = groundHeightFast(x, z, villages);
     if (y < TREE_MIN_HEIGHT || y > TREE_MAX_HEIGHT) continue;
     if (y <= WATER_LEVEL + 0.5) continue;
@@ -244,6 +254,7 @@ export function buildScatter(cx, cz) {
     const b = biomeAt(x, z);
     if (prng() > b.rocks / MAX_ROCK_FACTOR) continue;
     if (isInVillageAreaFast(x, z, villages)) continue;
+    if (isInFarmAreaFast(x, z, farms)) continue;
     const y = groundHeightFast(x, z, villages);
     if (y < 0.3) continue;
     if (y <= WATER_LEVEL + 0.5) continue;

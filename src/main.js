@@ -8,6 +8,7 @@ import { ChunkManager } from './world/ChunkManager.js';
 import { VillageManager } from './world/VillageManager.js';
 import { isOnFlatGround } from './world/Villages.js';
 import { RuinsManager } from './world/RuinsManager.js';
+import { FarmManager } from './world/FarmManager.js';
 import { Water } from './world/Water.js';
 import { WaterReflection } from './world/WaterReflection.js';
 import { groundHeight, physicsFloor } from './world/Ground.js';
@@ -117,6 +118,7 @@ const chunkPool = new ChunkWorkerPool(2);
 const chunks = new ChunkManager(renderer.scene, { roads, pool: chunkPool });
 const villages = new VillageManager(renderer.scene);
 const ruins = new RuinsManager(renderer.scene);
+const farms = new FarmManager(renderer.scene);
 const water = new Water(renderer.scene);
 const waterReflection = new WaterReflection(renderer.scene);
 const clouds = new Clouds(renderer.scene);
@@ -437,6 +439,11 @@ menu.onChange = ({ type, color }) => {
   if (gameState === 'playing') plane.mesh.visible = !plane.crashed;
 };
 menu.onStart = ({ type, color, timePreset, mode }) => {
+  // Starting a fresh game means leaving any race/lobby we were in — otherwise
+  // the race HUD lingers and the server keeps us in the race while we teleport
+  // to the runway (the "race keeps running after START GAME" bug).
+  if (raceManager.inRace) raceManager.leaveRace();
+  if (inLobby) lobby.onLeave();
   plane.setLoadout(type, color);
   applyMode(mode);
   applyModeTime(timePreset);
@@ -715,6 +722,7 @@ chunks.primeAll(plane.position, primeRadius);
 // fails, so only nearby villages/ruins end up built synchronously.
 villages.primeAll(plane.position, terrainViewRadiusFor(plane), chunkReady);
 ruins.primeAll(plane.position, terrainViewRadiusFor(plane), chunkReady);
+farms.primeAll(plane.position, terrainViewRadiusFor(plane), chunkReady);
 
 let lastRenderTime = performance.now();
 let resetHeld = false;
@@ -731,6 +739,7 @@ function streamUpdate() {
   chunks.update(plane.position, viewDistanceFor(plane), fogFarFor(plane));
   villages.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
   ruins.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
+  farms.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
   // Roads stream by distance to the player (decoupled from chunk lifetime so
   // a road never vanishes just because a faraway owner chunk unloaded).
   roads.update(plane.position);

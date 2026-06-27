@@ -24,6 +24,11 @@ export class MultiplayerClient {
     // Latest race / lobby state from the server (null until first message).
     this.race = null;
     this.lobby = null;
+    // Set when the player deliberately leaves a race (START GAME from the menu).
+    // Survives a reconnect/resume so a re-adopted race snapshot can't yank the
+    // player back in; the pending leave is re-flushed to the server on reconnect
+    // (the original leave_race may have been dropped on a stalled socket).
+    this._leftRace = false;
     this._enabled = true;
     this._reconnectTimer = null;
     // Session resume: the server issues a token per session; we present it on
@@ -185,7 +190,10 @@ export class MultiplayerClient {
       this._clearGiveUp();
       // Fresh identity → abandon any stale race/lobby so we land cleanly in
       // free flight. Resume → keep them; the server re-sends the race state.
-      if (!resumed) this._dropSession();
+      if (!resumed) { this._dropSession(); this._leftRace = false; }
+      // If we left a race while the socket was down, the server may have re-
+      // adopted us into it on resume — re-send the leave so it moves us to free.
+      if (this._leftRace) this._send({ type: 'leave_race' });
       this._notify();
     } else if (msg.type === 'snapshot') {
       const seen = new Set();
@@ -211,6 +219,9 @@ export class MultiplayerClient {
       }
       this._notify();
     } else if (msg.type === 'race') {
+      // We deliberately left this race; a resumed snapshot must not re-enter it.
+      // Re-tell the server in case our leave_race was lost on the dropped socket.
+      if (this._leftRace) { this._send({ type: 'leave_race' }); return; }
       this.race = msg;
       if (this._raceListener) this._raceListener(msg);
     } else if (msg.type === 'lobby') {
@@ -228,8 +239,20 @@ export class MultiplayerClient {
   }
 
   setName(name) { this._send({ type: 'set_name', name }); }
-  joinLobby(plane, time, color, gates) { this._send({ type: 'join_lobby', plane, time, color, gates }); }
+  joinLobby(plane, time, color, gates) {
+    this._leftRace = false; // re-entering the race pipeline — clear the leave intent
+    this._send({ type: 'join_lobby', plane, time, color, gates });
+  }
   leaveLobby() { this._send({ type: 'leave_lobby' }); }
+  // Bail out of an active race back to free flight (e.g. the player hit START
+  // GAME from the menu while still racing). Drop the cached race snapshot so a
+  // resumed race message can't re-trigger re-entry, and remember the intent so
+  // we re-tell the server if this send was lost on a dropped socket.
+  leaveRace() {
+    this._leftRace = true;
+    this.race = null;
+    this._send({ type: 'leave_race' });
+  }
   // Drop the cached lobby snapshot. The server scopes lobby broadcasts to
   // CURRENT lobby members, so after we leave (or get moved into a race) no
   // fresh message ever overwrites the stale one — and the stale member list

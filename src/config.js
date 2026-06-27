@@ -7,10 +7,21 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.6.14';
-export const GAME_CODENAME = 'Foxtrot';
+export const GAME_VERSION = '0.7.0';
+export const GAME_CODENAME = 'Golf';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.7.0',
+    codename: 'Golf',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-27',
+    notes: [
+      'Farms & fields now dot the lowlands: plains and savanna grow crop fields with furrows and fences, plus farmsteads — barns, silos, farmhouses, scarecrows and haystacks. Each spot is its own thing: a lone field, a farmyard, or both together — and they keep clear of villages, water and one another.',
+      'Castle ruins come in two sizes. Alongside the small keeps, rare broad mountain summits now hold monumental fortresses — tall crenellated curtain walls, cone-capped corner towers, a twin-towered gatehouse, an inner bailey, a great hall and a three-storey keep — much bigger and a touch better preserved.',
+      'Fixed leaving a multiplayer race from the menu: pressing START GAME while racing used to dump you back on the runway but leave the race interface stuck on screen as if it were still going. It now cleanly exits the race — for you and for everyone else — even if your connection hiccups at the wrong moment.',
+    ],
+  },
   {
     version: '0.6.14',
     codename: 'Foxtrot',
@@ -476,6 +487,51 @@ export const RUIN_MIN_HEIGHT = 95;   // groundHeight must exceed this for a ruin
 export const RUIN_SINK = 1.1;        // how deep each piece is buried below local ground (m)
 export const RUIN_COURT_MIN = 16;    // castle courtyard half-size range (m)
 export const RUIN_COURT_MAX = 26;
+// Monumental "grand" ruin tier (v0.7) — a second, much larger and slightly
+// better-preserved castle that only lands on broad mountain summits. The small
+// tier above is unchanged; tier is rolled on a separate seed stream so existing
+// worlds stay byte-stable.
+export const RUIN_GRAND_CHANCE = 0.30;       // of an eligible ruin being grand
+export const RUIN_GRAND_MIN_HEIGHT = 110;    // grand needs an even higher peak
+export const RUIN_GRAND_MAX_SPREAD = 24;     // max ground spread over the grand footprint (m) — else stays small
+export const RUIN_GRAND_REACH = 46;          // half-extent probed for the flatness pre-check (m)
+export const RUIN_GRAND_COURT_MIN = 34;      // grand courtyard half-size range (m) — ~68–96 m across
+export const RUIN_GRAND_COURT_MAX = 48;
+export const RUIN_GRAND_WALL_T = 2.4;        // grand curtain-wall thickness (m)
+
+// Farms & fields (v0.7) — a standalone world layer separate from village
+// farmsteads. On a cell of arable lowland a feature may spawn: just a crop
+// field, just a farmstead (buildings + yard), or both. Like ruins, fields and
+// buildings DRAPE on the terrain (per-piece groundHeight) — they never flatten
+// it and never touch the terrain worker. One feature per cell, fully contained
+// in its cell, so the 3×3 streaming window and scatter reach-query are complete.
+export const FARM_CELL_SIZE = 1200;          // meters per farm cell (denser than villages)
+export const FARM_CELL_CHANCE = 0.45;        // of a cell containing a farm/field feature (distinct from the village-farm modifier FARM_CHANCE)
+export const FARM_CELL_MARGIN = 200;         // keep the footprint this far inside the cell (m)
+export const FARM_BUILD_BUDGET_MS = 3;       // per-frame mesh build budget
+export const FARM_MAX_HEIGHT = 55;           // fields only on low ground (< this) — disjoint from ruins (> 95)
+export const FARM_MAX_SPREAD = 8;            // max ground spread over the footprint (m) — gentle land only
+export const FARM_VILLAGE_CLEARANCE = 60;    // keep farms this far from villages/airports (m)
+export const FARM_FARM_CLEARANCE = 40;       // keep farms this far from each other (m)
+export const FARM_REACH_PAD = 90;            // ≥ max field half-diagonal — for affectingArea + scatter reach
+export const FARM_FIELD_SEG = 8;             // target field-mesh segment size (m) — drape resolution
+export const FARM_FIELD_LIFT = 0.06;         // raise the field skin this far above ground (m) — anti z-fight
+export const FARM_ROW_PITCH = 2.2;           // furrow spacing (m)
+export const FARM_CROP_SPACING = 1.4;        // crop spacing along a furrow (m)
+export const FARM_FENCE_SPAN = 2.4;          // fence rail length between posts (m)
+export const FARM_SINK = 0.1;                // sink buildings this far into the ground (m)
+export const FARM_YARD_HALF = 18;            // farmstead yard half-size (m)
+export const FARM_VARIANT_WEIGHTS = { field: 0.45, both: 0.40, farm: 0.15 };
+export const FARM_FIELD_SIZES = {
+  field: { L: 70, W: 50 },
+  both: { L: 60, W: 45 },
+  farm: { L: 30, W: 24 },
+};
+export const FARM_MAX_CROPS = { field: 1400, both: 1100, farm: 300 };
+export const FARM_CROP_PALETTE = {
+  plains: { crop: 'wheat', soilA: 0x6b5836, soilB: 0x5a4a2c, tuft: 0xc8a85a },
+  savanna: { crop: 'corn', soilA: 0x6f5a30, soilB: 0x5e4c26, tuft: 0xb89a48 },
+};
 
 // Physics
 export const GRAVITY = 9.81;
@@ -897,7 +953,7 @@ export const DEBUG_PROFILER = !!(import.meta.env && import.meta.env.DEV);
 export const DEBUG_PROFILER_LONG_FRAME_MS = 20;
 export const DEBUG_PROFILER_REPORT_INTERVAL_MS = 5000;
 export const VILLAGE_BUILD_BUDGET_MS = 3;
-export const RUIN_BUILD_BUDGET_MS = 2;
+export const RUIN_BUILD_BUDGET_MS = 3;   // grand-tier ruins are ~150 meshes; give the streamer a touch more headroom
 export const TREE_MIN_HEIGHT = 1.5;
 export const TREE_MAX_HEIGHT = 90;    // treeline — forests climb the uplands + lower slopes
 export const TREE_MAX_SLOPE = 0.45;   // tan of slope: reject steep spots

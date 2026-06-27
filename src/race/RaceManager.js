@@ -161,6 +161,17 @@ export class RaceManager {
     return r.course && r.course.length ? `${r.course.length}:${r.course[0].x},${r.course[0].z}` : 'none';
   }
 
+  // Bail out of the current race back to free flight — used when the player
+  // hits START GAME from the menu while still racing. Clears the local race UI
+  // immediately AND tells the server to move us out, so the race doesn't keep
+  // "running" with us in it (the reported bug: teleported to the runway but the
+  // race HUD lingered and the server kept scoring us as a ghost racer).
+  leaveRace() {
+    if (!this.inRace) return;
+    this.client.leaveRace();
+    this._teardown();
+  }
+
   _teardown() {
     this.inRace = false;
     this.phase = 'idle';
