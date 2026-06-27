@@ -99,13 +99,12 @@ export function buildVillageProps(village, prng) {
     b.mats.push(_m.clone());
     count++;
   }
-  // A yard tree = trunk + canopy sharing one matrix (two batches).
+  // A yard tree = one merged trunk+canopy geometry (single batch).
   function addTree(sp, x, z, s) {
     if (count >= cap) return;
     if (!inside(x, z)) return;
     const rot = prng() * Math.PI * 2;
-    addScaled(sp.trunkGeom, sp.trunkMat, x, z, rot, cast, s);
-    addScaled(sp.canopyGeom, sp.canopyMat, x, z, rot, cast, s);
+    addScaled(sp.geom, sp.mat, x, z, rot, cast, s);
     count++;
   }
   function addScaled(geom, mat, x, z, rotY, casts, s) {

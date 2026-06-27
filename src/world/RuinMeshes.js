@@ -4,6 +4,8 @@ import {
   CylinderGeometry,
   Group,
   IcosahedronGeometry,
+  InstancedMesh,
+  Matrix4,
   Mesh,
   MeshStandardMaterial,
 } from 'three';
@@ -60,6 +62,53 @@ function pickMat(prng) {
   return stoneMats[Math.floor(prng() * stoneMats.length)];
 }
 
+const _IDENT = new Matrix4();
+
+// Collapse a freshly-built ruin group (60–195 separate Mesh objects, all
+// sharing ~6 materials and 4 unit geometries) into one InstancedMesh per
+// (geometry, material, castShadow, receiveShadow) — a grand ruin drops to
+// ~10-15 draw calls instead of 195, so installing it no longer spikes a frame.
+// The build logic above is untouched; this just flattens the scene graph by
+// reading each piece's already-composed local matrix (gable slabs live under a
+// nested group, so parent matrices accumulate during the walk). Three.js
+// auto-computes an instance-aware bounding sphere, so frustum culling is
+// preserved. The InstancedMesh instance buffers are per-ruin → disposeRuinGroup
+// frees them on unload.
+function batchGroup(srcGroup) {
+  const out = new Group();
+  out.position.copy(srcGroup.position);
+  out.quaternion.copy(srcGroup.quaternion);
+  out.scale.copy(srcGroup.scale);
+
+  const map = new Map();
+  const walk = (obj, parentMat) => {
+    obj.updateMatrix(); // compose pos/quat/scale → obj.matrix
+    const world = new Matrix4().multiplyMatrices(parentMat, obj.matrix);
+    if (obj.isMesh) {
+      const key = `${obj.geometry.uuid}|${obj.material.uuid}|${obj.castShadow ? 1 : 0}|${obj.receiveShadow ? 1 : 0}`;
+      let e = map.get(key);
+      if (!e) {
+        e = { geometry: obj.geometry, material: obj.material, cast: obj.castShadow, receive: obj.receiveShadow, mats: [] };
+        map.set(key, e);
+      }
+      e.mats.push(world);
+    }
+    for (const c of obj.children) walk(c, world);
+  };
+  // srcGroup's own transform is carried by `out`, so its children start at identity.
+  for (const c of srcGroup.children) walk(c, _IDENT);
+
+  for (const e of map.values()) {
+    const im = new InstancedMesh(e.geometry, e.material, e.mats.length);
+    im.castShadow = e.cast;
+    im.receiveShadow = e.receive;
+    for (let i = 0; i < e.mats.length; i++) im.setMatrixAt(i, e.mats[i]);
+    im.instanceMatrix.needsUpdate = true;
+    out.add(im);
+  }
+  return out;
+}
+
 export function buildRuinGroup(ruin) {
   const group = new Group();
   const prng = alea(ruin.seed);
@@ -98,7 +147,7 @@ export function buildRuinGroup(ruin) {
 
   group.position.set(ruin.x, 0, ruin.z);
   group.rotation.y = ruin.rot;
-  return group;
+  return batchGroup(group);
 }
 
 // ---------------------------------------------------------------------------
@@ -560,8 +609,11 @@ function buildGrandCastle(group, prng, baseAt, piece) {
   }
 }
 
-// All geometries are shared unit shapes and all materials are shared — there
-// is nothing per-ruin to free beyond removing the group from the scene.
+// Geometries and materials are shared, but batchGroup() gave each ruin its own
+// InstancedMesh instance buffers — free those on unload (the shared geom/mat
+// stay alive).
 export function disposeRuinGroup(group) {
-  void group;
+  group.traverse((o) => {
+    if (o.isInstancedMesh) o.dispose();
+  });
 }

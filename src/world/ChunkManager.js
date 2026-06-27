@@ -79,6 +79,10 @@ export class ChunkManager {
     // Cached sort state; rebuilt lazily when pending changes.
     this._pendingSorted = null;
     this._pendingSortedIndex = 0;
+    // True for the frame a terrain chunk or scatter group was installed — lets
+    // the render loop refresh the (manually-driven) shadow map so new geometry
+    // immediately casts/receives shadows.
+    this.installedThisFrame = false;
   }
 
   // `visibilityRadius` (optional, world meters) — hide chunks beyond the
@@ -96,6 +100,7 @@ export class ChunkManager {
       profiler.timeEnd('chunkMgr', _tMgr);
       return;
     }
+    this.installedThisFrame = false;
     const pcx = Math.floor(planePos.x / CHUNK_SIZE);
     const pcz = Math.floor(planePos.z / CHUNK_SIZE);
     const vd = viewDistance ?? VIEW_DISTANCE_CHUNKS;
@@ -346,6 +351,7 @@ export class ChunkManager {
     };
     this.chunks.set(key, entry);
     this._scatterQueue.push(entry);
+    this.installedThisFrame = true;
   }
 
   hasChunk(cx, cz) {
@@ -410,6 +416,7 @@ export class ChunkManager {
       entry.scatter = buildScatter(entry.cx, entry.cz);
       entry.group.add(entry.scatter);
       entry.scatterPending = false;
+      this.installedThisFrame = true;
     }
   }
 }

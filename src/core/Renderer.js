@@ -32,6 +32,11 @@ export class Renderer {
     // itself toggles castShadow so this is free when shadows are off.
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFSoftShadowMap;
+    // Drive the shadow map manually (main.js) instead of re-rendering every
+    // frame: the sun's shadow pass re-draws all ~440 visible terrain chunks, so
+    // refreshing it only when the view/sun/world actually changed is the single
+    // biggest steady GPU win. main.js sets shadowMap.needsUpdate when needed.
+    this.renderer.shadowMap.autoUpdate = false;
     document.body.appendChild(this.renderer.domElement);
 
     this.scene = new Scene();

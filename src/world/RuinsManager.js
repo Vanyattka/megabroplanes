@@ -1,6 +1,7 @@
-import { CHUNK_SIZE, RUIN_CELL_SIZE, RUIN_BUILD_BUDGET_MS } from '../config.js';
+import { CHUNK_SIZE, RUIN_CELL_SIZE } from '../config.js';
 import { getRuin } from './Ruins.js';
 import { buildRuinGroup, disposeRuinGroup } from './RuinMeshes.js';
+import { profiler } from '../debug/Profiler.js';
 
 export class RuinsManager {
   constructor(scene) {
@@ -12,7 +13,7 @@ export class RuinsManager {
     this._lastMaxSq = -1;
   }
 
-  update(planePos, maxDistance = Infinity, isChunkReady = null) {
+  update(planePos, maxDistance = Infinity, isChunkReady = null, gate = null) {
     const pcx = Math.floor(planePos.x / RUIN_CELL_SIZE);
     const pcz = Math.floor(planePos.z / RUIN_CELL_SIZE);
     const maxSq = maxDistance * maxDistance;
@@ -27,9 +28,8 @@ export class RuinsManager {
       this._recomputeNeeded(pcx, pcz, planePos, maxSq);
     }
 
+    if (gate && gate.used) return;
     if (this.pending.length > 0) {
-      const tStart = performance.now();
-      const deadline = tStart + RUIN_BUILD_BUDGET_MS;
       for (let i = 0; i < this.pending.length; i++) {
         const p = this.pending[i];
         if (isChunkReady) {
@@ -37,13 +37,15 @@ export class RuinsManager {
           const rcz = Math.floor(p.ruin.z / CHUNK_SIZE);
           if (!isChunkReady(rcx, rcz)) continue;
         }
+        const _t0 = profiler.timeBegin();
         const g = buildRuinGroup(p.ruin);
+        profiler.timeEnd('ruin', _t0);
         this.scene.add(g);
         this.active.set(p.key, g);
         this.pending.splice(i, 1);
+        if (gate) gate.used = true;
         break;
       }
-      if (performance.now() > deadline) return;
     }
   }
 

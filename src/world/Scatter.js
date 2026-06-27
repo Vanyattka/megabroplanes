@@ -1,4 +1,6 @@
 import {
+  BufferAttribute,
+  Color,
   ConeGeometry,
   CylinderGeometry,
   Euler,
@@ -10,6 +12,7 @@ import {
   Quaternion,
   Vector3,
 } from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import alea from 'alea';
 import {
   CHUNK_SIZE,
@@ -52,19 +55,38 @@ const rockMat = new MeshStandardMaterial({ color: 0x7a7572, flatShading: true, r
 // primitives and shared across the whole world (per-chunk only the instance
 // buffers are allocated). Geometries are pre-translated so the model sits on
 // the ground at y=0.
+// Bake a flat color into a geometry's per-vertex 'color' attribute so several
+// differently-coloured parts can share ONE vertexColors material.
+function paintGeom(geom, hex) {
+  const c = new Color(hex);
+  const n = geom.attributes.position.count;
+  const arr = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
+  geom.setAttribute('color', new BufferAttribute(arr, 3));
+}
+
 function makeSpecies(trunk, canopy) {
   trunk.geom.translate(0, trunk.y, 0);
   canopy.geom.translate(0, canopy.y, 0);
+  // Merge trunk + canopy into ONE geometry carrying their colors as vertex
+  // colors, rendered with ONE shared vertexColors material → a chunk builds
+  // one InstancedMesh per species instead of two, halving scatter draw calls.
+  // mergeGeometries needs matching indexing; cylinders/cones are indexed but
+  // icosahedron canopies aren't, so drop indices first (flat shading doesn't
+  // use them anyway).
+  const tg = trunk.geom.index ? trunk.geom.toNonIndexed() : trunk.geom;
+  const cg = canopy.geom.index ? canopy.geom.toNonIndexed() : canopy.geom;
+  paintGeom(tg, trunk.color);
+  paintGeom(cg, canopy.color);
+  const geom = mergeGeometries([tg, cg], false);
   return {
-    trunkGeom: trunk.geom,
-    canopyGeom: canopy.geom,
-    trunkMat: new MeshStandardMaterial({ color: trunk.color, flatShading: true, roughness: 1 }),
-    canopyMat: new MeshStandardMaterial({ color: canopy.color, flatShading: true, roughness: 1 }),
+    geom,
+    mat: new MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1 }),
   };
 }
 // Exported so village yard/street trees (VillageProps) can reuse the shared
-// trunk/canopy geometry — they're always InstancedMesh, so the shared geoms
-// are never disposed.
+// merged tree geometry + vertexColors material — they're always InstancedMesh,
+// so the shared geoms are never disposed. Each species is { geom, mat }.
 export const SPECIES = {
   // Classic pine — the original tree.
   conifer: makeSpecies(
@@ -231,19 +253,12 @@ export function buildScatter(cx, cz) {
     const mats = bySpecies[name];
     if (!mats.length) continue;
     const sp = SPECIES[name];
-    const trunks = new InstancedMesh(sp.trunkGeom, sp.trunkMat, mats.length);
-    const canopies = new InstancedMesh(sp.canopyGeom, sp.canopyMat, mats.length);
-    trunks.castShadow = castTreeShadows;
-    trunks.receiveShadow = true;
-    canopies.castShadow = castTreeShadows;
-    canopies.receiveShadow = true;
-    for (let i = 0; i < mats.length; i++) {
-      trunks.setMatrixAt(i, mats[i]);
-      canopies.setMatrixAt(i, mats[i]);
-    }
-    trunks.instanceMatrix.needsUpdate = true;
-    canopies.instanceMatrix.needsUpdate = true;
-    group.add(trunks, canopies);
+    const trees = new InstancedMesh(sp.geom, sp.mat, mats.length);
+    trees.castShadow = castTreeShadows;
+    trees.receiveShadow = true;
+    for (let i = 0; i < mats.length; i++) trees.setMatrixAt(i, mats[i]);
+    trees.instanceMatrix.needsUpdate = true;
+    group.add(trees);
   }
 
   // Rocks — tolerant of slope, bias toward higher terrain.

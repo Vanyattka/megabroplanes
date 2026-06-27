@@ -7,10 +7,19 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.7.0';
+export const GAME_VERSION = '0.7.1';
 export const GAME_CODENAME = 'Golf';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.7.1',
+    codename: 'Golf',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-27',
+    notes: [
+      'Performance: the world streams in far more smoothly. Flying toward towns, castle ruins and dense terrain no longer hitches the way it did. Under the hood — castle ruins now draw batched (a grand fortress dropped from ~195 separate pieces to ~16 draw calls), trees render as one merged piece instead of separate trunk + canopy (~a third fewer draw calls near a town), the sun shadow map only re-renders when the view, sun or world actually changes instead of every single frame, and heavy structures install one at a time so a town, a ruin and a farm can no longer all pop in on the same frame.',
+    ],
+  },
   {
     version: '0.7.0',
     codename: 'Golf',
@@ -467,6 +476,13 @@ export const FARM_CHANCE = 0.40;            // chance a small/medium plains/sava
 export const COASTAL_RING_PAD = 130;        // sample this far past the village for sea
 export const COASTAL_SEAHITS_MIN = 2;       // of 12 ring samples in the sea → coastal
 export const COASTAL_SEAHITS_MAX = 9;
+
+// Manual shadow-map refresh (v0.7.1). The sun shadow map only re-renders when
+// the shadow centre (plane / orbit camera) moves more than this, the sun moves,
+// or the world changed — otherwise the cached map is reused. Small enough that
+// shadows never visibly lag behind the plane.
+export const SHADOW_UPDATE_DIST = 6;        // meters of XZ movement before a shadow refresh
+export const SHADOW_SUN_EPS = 0.0015;       // change in sunDir.y before a shadow refresh
 
 // Street props (instanced per village). Density + caps keep cities cozy not
 // cluttered; the MIX shifts urban↔rural per tier (cities favor lamps/benches,

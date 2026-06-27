@@ -40,6 +40,8 @@ import {
   LANDING_LIGHT_INTENSITY,
   BLOOM_THRESHOLD_DAY,
   BLOOM_THRESHOLD_DUSK,
+  SHADOW_UPDATE_DIST,
+  SHADOW_SUN_EPS,
 } from './config.js';
 import { MultiplayerClient } from './net/Client.js';
 import { RemotePlaneManager } from './net/RemotePlaneManager.js';
@@ -136,6 +138,30 @@ window.addEventListener('resize', () => {
 // Apply graphics-settings changes across the subsystems that care. Tree
 // shadows and terrain detail noise are only applied to *new* chunks — old
 // chunks keep their existing look until they unload, which is fine.
+// --- Manual shadow-map driving ---------------------------------------------
+// The sun shadow pass re-renders every visible terrain chunk (~440), so we
+// refresh the (autoUpdate=false) shadow map only when the shadow centre moves,
+// the sun moves, or the world changed — not every frame. Declared before
+// applyGfx() because that runs at module load and flips _shadowDirty.
+let _shadowCx = Infinity;
+let _shadowCz = Infinity;
+let _shadowSunY = Infinity;
+let _shadowDirty = true; // force the first render
+function requestShadowIfNeeded(cx, cz) {
+  const dx = cx - _shadowCx;
+  const dz = cz - _shadowCz;
+  const sunY = worldTime.sunDir.y;
+  const moved = dx * dx + dz * dz > SHADOW_UPDATE_DIST * SHADOW_UPDATE_DIST;
+  const sunMoved = Math.abs(sunY - _shadowSunY) > SHADOW_SUN_EPS;
+  if (_shadowDirty || moved || sunMoved) {
+    renderer.renderer.shadowMap.needsUpdate = true;
+    _shadowCx = cx;
+    _shadowCz = cz;
+    _shadowSunY = sunY;
+    _shadowDirty = false;
+  }
+}
+
 function applyGfx(settings) {
   renderer.renderer.setPixelRatio(settings.pixelRatio);
   // The composer caches its pixel ratio at construction; push the new one
@@ -153,6 +179,9 @@ function applyGfx(settings) {
   postfx.setGodraysEnabled(!!settings.godrays);
   postfx.setColorGradeEnabled(settings.colorGrade !== false);
   postfx.setFxaaEnabled(settings.fxaa !== false);
+  // Shadow map size / frustum may have been reallocated — force a refresh of
+  // the manually-driven shadow map on the next frame.
+  _shadowDirty = true;
 }
 applyGfx(gfx.settings);
 gfx.onChange(applyGfx);
@@ -332,6 +361,20 @@ if (import.meta.env && import.meta.env.DEV) {
     plane.spawnAirborne(new Vector3(x, y, z), plane.quaternion.clone(), new Vector3(0, 0, 0), 0.2);
   window.__gh = (x, z) => groundHeight(x, z);
   window.__cp = (i) => mp.sendCheckpoint(i);
+  window.__rinfo = () => {
+    let meshes = 0, instanced = 0, visibleRenderable = 0;
+    renderer.scene.traverse((o) => {
+      const renderable = o.isMesh || o.isInstancedMesh || o.isPoints || o.isLine;
+      if (!renderable) return;
+      if (o.isInstancedMesh) instanced++; else meshes++;
+      // visible only if it and all ancestors are visible
+      let vis = o.visible, p = o.parent;
+      while (vis && p) { vis = p.visible; p = p.parent; }
+      if (vis) visibleRenderable++;
+    });
+    const mem = renderer.renderer.info.memory;
+    return { sceneMeshes: meshes, sceneInstanced: instanced, totalRenderable: meshes + instanced, visibleRenderable, geometries: mem.geometries, textures: mem.textures };
+  };
   window.__dbg = () => ({
     pos: plane.position.toArray(),
     course: mp.race && mp.race.course,
@@ -737,12 +780,20 @@ function streamUpdate() {
   // are skipped in rendering — a major GPU win that keeps loaded chunks
   // available for when the plane turns and they come back into view.
   chunks.update(plane.position, viewDistanceFor(plane), fogFarFor(plane));
-  villages.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
-  ruins.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
-  farms.update(plane.position, terrainViewRadiusFor(plane), chunkReady);
+  // At most ONE content feature (village/ruin/farm) builds per frame across all
+  // three managers — a city + grand ruin + farm can no longer all install on
+  // the same frame and spike it. They still do their cheap recompute/cull
+  // bookkeeping every frame; only the heavy mesh build is gated. Priority:
+  // villages first (they anchor the runway), then ruins, then farms.
+  const contentGate = { used: false };
+  villages.update(plane.position, terrainViewRadiusFor(plane), chunkReady, contentGate);
+  ruins.update(plane.position, terrainViewRadiusFor(plane), chunkReady, contentGate);
+  farms.update(plane.position, terrainViewRadiusFor(plane), chunkReady, contentGate);
   // Roads stream by distance to the player (decoupled from chunk lifetime so
   // a road never vanishes just because a faraway owner chunk unloaded).
   roads.update(plane.position);
+  // New geometry this tick → refresh the shadow map so it casts/receives.
+  if (contentGate.used || chunks.installedThisFrame) _shadowDirty = true;
 }
 
 function physicsStep(dt) {
@@ -858,6 +909,7 @@ function renderStep(alpha) {
       renderer.scene.fog.far = fogFarFor(menuPlane);
     }
     sky.update(renderer.camera, renderer.camera.position);
+    requestShadowIfNeeded(renderer.camera.position.x, renderer.camera.position.z);
     stars.update(renderer.camera);
     water.update(renderDt, renderer.camera.position, worldTime.horizonColor);
     waterReflection.setVisible(false);
@@ -887,6 +939,7 @@ function renderStep(alpha) {
     renderer.scene.fog.far = fogFarFor(plane);
   }
   sky.update(renderer.camera, plane.position);
+  requestShadowIfNeeded(plane.position.x, plane.position.z);
   stars.update(renderer.camera);
   const waterExtras = computeWaterExtras();
   // Use the render-interpolated position so water tracks under the camera

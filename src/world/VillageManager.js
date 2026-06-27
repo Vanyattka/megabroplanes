@@ -2,10 +2,10 @@ import {
   CHUNK_SIZE,
   VILLAGE_CELL_SIZE,
   VILLAGE_VIEW_CELLS,
-  VILLAGE_BUILD_BUDGET_MS,
 } from '../config.js';
 import { getVillage } from './Villages.js';
 import { buildVillageGroup, disposeVillageGroup } from './VillageMeshes.js';
+import { profiler } from '../debug/Profiler.js';
 
 // Two-stage streaming: when the plane crosses a village cell, we enqueue
 // any new villages in range, but we don't build them until the chunk
@@ -22,7 +22,7 @@ export class VillageManager {
     this._lastMaxSq = -1;
   }
 
-  update(planePos, maxDistance = Infinity, isChunkReady = null) {
+  update(planePos, maxDistance = Infinity, isChunkReady = null, gate = null) {
     const pcx = Math.floor(planePos.x / VILLAGE_CELL_SIZE);
     const pcz = Math.floor(planePos.z / VILLAGE_CELL_SIZE);
     const maxSq = maxDistance * maxDistance;
@@ -39,11 +39,11 @@ export class VillageManager {
       this._recomputeNeeded(pcx, pcz, planePos, maxSq);
     }
 
-    // Drain pending. Build one village per frame at most, respecting the
-    // budget, and only once the terrain chunk under it is loaded.
+    // Drain pending — build at most one village per frame, only once the
+    // terrain chunk under it is loaded. The shared cross-manager gate caps the
+    // whole frame to a single content-feature build.
+    if (gate && gate.used) return;
     if (this.pending.length > 0) {
-      const tStart = performance.now();
-      const deadline = tStart + VILLAGE_BUILD_BUDGET_MS;
       for (let i = 0; i < this.pending.length; i++) {
         const p = this.pending[i];
         if (isChunkReady) {
@@ -52,16 +52,15 @@ export class VillageManager {
           if (!isChunkReady(vcx, vcz)) continue;
         }
         // Build this one and remove from pending.
+        const _t0 = profiler.timeBegin();
         const group = buildVillageGroup(p.village);
+        profiler.timeEnd('village', _t0);
         this.scene.add(group);
         this.active.set(p.key, group);
         this.pending.splice(i, 1);
-        // At most one village per frame — they're expensive (up to 20 ms
-        // for a city), and we don't want to stack multiple.
+        if (gate) gate.used = true;
         break;
       }
-      // Time check — bail if over budget.
-      if (performance.now() > deadline) return;
     }
   }
 

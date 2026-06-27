@@ -38,6 +38,7 @@ class Profiler {
       chunkMgr: [],      // total time spent inside ChunkManager.update()
       village: [],
       ruin: [],
+      farm: [],
     };
     this.buildCap = 200;
 
@@ -73,6 +74,9 @@ class Profiler {
       terrain: 0, terrainMs: 0,
       scatter: 0, scatterMs: 0,
       roads: 0,   roadsMs: 0,
+      village: 0, villageMs: 0,
+      ruin: 0,    ruinMs: 0,
+      farm: 0,    farmMs: 0,
       chunkMgrMs: 0,
     };
   }
@@ -98,15 +102,20 @@ class Profiler {
       // the cache at startup). So we only flag "shader-suspect" when the
       // gap is big AND no chunks were built this frame (an isolated stall
       // with nothing else going on is more likely a compile hiccup).
-      const buildMs = cf.terrainMs + cf.scatterMs + cf.roadsMs;
+      const buildMs = cf.terrainMs + cf.scatterMs + cf.roadsMs + cf.villageMs + cf.ruinMs + cf.farmMs;
       const gap = dt - buildMs;
-      const shaderSuspect = cf.terrain === 0 && cf.scatter === 0 && gap > 20;
+      const shaderSuspect =
+        cf.terrain === 0 && cf.scatter === 0 &&
+        cf.village === 0 && cf.ruin === 0 && cf.farm === 0 && gap > 20;
       const tag = shaderSuspect ? ' [shader-compile?]' : '';
       // Console line short enough to scan while flying.
       console.log(
         `[LONG ${dt.toFixed(1)}ms]${tag} ` +
         `terrain=${cf.terrain}(${cf.terrainMs.toFixed(1)}ms) ` +
         `scatter=${cf.scatter}(${cf.scatterMs.toFixed(1)}ms) ` +
+        `village=${cf.village}(${cf.villageMs.toFixed(1)}ms) ` +
+        `ruin=${cf.ruin}(${cf.ruinMs.toFixed(1)}ms) ` +
+        `farm=${cf.farm}(${cf.farmMs.toFixed(1)}ms) ` +
         `roads=${cf.roads}(${cf.roadsMs.toFixed(1)}ms) ` +
         `chunkMgr=${cf.chunkMgrMs.toFixed(1)}ms`
       );
@@ -139,6 +148,9 @@ class Profiler {
     if (category === 'terrain')      { cf.terrain++;  cf.terrainMs  += dt; this.counters.chunksBuilt++; }
     else if (category === 'scatter') { cf.scatter++;  cf.scatterMs  += dt; this.counters.scattersBuilt++; }
     else if (category === 'roads')   { cf.roads++;    cf.roadsMs    += dt; this.counters.roadsBuilt++; }
+    else if (category === 'village') { cf.village++;  cf.villageMs  += dt; }
+    else if (category === 'ruin')    { cf.ruin++;     cf.ruinMs     += dt; }
+    else if (category === 'farm')    { cf.farm++;     cf.farmMs     += dt; }
     else if (category === 'chunkMgr'){ cf.chunkMgrMs += dt; }
   }
 

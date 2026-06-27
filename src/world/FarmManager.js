@@ -1,6 +1,7 @@
-import { CHUNK_SIZE, FARM_CELL_SIZE, FARM_BUILD_BUDGET_MS } from '../config.js';
+import { CHUNK_SIZE, FARM_CELL_SIZE } from '../config.js';
 import { getFarm } from './Farms.js';
 import { buildFarmGroup, disposeFarmGroup } from './FarmMeshes.js';
+import { profiler } from '../debug/Profiler.js';
 
 // Streams standalone farms/fields exactly like RuinsManager: builds at most one
 // feature per frame within a small time budget, only once the terrain chunk
@@ -17,7 +18,7 @@ export class FarmManager {
     this._lastMaxSq = -1;
   }
 
-  update(planePos, maxDistance = Infinity, isChunkReady = null) {
+  update(planePos, maxDistance = Infinity, isChunkReady = null, gate = null) {
     const pcx = Math.floor(planePos.x / FARM_CELL_SIZE);
     const pcz = Math.floor(planePos.z / FARM_CELL_SIZE);
     const maxSq = maxDistance * maxDistance;
@@ -30,9 +31,8 @@ export class FarmManager {
       this._recomputeNeeded(pcx, pcz, planePos, maxSq);
     }
 
+    if (gate && gate.used) return;
     if (this.pending.length > 0) {
-      const tStart = performance.now();
-      const deadline = tStart + FARM_BUILD_BUDGET_MS;
       for (let i = 0; i < this.pending.length; i++) {
         const p = this.pending[i];
         if (isChunkReady) {
@@ -40,13 +40,15 @@ export class FarmManager {
           const fcz = Math.floor(p.farm.z / CHUNK_SIZE);
           if (!isChunkReady(fcx, fcz)) continue;
         }
+        const _t0 = profiler.timeBegin();
         const g = buildFarmGroup(p.farm);
+        profiler.timeEnd('farm', _t0);
         this.scene.add(g);
         this.active.set(p.key, g);
         this.pending.splice(i, 1);
+        if (gate) gate.used = true;
         break;
       }
-      if (performance.now() > deadline) return;
     }
   }
 
