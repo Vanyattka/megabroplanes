@@ -22,9 +22,9 @@ export class Hud {
     const speed = plane.velocity.length() * MS_TO_KNOTS;
     const alt = plane.position.y * M_TO_FT;
     const thr = Math.round(plane.throttle * 100);
-    if (this.speedEl) this.speedEl.textContent = `${Math.round(speed)} kt`;
-    if (this.altEl) this.altEl.textContent = `${Math.round(alt)} ft`;
-    if (this.thrEl) this.thrEl.textContent = `${thr}%`;
+    if (this.speedEl) this.speedEl.innerHTML = `${Math.round(speed)}<span class="u">kt</span>`;
+    if (this.altEl) this.altEl.innerHTML = `${Math.round(alt)}<span class="u">ft</span>`;
+    if (this.thrEl) this.thrEl.innerHTML = `${thr}<span class="u">%</span>`;
     if (this.gearEl) {
       const t = plane.gearT ?? 1;
       const transit = t > 0.02 && t < 0.98;
@@ -100,7 +100,7 @@ export class Hud {
     ctx.restore();
 
     // Fixed aircraft reference
-    ctx.strokeStyle = '#ffcc33';
+    ctx.strokeStyle = '#ffd24a';
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(cx - 44, cy);
@@ -112,18 +112,23 @@ export class Hud {
     ctx.moveTo(cx + 14, cy);
     ctx.lineTo(cx + 44, cy);
     ctx.stroke();
-    ctx.fillStyle = '#ffcc33';
+    ctx.fillStyle = '#ffd24a';
     ctx.beginPath();
     ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.restore();
 
-    // Instrument ring
-    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-    ctx.lineWidth = 2;
+    // Instrument ring — twin ring (dark seat + light rim) matching the minimap.
     ctx.beginPath();
     ctx.arc(cx, cy, 110, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.30)';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, cy, 108.5, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = 2;
     ctx.stroke();
   }
 }

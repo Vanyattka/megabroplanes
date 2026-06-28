@@ -69,6 +69,18 @@ export class Minimap {
     // Compass yaw: 0 = heading north (world -Z), +π/2 = heading east (+X).
     const yaw = Math.atan2(_fwd.x, -_fwd.z);
 
+    // The whole map is clipped to a circle, so the corners — which can show
+    // not-yet-streamed terrain — never appear, and the minimap reads as a
+    // round instrument matching the attitude indicator.
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(w / 2, h / 2, w / 2 - 1, 0, Math.PI * 2);
+    ctx.clip();
+
+    // Backing tint so any uncovered pixel reads as deep water, not transparent.
+    ctx.fillStyle = 'rgba(14, 20, 32, 0.55)';
+    ctx.fillRect(0, 0, w, h);
+
     // Everything inside this save/restore is drawn in the world-aligned
     // frame but rotated so the plane's forward direction becomes canvas-up.
     ctx.save();
@@ -76,7 +88,7 @@ export class Minimap {
     ctx.rotate(-yaw);
     ctx.translate(-w / 2, -h / 2);
 
-    ctx.imageSmoothingEnabled = false;
+    ctx.imageSmoothingEnabled = true; // soft biome blend instead of blocky pixels
     ctx.drawImage(this.terrainCanvas, 0, 0, w, h);
 
     this._drawRoads(plane);
@@ -92,9 +104,27 @@ export class Minimap {
     this._drawPlayerMarker();
     this._drawCompass(yaw);
 
-    ctx.strokeStyle = BORDER_COLOR;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(1, 1, w - 2, h - 2);
+    ctx.restore(); // end circular clip
+
+    this._drawRing(w, h);
+  }
+
+  // Twin-ring frame: a soft dark seat + a crisp light rim, matching the
+  // attitude indicator and the glass panels.
+  _drawRing(w, h) {
+    const ctx = this.ctx;
+    const cx = w / 2;
+    const cy = h / 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, w / 2 - 1.5, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.30)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, cy, w / 2 - 2.5, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.42)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
   }
 
   _redrawTerrain(plane) {

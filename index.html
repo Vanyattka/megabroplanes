@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>megabroplanes</title>
+    <title>mbplanes</title>
     <script>
       // Headless-verification aid (opt-in, off for players): when the
       // mbp:forceRaf flag is set and the tab is hidden — an automated preview
@@ -36,61 +36,108 @@
     <style>
       html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #88bbee; font-family: monospace; touch-action: none; -webkit-user-select: none; user-select: none; }
       canvas { display: block; touch-action: none; }
+      /* ---- In-flight HUD design tokens (v0.7.2) ---------------------------
+         One cohesive "soft glass" language for every in-flight element:
+         translucent blurred panels, a hairline border, consistent rounding,
+         and a single warm-gold accent. Keeps the round instruments (minimap +
+         attitude) and the info panels feeling like one friendly system. */
+      :root {
+        --hud-bg: rgba(16, 22, 34, 0.46);
+        --hud-bg-strong: rgba(13, 19, 30, 0.68);
+        --hud-border: rgba(255, 255, 255, 0.16);
+        --hud-border-strong: rgba(255, 255, 255, 0.28);
+        --hud-radius: 16px;
+        --hud-radius-sm: 11px;
+        --hud-shadow: 0 6px 22px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+        --hud-blur: blur(14px) saturate(1.3);
+        --hud-accent: #ffd24a;
+        --hud-accent-soft: rgba(255, 210, 74, 0.16);
+        --hud-text: rgba(255, 255, 255, 0.97);
+        --hud-dim: rgba(255, 255, 255, 0.55);
+        --hud-good: #45e08a;
+      }
+      /* Flight readout — bottom-left instrument panel (SPD/ALT/THR/GEAR). */
       #hud {
         position: absolute;
-        top: 12px;
-        left: 12px;
-        color: #ffffff;
-        background: rgba(0, 0, 0, 0.35);
-        padding: 10px 14px;
-        border-radius: 6px;
-        font-size: 14px;
-        line-height: 1.5;
+        bottom: 14px;
+        left: 14px;
+        color: var(--hud-text);
+        background: var(--hud-bg);
+        -webkit-backdrop-filter: var(--hud-blur);
+        backdrop-filter: var(--hud-blur);
+        border: 1px solid var(--hud-border);
+        padding: 12px 16px;
+        border-radius: var(--hud-radius);
+        box-shadow: var(--hud-shadow);
         pointer-events: none;
-        text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
       }
-      #hud .row { display: flex; justify-content: space-between; gap: 16px; min-width: 180px; }
-      #hud .label { opacity: 0.8; }
+      #hud .row { display: flex; align-items: baseline; justify-content: space-between; gap: 22px; min-width: 138px; }
+      #hud .label { font-size: 10px; letter-spacing: 2px; color: var(--hud-dim); text-transform: uppercase; }
+      #hud .row > span:last-child { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 17px; line-height: 1; letter-spacing: 0.3px; }
+      #hud .u { font-size: 10px; font-weight: 600; color: var(--hud-dim); margin-left: 3px; letter-spacing: 1px; }
+      /* Controls hint — a slim, low-key pill centred at the bottom. */
       #hint {
         position: absolute;
-        bottom: 12px;
-        left: 12px;
-        color: #ffffff;
-        background: rgba(0, 0, 0, 0.35);
-        padding: 8px 12px;
-        border-radius: 6px;
-        font-size: 12px;
-        line-height: 1.5;
+        bottom: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        max-width: min(560px, 64vw);
+        text-align: center;
+        color: var(--hud-dim);
+        background: var(--hud-bg);
+        -webkit-backdrop-filter: var(--hud-blur);
+        backdrop-filter: var(--hud-blur);
+        border: 1px solid var(--hud-border);
+        padding: 7px 18px;
+        border-radius: 999px;
+        box-shadow: var(--hud-shadow);
+        font-size: 11px;
+        letter-spacing: 0.3px;
+        line-height: 1.45;
         pointer-events: none;
-        text-shadow: 0 1px 2px rgba(0,0,0,0.6);
       }
+      body.in-race #hint { bottom: 64px; }
+      /* Settings cluster — bottom-right glass panel. */
       #settings {
         position: absolute;
-        bottom: 12px;
-        right: 12px;
-        color: #ffffff;
-        background: rgba(0, 0, 0, 0.35);
-        padding: 8px 12px;
-        border-radius: 6px;
-        font-size: 12px;
-        line-height: 1.4;
-        text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+        bottom: 14px;
+        right: 14px;
+        color: var(--hud-text);
+        background: var(--hud-bg);
+        -webkit-backdrop-filter: var(--hud-blur);
+        backdrop-filter: var(--hud-blur);
+        border: 1px solid var(--hud-border);
+        padding: 11px 12px;
+        border-radius: var(--hud-radius);
+        box-shadow: var(--hud-shadow);
+        font-size: 11px;
+        line-height: 1.45;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 134px;
       }
-      #settings label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+      #settings label { display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--hud-dim); }
+      #settings input[type="checkbox"] { accent-color: var(--hud-accent); width: 14px; height: 14px; cursor: pointer; }
       #settings button {
-        background: rgba(255, 255, 255, 0.12);
-        border: 1px solid rgba(255, 255, 255, 0.5);
-        color: #fff;
-        padding: 4px 10px;
-        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid var(--hud-border-strong);
+        color: var(--hud-text);
+        padding: 7px 12px;
+        border-radius: var(--hud-radius-sm);
         font-family: monospace;
         font-size: 11px;
-        font-weight: bold;
+        font-weight: 700;
         letter-spacing: 1px;
         cursor: pointer;
-        margin-bottom: 6px;
+        transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
       }
-      #settings button:hover { background: rgba(255, 204, 64, 0.2); border-color: #ffcc40; }
+      #settings button:hover { background: var(--hud-accent-soft); border-color: var(--hud-accent); color: #fff; }
+      #settings button:active { transform: translateY(1px); }
+      #mp-status, #audio-indicator { font-size: 10.5px; color: var(--hud-dim); letter-spacing: 0.4px; }
       /* Mobile touch UI */
       #touch-ui { position: absolute; inset: 0; pointer-events: none; }
       #touch-ui > * { pointer-events: auto; }
@@ -427,10 +474,14 @@
         left: 50%;
         transform: translate(-50%, -50%);
         color: #fff;
-        background: rgba(180, 30, 20, 0.75);
-        padding: 14px 22px;
-        border-radius: 8px;
-        font-size: 22px;
+        background: rgba(150, 28, 24, 0.55);
+        -webkit-backdrop-filter: var(--hud-blur);
+        backdrop-filter: var(--hud-blur);
+        border: 1px solid rgba(255, 120, 90, 0.55);
+        padding: 14px 24px;
+        border-radius: var(--hud-radius);
+        box-shadow: var(--hud-shadow);
+        font-size: 20px;
         font-weight: bold;
         letter-spacing: 1px;
         text-shadow: 0 2px 4px rgba(0,0,0,0.6);
@@ -440,35 +491,39 @@
       /* ---- Race mode HUD ---- */
       #btn-race {
         display: none;
-        background: rgba(255, 204, 64, 0.18);
-        border: 1px solid #ffcc40;
-        color: #fff;
-        padding: 5px 10px;
-        border-radius: 4px;
+        width: 100%;
+        background: var(--hud-accent-soft);
+        border: 1px solid rgba(255, 210, 74, 0.5);
+        color: var(--hud-text);
+        padding: 7px 12px;
+        border-radius: var(--hud-radius-sm);
         font-family: monospace;
         font-size: 11px;
-        font-weight: bold;
+        font-weight: 700;
         letter-spacing: 1px;
         cursor: pointer;
-        margin-bottom: 6px;
-        width: 100%;
+        transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
       }
-      #btn-race:hover:not(:disabled) { background: rgba(255, 204, 64, 0.34); }
-      #btn-race:disabled { opacity: 0.55; cursor: default; border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.08); }
+      #btn-race:hover:not(:disabled) { background: rgba(255, 210, 74, 0.30); border-color: var(--hud-accent); color: #fff; }
+      #btn-race:active:not(:disabled) { transform: translateY(1px); }
+      #btn-race:disabled { opacity: 0.5; cursor: default; border-color: var(--hud-border); background: rgba(255,255,255,0.06); }
       #race-status {
         position: absolute;
-        top: 12px; left: 50%; transform: translateX(-50%);
-        color: #fff;
-        background: rgba(0, 0, 0, 0.42);
+        top: 14px; left: 50%; transform: translateX(-50%);
+        color: var(--hud-text);
+        background: var(--hud-bg-strong);
+        -webkit-backdrop-filter: var(--hud-blur);
+        backdrop-filter: var(--hud-blur);
         padding: 8px 18px;
-        border-radius: 8px;
+        border-radius: 999px;
         font-family: monospace;
-        font-size: 15px;
-        letter-spacing: 1px;
+        font-size: 14px;
+        letter-spacing: 0.5px;
         text-shadow: 0 1px 2px rgba(0,0,0,0.7);
         display: none;
         pointer-events: none;
-        border: 1px solid rgba(255, 204, 64, 0.5);
+        box-shadow: var(--hud-shadow);
+        border: 1px solid rgba(255, 210, 74, 0.45);
       }
       #race-status b { color: #ffd23a; }
       #race-status .rs-fin { color: #39ff8a; font-weight: bold; }
@@ -485,18 +540,21 @@
       }
       #race-leaderboard {
         position: absolute;
-        top: 280px; left: 12px;
-        width: 160px;
-        color: #fff;
-        background: rgba(0, 0, 0, 0.42);
-        padding: 8px 10px;
-        border-radius: 6px;
+        top: 184px; left: 14px;
+        width: 158px;
+        color: var(--hud-text);
+        background: var(--hud-bg);
+        -webkit-backdrop-filter: var(--hud-blur);
+        backdrop-filter: var(--hud-blur);
+        border: 1px solid var(--hud-border);
+        padding: 9px 12px;
+        border-radius: var(--hud-radius-sm);
+        box-shadow: var(--hud-shadow);
         font-family: monospace;
         font-size: 12px;
         line-height: 1.5;
         display: none;
         pointer-events: none;
-        text-shadow: 0 1px 2px rgba(0,0,0,0.7);
       }
       #race-leaderboard .lb-title { font-weight: bold; letter-spacing: 2px; color: #ffd23a; margin-bottom: 4px; }
       #race-leaderboard .lb-row { display: flex; justify-content: space-between; gap: 8px; }
@@ -521,7 +579,7 @@
       #race-results .res-title { font-size: 22px; font-weight: bold; letter-spacing: 2px; margin-bottom: 10px; }
       #race-results .res-row.me { color: #ffd23a; font-weight: bold; }
       #race-results .res-foot { margin-top: 10px; font-size: 11px; opacity: 0.6; }
-      body.touch #race-leaderboard { top: 250px; }
+      body.touch #race-leaderboard { top: 184px; }
       /* HP bar (bottom-center during a race) */
       #race-hp {
         position: absolute;
@@ -533,7 +591,7 @@
         text-align: center;
       }
       #race-hp .hp-label { color: #fff; font-size: 11px; letter-spacing: 3px; margin-bottom: 3px; text-shadow: 0 1px 2px rgba(0,0,0,0.7); }
-      #race-hp .hp-track { height: 12px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.5); border-radius: 6px; overflow: hidden; }
+      #race-hp .hp-track { height: 11px; background: rgba(10,16,26,0.55); border: 1px solid var(--hud-border-strong); border-radius: 999px; overflow: hidden; -webkit-backdrop-filter: var(--hud-blur); backdrop-filter: var(--hud-blur); box-shadow: var(--hud-shadow); }
       #race-hp .hp-fill { height: 100%; transition: width 0.12s linear; }
       #race-crosshair {
         position: absolute;
@@ -594,13 +652,13 @@
       <div class="row"><span class="label">THR</span><span id="hud-thr">0%</span></div>
       <div class="row"><span class="label">GEAR</span><span id="hud-gear">DOWN</span></div>
     </div>
-    <div id="hint">S/W nose down/up · A/D roll · Q/E yaw · Shift/Ctrl throttle · Space brake · G gear · R reset · L lights · M mute · drag mouse to look</div>
+    <div id="hint">WASD fly · Q/E yaw · Shift/Ctrl throttle · G gear · R reset · drag to look</div>
     <div id="settings">
       <button id="btn-menu">&larr; MENU</button>
       <button id="btn-race">🏁 START RACE</button>
       <label><input type="checkbox" id="crashes-enabled" checked /> crashes</label>
-      <div id="mp-status" style="margin-top: 4px; opacity: 0.85;">mp: offline</div>
-      <div id="audio-indicator" title="M to mute" style="margin-top: 2px; opacity: 0.85;">🔈 off</div>
+      <div id="mp-status">mp: offline</div>
+      <div id="audio-indicator" title="M to mute">🔈 off</div>
     </div>
     <div id="race-status"></div>
     <div id="race-countdown"></div>
@@ -698,11 +756,11 @@
       </div>
       <div id="menu-footer-hint">WASD · QE · shift/ctrl · space · R · drag mouse to look</div>
     </div>
-    <canvas id="horizon" width="260" height="260" style="position:absolute; top:12px; right:12px; pointer-events:none;"></canvas>
+    <canvas id="horizon" width="260" height="260" style="position:absolute; top:14px; right:14px; width:184px; height:184px; pointer-events:none; filter: drop-shadow(0 6px 18px rgba(0,0,0,0.32));"></canvas>
     <canvas id="minimap" width="160" height="160"
-      style="position:absolute; top:110px; left:12px; width:160px; height:160px;
-      image-rendering: pixelated; image-rendering: crisp-edges;
-      background: rgba(0,0,0,0.4); border-radius: 4px; pointer-events:none;"></canvas>
+      style="position:absolute; top:14px; left:14px; width:158px; height:158px;
+      border-radius:50%; pointer-events:none;
+      box-shadow: 0 6px 22px rgba(0,0,0,0.30), 0 0 0 1px rgba(255,255,255,0.16);"></canvas>
     <div id="touch-ui" class="hidden">
       <div class="joy" id="joy">
         <div class="joy-base"></div>

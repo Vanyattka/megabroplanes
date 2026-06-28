@@ -7,10 +7,19 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.7.1';
+export const GAME_VERSION = '0.7.2';
 export const GAME_CODENAME = 'Golf';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 export const CHANGELOG = [
+  {
+    version: '0.7.2',
+    codename: 'Golf',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-27',
+    notes: [
+      'In-flight HUD refresh: one cohesive, softer look across every cockpit element. The minimap is now round (no more empty squares in the corners where the world hadn\'t loaded), with a gently smoothed map; it matches the round attitude indicator beside it. Speed/altitude/throttle now read as big numbers with small units on a frosted-glass panel, and the controls hint, settings and race readouts share the same rounded glass style with a warm-gold accent — and no longer overlap each other.',
+    ],
+  },
   {
     version: '0.7.1',
     codename: 'Golf',
