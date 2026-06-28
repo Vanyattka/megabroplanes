@@ -242,10 +242,12 @@ export const waterMaterial = new ShaderMaterial({
       // the slope-scaled `factor` pushes hardest) and sea shores. Without this
       // the reflective surface z-fought against the slope and shimmered. Push
       // is AWAY from camera (positive) so the waterline stays crisp rather than
-      // the water creeping up the bank.
+      // the water creeping up the bank. Bumped (was 2/3) because shorelines —
+      // and especially tiny ponds, which are almost ALL edge — still flickered:
+      // the bigger constant bias makes terrain win reliably at the waterline.
       polygonOffset: true,
-      polygonOffsetFactor: 2.0,
-      polygonOffsetUnits: 3.0,
+      polygonOffsetFactor: 3.0,
+      polygonOffsetUnits: 10.0,
 });
 
 export class Water {

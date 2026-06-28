@@ -7,7 +7,7 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.7.5';
+export const GAME_VERSION = '0.7.6';
 export const GAME_CODENAME = 'Golf';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 
@@ -16,6 +16,17 @@ export const GAME_CHANNEL = 'PRE-RELEASE';
 // CSS and markup are untouched.
 export const USE_NEW_MENU = true;
 export const CHANGELOG = [
+  {
+    version: '0.7.6',
+    codename: 'Golf',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-28',
+    notes: [
+      'Clouds are properly fluffy now — each one is a little cluster of lit puffs that reads as a real 3D volume instead of a flat cardboard sprite.',
+      'Fixed water shimmering along shorelines: the edges of lakes and rivers — and especially tiny ponds, which would flicker in and out entirely — now sit steady against the bank.',
+      'Fixed the jet\'s afterburner trail tearing sideways off the nozzle during hard turns; the flame now stays glued to the engine.',
+    ],
+  },
   {
     version: '0.7.5',
     codename: 'Golf',
@@ -898,7 +909,7 @@ export const CLOUD_SIZE_MAX = 180;
 export const CLOUD_DRIFT_SPEED = 2.0;    // m/s along CLOUD_DRIFT_DIR
 export const CLOUD_DRIFT_DIR = [1.0, 0.0, 0.35]; // normalized in Clouds.js
 export const CLOUD_OPACITY = 0.9;
-export const CLOUD_MAX_INSTANCES = 96;   // InstancedMesh pool upper bound
+export const CLOUD_MAX_INSTANCES = 1000;  // InstancedMesh pool upper bound (clouds are now ~8-13 puffs each)
 
 // Shadows
 export const PLANE_SHADOW_SIZE = 14;
