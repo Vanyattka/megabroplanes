@@ -42,6 +42,7 @@ import {
   BLOOM_THRESHOLD_DUSK,
   SHADOW_UPDATE_DIST,
   SHADOW_SUN_EPS,
+  USE_NEW_MENU,
 } from './config.js';
 import { MultiplayerClient } from './net/Client.js';
 import { RemotePlaneManager } from './net/RemotePlaneManager.js';
@@ -278,6 +279,9 @@ let gameState = 'menu';
 // clock so all clients see the same sky; in SP, the player's chosen
 // time preset applies.
 let currentMode = 'singleplayer';
+// New menu/lobby skin — gated behind a single body class so the old UI stays
+// fully intact (flip USE_NEW_MENU in config.js to revert).
+if (USE_NEW_MENU) document.body.classList.add('menu-new');
 const menu = new Menu();
 
 // Apply a time-of-day preset to the DayNight cycle (or resume auto mode).

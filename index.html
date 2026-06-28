@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>mbplanes</title>
+    <!-- New menu/lobby design fonts (used only by the body.menu-new skin). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet" />
     <script>
       // Headless-verification aid (opt-in, off for players): when the
       // mbp:forceRaf flag is set and the tab is hidden — an automated preview
@@ -643,6 +647,198 @@
       body.in-lobby #horizon, body.in-lobby #settings, body.in-lobby #touch-ui { display: none !important; }
       body.photo #race-hp, body.photo #race-crosshair, body.photo #lobby { display: none !important; }
       body.menu-open #race-hp, body.menu-open #race-crosshair, body.menu-open #lobby { display: none !important; }
+
+      /* ==================================================================
+         NEW MENU / LOBBY SKIN (v0.7.3) — everything gated behind .menu-new.
+         A soft-glass sunset "departure board". Reuses the old markup, ids
+         and JS wiring; only the look changes. USE_NEW_MENU=false in
+         config.js removes the body.menu-new class → the old UI returns.
+         ================================================================== */
+      #nm-bg, #nm-wordmark, #nm-hero { display: none; }
+      body.menu-new.menu-open #nm-bg,
+      body.menu-new.menu-open #nm-wordmark { display: block; }
+      body.menu-new.menu-open #nm-hero { display: flex; }
+      body.menu-new #menu-title,
+      body.menu-new #menu-subtitle,
+      body.menu-new #menu-footer-hint,
+      body.menu-new #menu > #menu-version { display: none; }
+
+      /* ---- living background ---- */
+      #nm-bg { position: fixed; inset: 0; z-index: 40; overflow: hidden; pointer-events: none; }
+      #nm-sky { position: absolute; inset: 0; background: linear-gradient(180deg,#0b1226 0%,#15203f 30%,#3a2f57 56%,#8a4a55 78%,#cf6e44 92%,#f0a25c 100%); }
+      #nm-glow { position: absolute; width: 90vw; height: 90vw; left: 72%; top: 86%; transform: translate(-50%,-50%); background: radial-gradient(circle at center, rgba(255,182,96,.5) 0%, rgba(0,0,0,0) 70%); animation: nmGlow 9s ease-in-out infinite; }
+      #nm-stars { position: absolute; inset: 0; opacity: .16; }
+      #nm-stars span { position: absolute; border-radius: 50%; background: #fff; animation: nmTwinkle 3s ease-in-out infinite; }
+      #nm-clouds { position: absolute; inset: 0; }
+      #nm-driftjet { position: absolute; top: 15%; left: 0; opacity: .5; animation: nmDrift 78s linear infinite; }
+      #nm-vignette { position: absolute; inset: 0; background: radial-gradient(125% 105% at 50% 26%, rgba(0,0,0,0) 52%, rgba(4,8,18,.5) 100%); }
+      @keyframes nmGlow { 0%,100%{opacity:.85;transform:translate(-50%,-50%) scale(1)} 50%{opacity:1;transform:translate(-50%,-50%) scale(1.06)} }
+      @keyframes nmTwinkle { 0%,100%{opacity:.25} 50%{opacity:1} }
+      @keyframes nmDrift { from{transform:translateX(-32vw)} to{transform:translateX(132vw)} }
+      @keyframes nmBob { 0%,100%{transform:translateY(0) rotate(-1.4deg)} 50%{transform:translateY(-15px) rotate(1.4deg)} }
+
+      /* ---- wordmark ---- */
+      #nm-wordmark { position: fixed; top: 40px; left: 54px; z-index: 52; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 24px; letter-spacing: .34em; color: #fff; text-shadow: 0 2px 18px rgba(0,0,0,.45); pointer-events: none; }
+      #nm-wordmark span { color: #ffd24a; }
+      #nm-ver { margin-top: 9px; font-family: 'Sora', sans-serif; font-size: 9.5px; letter-spacing: .3em; color: rgba(255,255,255,.5); text-transform: uppercase; font-weight: 400; }
+
+      /* ---- hero 3D plane ---- */
+      #nm-hero { position: fixed; top: 0; bottom: 0; right: 2%; width: 54%; z-index: 42; align-items: center; justify-content: center; pointer-events: none; transition: opacity .5s ease, transform .8s cubic-bezier(.4,0,.2,1); }
+      #nm-hero-canvas { width: min(560px, 82%); height: auto; aspect-ratio: 1 / 1; filter: drop-shadow(0 30px 44px rgba(0,0,0,.42)); animation: nmBob 6s ease-in-out infinite; }
+      #nm-hero-cap { position: absolute; right: 6%; bottom: 13%; text-align: right; transition: opacity .4s ease; }
+      #nm-hero-kicker { font-family: 'Sora', sans-serif; font-size: 10px; letter-spacing: .34em; text-transform: uppercase; color: #ffd24a; margin-bottom: 6px; }
+      #nm-hero-name { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 26px; color: #fff; }
+      #nm-hero-sub { font-family: 'Sora', sans-serif; font-size: 12px; color: rgba(255,255,255,.55); margin-top: 3px; }
+      /* hero only fronts the main + aircraft screens; on settings/notes it eases aside */
+      body.menu-new.nm-screen-settings #nm-hero { opacity: .28; transform: translateX(10%) scale(.9); }
+      body.menu-new.nm-screen-notes #nm-hero { opacity: 0; transform: translateX(16%) scale(.92); }
+      body.menu-new:not(.nm-screen-main) #nm-hero-cap { opacity: 0; }
+
+      /* ---- #menu → left panel stage ---- */
+      body.menu-new #menu:not(.hidden) { background: transparent; display: block; padding: 0; overflow: visible; font-family: 'Sora', sans-serif; }
+      body.menu-new #menu-main,
+      body.menu-new #menu-planes,
+      body.menu-new #menu-settings,
+      body.menu-new #menu-notes {
+        position: absolute; left: 54px; top: 50%; transform: translateY(-50%);
+        width: min(46%, 560px); align-items: stretch; text-align: left; gap: 20px;
+      }
+      body.menu-new #menu-planes, body.menu-new #menu-settings, body.menu-new #menu-notes { max-width: none; }
+
+      /* section kickers + titles */
+      body.menu-new #menu h2 { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 34px; letter-spacing: .01em; text-transform: none; }
+      body.menu-new #menu h3 { font-family: 'Sora', sans-serif; font-weight: 400; font-size: 10px; letter-spacing: .24em; text-transform: uppercase; color: rgba(255,255,255,.5); opacity: 1; margin-bottom: -6px; }
+
+      /* mode toggle → pill */
+      body.menu-new #mode-toggle { width: fit-content; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; background: rgba(0,0,0,.22); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+      body.menu-new .mode-btn { font-family: 'Sora', sans-serif; font-weight: 600; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; padding: 11px 20px; color: rgba(255,255,255,.55); border-radius: 999px; }
+      body.menu-new .mode-btn.selected { background: rgba(255,210,74,.18); color: #ffd24a; }
+      body.menu-new .mode-btn:hover { color: #ffe8b0; }
+
+      /* call sign input → underlined */
+      body.menu-new #name-input { background: transparent; border: none; border-bottom: 1px solid rgba(255,255,255,.22); border-radius: 0; text-align: left; padding: 8px 2px; width: 240px; font-family: 'Sora', sans-serif; font-weight: 500; font-size: 13px; letter-spacing: .14em; }
+      body.menu-new #name-input:focus { border-bottom-color: rgba(255,210,74,.6); }
+      body.menu-new #name-input::placeholder { color: rgba(255,255,255,.32); letter-spacing: .16em; }
+
+      /* departure-board nav (the main menu buttons) */
+      body.menu-new #menu-main { gap: 18px; }
+      body.menu-new #menu-main .menu-btn {
+        background: transparent; border: none; padding: 0; min-width: 0; width: fit-content;
+        text-align: left; text-transform: none; border-radius: 0;
+        font-family: 'Space Grotesk', sans-serif; font-weight: 500; font-size: 21px; letter-spacing: .02em;
+        color: rgba(255,255,255,.82); transition: transform .22s ease, color .2s ease;
+        display: flex; align-items: baseline; gap: 16px;
+      }
+      body.menu-new #menu-main .menu-btn:hover { transform: translateX(8px); color: #fff; background: transparent; border: none; }
+      body.menu-new #menu-main .menu-btn:active { transform: translateX(8px) scale(.99); }
+      body.menu-new #btn-start { font-weight: 600; font-size: clamp(30px,3.4vw,40px); color: #fff; text-shadow: 0 2px 24px rgba(0,0,0,.4); }
+      body.menu-new #btn-start::after { content: '↗'; color: #ffd24a; font-size: .55em; margin-left: -4px; }
+      body.menu-new #btn-continue { font-weight: 500; font-size: 21px; color: rgba(255,255,255,.92); }
+      body.menu-new #btn-planes::before { content: '01'; }
+      body.menu-new #btn-settings::before { content: '02'; }
+      body.menu-new #btn-notes::before { content: '03'; }
+      body.menu-new #btn-planes::before, body.menu-new #btn-settings::before, body.menu-new #btn-notes::before {
+        color: #ffd24a; opacity: .6; font-family: 'Space Grotesk', sans-serif; font-size: 12px; font-weight: 500; letter-spacing: .1em; min-width: 22px;
+      }
+
+      /* back links on sub-screens */
+      body.menu-new #btn-back-planes, body.menu-new #btn-back-settings, body.menu-new #btn-back-notes {
+        background: transparent; border: none; padding: 0; min-width: 0; width: fit-content; align-self: flex-start;
+        color: rgba(255,255,255,.55); font-family: 'Sora', sans-serif; font-weight: 600; font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+      }
+      body.menu-new #btn-back-planes::before, body.menu-new #btn-back-settings::before, body.menu-new #btn-back-notes::before { content: '‹ '; }
+      body.menu-new #btn-back-planes:hover, body.menu-new #btn-back-settings:hover, body.menu-new #btn-back-notes:hover { color: #fff; background: transparent; border: none; }
+
+      /* aircraft rows (the old .plane-card, canvases hidden — hero shows the 3D) */
+      body.menu-new #plane-list { flex-direction: column; gap: 10px; width: 100%; max-width: none; }
+      body.menu-new .plane-card {
+        display: flex; align-items: center; gap: 18px; flex-direction: row;
+        padding: 14px 18px; width: 100%; max-width: none; border-radius: 16px;
+        border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.02); box-shadow: none;
+        transition: transform .25s ease, border-color .25s ease, background .25s ease;
+      }
+      body.menu-new .plane-card:hover { transform: translateX(4px); border-color: rgba(255,255,255,.2); background: rgba(255,255,255,.04); }
+      body.menu-new .plane-card.selected { border-color: rgba(255,210,74,.5); background: rgba(255,210,74,.10); transform: none; }
+      body.menu-new .plane-card .pc-canvas { display: none; }
+      body.menu-new .plane-card .pc-name { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 19px; letter-spacing: 0; margin: 0; color: #fff; }
+      body.menu-new .plane-card .pc-desc { font-family: 'Sora', sans-serif; font-size: 10.5px; letter-spacing: .08em; color: rgba(255,255,255,.5); text-transform: uppercase; margin-top: 3px; }
+      body.menu-new .plane-card .pc-tagline { display: none; }
+      body.menu-new .plane-card::after { content: '●'; margin-left: auto; color: #ffd24a; font-size: 13px; opacity: 0; transition: opacity .2s ease; }
+      body.menu-new .plane-card.selected::after { opacity: 1; }
+
+      /* livery swatches */
+      body.menu-new #color-list, body.menu-new #time-list, body.menu-new #gfx-list, body.menu-new #view-list { gap: 10px; justify-content: flex-start; }
+      body.menu-new .color-swatch { width: 30px; height: 30px; border-radius: 50%; border: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); transition: transform .15s ease, box-shadow .2s ease; }
+      body.menu-new .color-swatch:hover { transform: scale(1.12); }
+      body.menu-new .color-swatch.selected { box-shadow: 0 0 0 2px #0a1020, 0 0 0 4px #ffd24a; border: none; }
+
+      /* chips (time / graphics / view) */
+      body.menu-new .time-btn {
+        font-family: 'Sora', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
+        padding: 9px 15px; border-radius: 999px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.04); color: rgba(255,255,255,.66);
+        transition: all .2s ease;
+      }
+      body.menu-new .time-btn:hover { border-color: rgba(255,210,74,.6); color: #fff; }
+      body.menu-new .time-btn.selected { border-color: rgba(255,210,74,.85); background: rgba(255,210,74,.16); color: #ffd24a; }
+
+      /* seed row */
+      body.menu-new #seed-row { gap: 14px; }
+      body.menu-new #seed-current { font-family: 'Space Grotesk', sans-serif; color: #ffd24a; font-weight: 600; }
+      body.menu-new #btn-regen-seed { border-radius: 999px; }
+      body.menu-new #time-mp-note, body.menu-new #seed-mp-note { font-family: 'Sora', sans-serif; font-style: italic; color: rgba(255,255,255,.5); text-align: left; }
+
+      /* release-notes cards */
+      body.menu-new #menu-notes { width: min(46%, 560px); }
+      body.menu-new #notes-list { max-height: 56vh; }
+      body.menu-new .note-release { border: 1px solid rgba(255,255,255,.1); border-radius: 14px; background: rgba(0,0,0,.18); padding: 15px 18px; }
+      body.menu-new .note-ver { font-family: 'Space Grotesk', sans-serif; font-size: 15px; font-weight: 600; }
+      body.menu-new .note-ver .nv-code { color: #ffd24a; }
+      body.menu-new .note-badge { background: rgba(255,210,74,.18); border-color: rgba(255,210,74,.6); color: #ffe8b0; border-radius: 999px; }
+      body.menu-new .note-list { font-family: 'Sora', sans-serif; font-size: 12.5px; line-height: 1.6; color: rgba(255,255,255,.78); }
+
+      /* ---- race lobby ---- */
+      body.menu-new.in-lobby #nm-bg, body.menu-new.in-lobby #nm-wordmark { display: block; }
+      body.menu-new #lobby { background: transparent; align-items: flex-start; justify-content: center; gap: 15px; padding: 104px 54px 34px; font-family: 'Sora', sans-serif; }
+      body.menu-new #lobby > #lobby-title { margin-top: 6px; }
+      body.menu-new #lobby-title { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: clamp(28px,3.4vw,38px); letter-spacing: .01em; text-transform: none; margin: 0; }
+      body.menu-new #lobby-title::before { content: 'Multiplayer · Combat Race'; display: block; font-family: 'Sora', sans-serif; font-size: 10px; letter-spacing: .32em; text-transform: uppercase; color: #ffd24a; margin-bottom: 7px; font-weight: 400; }
+      body.menu-new #lobby-timer { display: flex; align-items: center; gap: 10px; color: rgba(255,255,255,.85); font-size: 13px; letter-spacing: .04em; margin: 2px 0 2px; }
+      body.menu-new #lobby-timer::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #45e08a; box-shadow: 0 0 10px #45e08a; animation: nmPulse 1.6s ease-in-out infinite; flex: none; }
+      @keyframes nmPulse { 0%,100%{opacity:.5;transform:scale(.85)} 50%{opacity:1;transform:scale(1)} }
+      body.menu-new .lobby-cols { gap: 18px; max-width: min(64vw, 780px); justify-content: flex-start; }
+      body.menu-new .lobby-panel { background: rgba(8,14,28,.42); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,.12); border-radius: 18px; padding: 15px 18px; box-shadow: 0 18px 50px rgba(0,0,0,.3); min-width: 250px; }
+      body.menu-new .lobby-panel h3 { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; opacity: 1; color: #fff; margin: 14px 0 10px; }
+      body.menu-new .lobby-panel h3:first-child { margin-top: 0; }
+      body.menu-new .lm-row.me { color: #ffd24a; }
+      body.menu-new .lm-row .lm-vote { font-family: 'Sora', sans-serif; font-size: 10px; letter-spacing: .06em; color: rgba(255,255,255,.4); text-transform: uppercase; }
+      body.menu-new .lobby-opt { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.14); color: rgba(255,255,255,.66); padding: 8px 14px; border-radius: 999px; font-family: 'Sora', sans-serif; font-weight: 600; font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; }
+      body.menu-new .lobby-opt:hover { border-color: rgba(255,210,74,.6); color: #fff; }
+      body.menu-new .lobby-opt.sel { border-color: rgba(255,210,74,.85); background: rgba(255,210,74,.16); color: #ffd24a; }
+      body.menu-new .lobby-swatch { width: 28px; height: 28px; border: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); }
+      body.menu-new .lobby-swatch.sel { box-shadow: 0 0 0 2px #0a1020, 0 0 0 4px #ffd24a; }
+      body.menu-new #lobby-vote-note { font-family: 'Sora', sans-serif; color: #ffd24a; opacity: .9; }
+      body.menu-new .lobby-actions { gap: 14px; align-items: center; margin-top: 4px; flex-wrap: wrap; }
+      body.menu-new #lobby-start { padding: 14px 34px; border-radius: 999px; border: none; background: linear-gradient(120deg,#ffd24a,#ff9a5a); color: #1a1206; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; box-shadow: 0 10px 30px rgba(255,180,80,.3); min-width: 0; cursor: pointer; transition: transform .15s ease, box-shadow .2s ease; }
+      body.menu-new #lobby-start::after { content: ' ↗'; }
+      body.menu-new #lobby-start:hover { transform: translateY(-2px); box-shadow: 0 14px 38px rgba(255,180,80,.45); background: linear-gradient(120deg,#ffd24a,#ff9a5a); }
+      body.menu-new #lobby-leave { padding: 14px 26px; border-radius: 999px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.04); color: rgba(255,255,255,.82); font-family: 'Sora', sans-serif; font-weight: 600; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; min-width: 0; cursor: pointer; }
+      body.menu-new #lobby-leave:hover { border-color: rgba(255,255,255,.45); color: #fff; background: rgba(255,255,255,.06); }
+      body.menu-new #lobby-hint { font-family: 'Sora', sans-serif; color: rgba(255,255,255,.42); letter-spacing: .04em; text-align: left; max-width: 600px; }
+
+      /* responsive — stack on narrow / touch */
+      @media (max-width: 760px) {
+        body.menu-new #lobby { padding: 64px 18px 24px; align-items: stretch; }
+        body.menu-new .lobby-cols { max-width: none; flex-direction: column; }
+        body.menu-new #nm-hero { top: 0; right: 0; left: 0; width: 100%; height: 42%; bottom: auto; }
+        body.menu-new #nm-hero-canvas { width: 64%; }
+        body.menu-new #nm-hero-cap { display: none; }
+        body.menu-new #nm-wordmark { top: 18px; left: 20px; font-size: 19px; }
+        body.menu-new #menu-main, body.menu-new #menu-planes, body.menu-new #menu-settings, body.menu-new #menu-notes {
+          left: 0; right: 0; top: 43%; bottom: 0; width: 100%; transform: none;
+          padding: 14px 20px env(safe-area-inset-bottom,18px); overflow-y: auto; justify-content: flex-start;
+        }
+        body.menu-new.nm-screen-settings #nm-hero, body.menu-new.nm-screen-notes #nm-hero { opacity: 0; }
+      }
     </style>
   </head>
   <body>
@@ -667,28 +863,28 @@
     <div id="race-leaderboard"></div>
     <div id="race-results"></div>
     <div id="lobby" class="hidden">
-      <h1 id="lobby-title">RACE LOBBY</h1>
+      <h1 id="lobby-title">Race Lobby</h1>
       <p id="lobby-timer">Waiting for players …</p>
       <div class="lobby-cols">
         <div class="lobby-panel">
-          <h3>PILOTS</h3>
+          <h3>Pilots</h3>
           <div id="lobby-members"></div>
         </div>
         <div class="lobby-panel">
-          <h3>VOTE — AIRCRAFT</h3>
+          <h3>Vote · Aircraft</h3>
           <div id="lobby-plane" class="lobby-opts"></div>
-          <h3>VOTE — TIME OF DAY</h3>
+          <h3>Vote · Time of day</h3>
           <div id="lobby-time" class="lobby-opts"></div>
-          <h3>VOTE — FLAGS</h3>
+          <h3>Vote · Flags</h3>
           <div id="lobby-gates" class="lobby-opts"></div>
-          <h3>YOUR COLOR</h3>
+          <h3>Your livery</h3>
           <div id="lobby-color" class="lobby-swatches"></div>
           <div id="lobby-vote-note"></div>
         </div>
       </div>
       <div class="lobby-actions">
-        <button class="menu-btn primary" id="lobby-start">START NOW</button>
-        <button class="menu-btn" id="lobby-leave">LEAVE LOBBY</button>
+        <button class="menu-btn primary" id="lobby-start">Start Now</button>
+        <button class="menu-btn" id="lobby-leave">Leave Lobby</button>
       </div>
       <p id="lobby-hint">Everyone races the majority-voted aircraft + time on a separate course. Fly through the gold gates · SPACE shoots · don't get shot down.</p>
     </div>
@@ -708,6 +904,32 @@
       body.photo #race-leaderboard,
       body.photo #race-results { display: none !important; }
     </style>
+    <!-- ===== New menu/lobby visual layers (v0.7.3). Shown only under
+         body.menu-new while a menu/lobby is open; the old menu markup below is
+         left fully intact and just hidden by the new-skin CSS. ===== -->
+    <div id="nm-bg" aria-hidden="true">
+      <div id="nm-sky"></div>
+      <div id="nm-glow"></div>
+      <div id="nm-stars"></div>
+      <div id="nm-clouds"></div>
+      <div id="nm-driftjet">
+        <svg width="42" height="42" viewBox="0 0 240 280" style="overflow:visible;">
+          <polygon points="120,14 134,70 136,228 104,228 106,70" fill="rgba(255,255,255,.55)"/>
+          <polygon points="120,120 26,214 86,214 120,178" fill="rgba(255,255,255,.5)"/>
+          <polygon points="120,120 214,214 154,214 120,178" fill="rgba(255,255,255,.5)"/>
+        </svg>
+      </div>
+      <div id="nm-vignette"></div>
+    </div>
+    <div id="nm-wordmark" aria-hidden="true">MB<span>PLANES</span><div id="nm-ver"></div></div>
+    <div id="nm-hero" aria-hidden="true">
+      <canvas id="nm-hero-canvas" width="560" height="560"></canvas>
+      <div id="nm-hero-cap">
+        <div id="nm-hero-kicker">Now boarding</div>
+        <div id="nm-hero-name"></div>
+        <div id="nm-hero-sub"></div>
+      </div>
+    </div>
     <div id="menu">
       <h1 id="menu-title">MBPlanes</h1>
       <p id="menu-subtitle">fly · drift · explode · vibes</p>
@@ -718,41 +940,41 @@
           <button class="mode-btn" data-mode="multiplayer">MULTIPLAYER</button>
         </div>
         <input id="name-input" type="text" maxlength="16" placeholder="YOUR NAME" autocomplete="off" spellcheck="false" />
-        <button class="menu-btn primary" id="btn-start">START GAME</button>
-        <button class="menu-btn" id="btn-continue" hidden>CONTINUE</button>
-        <button class="menu-btn" id="btn-planes">PLANES</button>
-        <button class="menu-btn" id="btn-settings">SETTINGS</button>
-        <button class="menu-btn" id="btn-notes">RELEASE NOTES</button>
+        <button class="menu-btn primary" id="btn-start">Start Game</button>
+        <button class="menu-btn" id="btn-continue" hidden>Continue</button>
+        <button class="menu-btn" id="btn-planes">Aircraft</button>
+        <button class="menu-btn" id="btn-settings">Settings</button>
+        <button class="menu-btn" id="btn-notes">Release Notes</button>
       </div>
       <div id="menu-planes" class="hidden">
-        <h2>AIRCRAFT</h2>
+        <h2>Aircraft</h2>
         <div id="plane-list"></div>
-        <h3>BODY COLOR</h3>
+        <h3>Livery</h3>
         <div id="color-list"></div>
-        <button class="menu-btn" id="btn-back-planes">BACK</button>
+        <button class="menu-btn" id="btn-back-planes">Back</button>
       </div>
       <div id="menu-settings" class="hidden">
-        <h2>SETTINGS</h2>
-        <h3>TIME OF DAY</h3>
+        <h2>Settings</h2>
+        <h3>Time of day</h3>
         <div id="time-list"></div>
         <div id="time-mp-note" style="display:none;">Time of day is synchronized across all players in multiplayer.</div>
-        <h3>GRAPHICS</h3>
+        <h3>Graphics</h3>
         <div id="gfx-list"></div>
-        <h3>VIEW DISTANCE</h3>
+        <h3>View distance</h3>
         <div id="view-list"></div>
-        <h3>WORLD SEED</h3>
+        <h3>World seed</h3>
         <div id="seed-row">
           <span>seed:</span>
           <span id="seed-current">default</span>
-          <button class="time-btn" id="btn-regen-seed">REGENERATE</button>
+          <button class="time-btn" id="btn-regen-seed">Regenerate</button>
         </div>
         <div id="seed-mp-note" style="display:none;">World seed is shared by everyone in multiplayer.</div>
-        <button class="menu-btn" id="btn-back-settings">BACK</button>
+        <button class="menu-btn" id="btn-back-settings">Back</button>
       </div>
       <div id="menu-notes" class="hidden">
-        <h2>RELEASE NOTES</h2>
+        <h2>Release Notes</h2>
         <div id="notes-list"></div>
-        <button class="menu-btn" id="btn-back-notes">BACK</button>
+        <button class="menu-btn" id="btn-back-notes">Back</button>
       </div>
       <div id="menu-footer-hint">WASD · QE · shift/ctrl · space · R · drag mouse to look</div>
     </div>

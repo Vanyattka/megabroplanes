@@ -94,6 +94,13 @@ export class Menu {
 
     document.body.classList.add('menu-open');
     this._refreshMainButtons();
+
+    // New skin (v0.7.3) — gated by the body.menu-new class (main.js sets it
+    // from USE_NEW_MENU). All new-skin work lives behind this.newSkin so the
+    // old UI is byte-for-byte unchanged when the flag is off.
+    this.newSkin = document.body.classList.contains('menu-new');
+    this._heroRaf = null;
+    if (this.newSkin) this._setupNewSkin();
   }
 
   getSelection() {
@@ -113,12 +120,14 @@ export class Menu {
     this.root.classList.remove('hidden');
     document.body.classList.add('menu-open');
     this._showMain();
+    if (this.newSkin) this._startHeroRaf();
   }
 
   hide() {
     this.root.classList.add('hidden');
     document.body.classList.remove('menu-open');
     this._stopRaf();
+    this._stopHeroRaf();
   }
 
   setContinueAvailable(on) {
@@ -137,6 +146,7 @@ export class Menu {
     this.settingsScreen.classList.add('hidden');
     if (this.notesScreen) this.notesScreen.classList.add('hidden');
     this._stopRaf();
+    this._nmSetScreen('main');
   }
   _showPlanes() {
     this.main.classList.add('hidden');
@@ -145,6 +155,7 @@ export class Menu {
     if (this.notesScreen) this.notesScreen.classList.add('hidden');
     this._ensurePreviews();
     this._startRaf();
+    this._nmSetScreen('planes');
   }
   _showSettings() {
     this.main.classList.add('hidden');
@@ -152,6 +163,7 @@ export class Menu {
     this.settingsScreen.classList.remove('hidden');
     if (this.notesScreen) this.notesScreen.classList.add('hidden');
     this._stopRaf();
+    this._nmSetScreen('settings');
   }
   _showNotes() {
     this.main.classList.add('hidden');
@@ -159,6 +171,7 @@ export class Menu {
     this.settingsScreen.classList.add('hidden');
     if (this.notesScreen) this.notesScreen.classList.remove('hidden');
     this._stopRaf();
+    this._nmSetScreen('notes');
   }
 
   _renderVersion() {
@@ -236,6 +249,7 @@ export class Menu {
   }
 
   _ensurePreviews() {
+    if (this.newSkin) return; // new skin uses the single hero preview, not per-card canvases
     if (this._previewsInitialized) return;
     const cards = this.planeList.querySelectorAll('.plane-card');
     cards.forEach((card) => {
@@ -248,6 +262,7 @@ export class Menu {
   }
 
   _startRaf() {
+    if (this.newSkin) return; // hero preview has its own loop
     if (this._rafId != null) return;
     this._lastRaf = performance.now();
     const loop = () => {
@@ -303,6 +318,7 @@ export class Menu {
       btn.addEventListener('click', () => {
         this.selectedTimePreset = key;
         this._updateTimePresets();
+        this._nmUpdateSky();
         save({
           type: this.selectedType,
           color: this.selectedColor,
@@ -377,6 +393,11 @@ export class Menu {
       mode: this.selectedMode,
     });
     for (const { preview } of this.previews) preview.setColor(this.selectedColor);
+    if (this.newSkin && this.heroPreview) {
+      this.heroPreview.setType(this.selectedType);
+      this.heroPreview.setColor(this.selectedColor);
+      this._nmUpdateHeroCaption();
+    }
     if (this.onChange) this.onChange(this.getSelection());
   }
 
@@ -455,5 +476,114 @@ export class Menu {
     if (this.btnRegen) {
       this.btnRegen.addEventListener('click', () => { if (this.onRegenerate) this.onRegenerate(); });
     }
+  }
+
+  // ---- new skin (v0.7.3) -------------------------------------------------
+  _setupNewSkin() {
+    const ver = document.getElementById('nm-ver');
+    if (ver) ver.textContent = `v${GAME_VERSION} · ${GAME_CODENAME} · ${GAME_CHANNEL}`;
+    this._nmBuildBackground();
+    this._nmInitHero();
+    this._nmSetScreen('main');
+    this._nmUpdateSky();
+    this._startHeroRaf();
+  }
+
+  _nmBuildBackground() {
+    const stars = document.getElementById('nm-stars');
+    const clouds = document.getElementById('nm-clouds');
+    // deterministic starfield + cloud band, matching the design mockups
+    let seed = 20260628;
+    const rnd = () => { seed = (seed * 1664525 + 1013904223) & 0x7fffffff; return seed / 0x7fffffff; };
+    if (stars && !stars.childElementCount) {
+      let html = '';
+      for (let i = 0; i < 30; i++) {
+        const x = (rnd() * 100).toFixed(2), y = (rnd() * 48).toFixed(2), s = (rnd() * 1.6 + 0.7).toFixed(2);
+        const d = (rnd() * 4).toFixed(2), t = (rnd() * 3 + 2.6).toFixed(2);
+        html += `<span style="left:${x}%;top:${y}%;width:${s}px;height:${s}px;box-shadow:0 0 ${s * 2.4}px #fff;animation-duration:${t}s;animation-delay:${d}s;"></span>`;
+      }
+      stars.innerHTML = html;
+    }
+    if (clouds && !clouds.childElementCount) {
+      const cl = [
+        { top: '13%', w: 360, o: 0.10, b: 34, dur: 120, delay: 0 },
+        { top: '29%', w: 250, o: 0.08, b: 26, dur: 92, delay: -30 },
+        { top: '50%', w: 440, o: 0.07, b: 46, dur: 165, delay: -70 },
+        { top: '64%', w: 300, o: 0.10, b: 30, dur: 112, delay: -18 },
+        { top: '8%', w: 210, o: 0.06, b: 22, dur: 140, delay: -95 },
+      ];
+      clouds.innerHTML = cl.map((c) =>
+        `<div style="position:absolute;left:0;top:${c.top};width:${c.w}px;height:${c.w * 0.4}px;background:radial-gradient(ellipse at center, rgba(255,255,255,${c.o}) 0%, rgba(255,255,255,0) 70%);filter:blur(${c.b}px);animation:nmDrift ${c.dur}s linear ${c.delay}s infinite;"></div>`
+      ).join('');
+    }
+  }
+
+  _nmInitHero() {
+    const canvas = document.getElementById('nm-hero-canvas');
+    if (!canvas) return;
+    this.heroPreview = new PlanePreview(canvas, this.selectedType, this.selectedColor);
+    this._nmUpdateHeroCaption();
+  }
+
+  _nmUpdateHeroCaption() {
+    const t = PLANE_TYPES[this.selectedType];
+    if (!t) return;
+    const nameEl = document.getElementById('nm-hero-name');
+    const subEl = document.getElementById('nm-hero-sub');
+    if (nameEl) nameEl.textContent = t.name;
+    if (subEl) subEl.textContent = t.tagline || t.description || '';
+  }
+
+  _nmSetScreen(name) {
+    if (!this.newSkin) return;
+    const b = document.body;
+    b.classList.remove('nm-screen-main', 'nm-screen-planes', 'nm-screen-settings', 'nm-screen-notes');
+    b.classList.add('nm-screen-' + name);
+  }
+
+  _nmUpdateSky() {
+    if (!this.newSkin) return;
+    const sky = this._skyFor(this.selectedTimePreset);
+    const skyEl = document.getElementById('nm-sky');
+    const glowEl = document.getElementById('nm-glow');
+    const starsEl = document.getElementById('nm-stars');
+    if (skyEl) skyEl.style.background = sky.g;
+    if (glowEl) {
+      glowEl.style.background = `radial-gradient(circle at center, ${sky.glow} 0%, rgba(0,0,0,0) 70%)`;
+      glowEl.style.left = sky.gx;
+      glowEl.style.top = sky.gy;
+    }
+    if (starsEl) starsEl.style.opacity = String(sky.stars);
+  }
+
+  _skyFor(t) {
+    const m = {
+      auto: { g: 'linear-gradient(180deg,#0b1226 0%,#15203f 30%,#3a2f57 56%,#8a4a55 78%,#cf6e44 92%,#f0a25c 100%)', glow: 'rgba(255,182,96,.5)', gx: '72%', gy: '86%', stars: 0.16 },
+      sunrise: { g: 'linear-gradient(180deg,#2a2a5c 0%,#5a3f76 34%,#9a4f72 60%,#e3785a 82%,#ffb072 100%)', glow: 'rgba(255,150,110,.55)', gx: '50%', gy: '94%', stars: 0.05 },
+      morning: { g: 'linear-gradient(180deg,#1d3a68 0%,#3d6aa6 40%,#7ea8d8 72%,#cfe6f5 100%)', glow: 'rgba(255,242,205,.5)', gx: '70%', gy: '80%', stars: 0 },
+      day: { g: 'linear-gradient(180deg,#1f5fb0 0%,#4f8bd6 42%,#88b6e6 74%,#cfe8f8 100%)', glow: 'rgba(255,250,228,.55)', gx: '76%', gy: '18%', stars: 0 },
+      sunset: { g: 'linear-gradient(180deg,#221a44 0%,#5a2f5e 34%,#9c3f55 58%,#d9663f 82%,#ffb15c 100%)', glow: 'rgba(255,150,80,.55)', gx: '50%', gy: '95%', stars: 0.08 },
+      night: { g: 'linear-gradient(180deg,#04081a 0%,#0a1430 40%,#101f3e 72%,#1b2c4e 100%)', glow: 'rgba(155,185,245,.4)', gx: '68%', gy: '28%', stars: 1 },
+    };
+    return m[t] || m.auto;
+  }
+
+  _startHeroRaf() {
+    if (!this.newSkin || !this.heroPreview || this._heroRaf != null) return;
+    let last = performance.now();
+    const loop = () => {
+      if (!this.isOpen()) { this._heroRaf = null; return; }
+      const now = performance.now();
+      const dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      this.heroPreview.animate(dt);
+      this._heroRaf = requestAnimationFrame(loop);
+    };
+    this._heroRaf = requestAnimationFrame(loop);
+  }
+
+  _stopHeroRaf() {
+    if (this._heroRaf != null) cancelAnimationFrame(this._heroRaf);
+    this._heroRaf = null;
   }
 }

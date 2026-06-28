@@ -7,10 +7,24 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.7.2';
+export const GAME_VERSION = '0.7.3';
 export const GAME_CODENAME = 'Golf';
 export const GAME_CHANNEL = 'PRE-RELEASE';
+
+// New main-menu + race-lobby skin (v0.7.3). Flip to false to fall straight back
+// to the old UI — everything is gated behind the body.menu-new class, the old
+// CSS and markup are untouched.
+export const USE_NEW_MENU = true;
 export const CHANGELOG = [
+  {
+    version: '0.7.3',
+    codename: 'Golf',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-28',
+    notes: [
+      'New main menu & race lobby: a calmer, friendlier "departure board" over a living sunset sky — drifting clouds, a passing jet, a soft glow that shifts with the time of day you pick. Your chosen aircraft now floats beside the menu as the real 3D model. The race lobby gets the same treatment: frosted-glass panels, gold accents and clearer pilot/vote/livery sections. Same buttons and flow as before — just a much nicer look.',
+    ],
+  },
   {
     version: '0.7.2',
     codename: 'Golf',
