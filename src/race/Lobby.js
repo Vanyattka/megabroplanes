@@ -26,6 +26,8 @@ export class Lobby {
     this.voteNoteEl = document.getElementById('lobby-vote-note');
 
     this.onLeave = null;
+    // Wired by main.js to spin the lead-voted plane in the shared 3D hero.
+    this.onHero = null;
     this._mine = { plane: null, time: null, color: null, gates: null };
 
     this._buildOptionButtons();
@@ -149,6 +151,13 @@ export class Lobby {
             ? `Waiting for players …  (${r.members.length}/${r.full}) — host can start anytime`
             : `(${r.members.length}/${r.full})`;
       }
+    }
+
+    // Spin the lead-voted plane (in my colour) in the shared 3D hero.
+    if (this.onHero) {
+      const heroPlane = (r.vote && r.vote.plane) || selPlane || this._mine.plane;
+      const heroColor = selColor != null ? selColor : this._mine.color;
+      if (heroPlane) this.onHero(heroPlane, heroColor);
     }
   }
 }

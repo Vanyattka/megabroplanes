@@ -684,8 +684,14 @@
 
       /* ---- hero 3D plane ---- */
       #nm-hero { position: fixed; top: 0; bottom: 0; right: 2%; width: 54%; z-index: 42; align-items: center; justify-content: center; pointer-events: none; transition: opacity .5s ease, transform .8s cubic-bezier(.4,0,.2,1); }
+      #nm-hero-roll { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; will-change: transform, opacity; }
       #nm-hero-canvas { width: min(560px, 82%); height: auto; aspect-ratio: 1 / 1; filter: drop-shadow(0 30px 44px rgba(0,0,0,.42)); animation: nmBob 6s ease-in-out infinite; }
       #nm-hero-cap { position: absolute; right: 6%; bottom: 13%; text-align: right; transition: opacity .4s ease; }
+      /* lobby reuses the rotating hero (the lead/voted plane), no caption */
+      body.menu-new.in-lobby #nm-hero { display: flex; right: 0; width: 40%; }
+      body.menu-new.in-lobby #nm-hero-cap { display: none; }
+      body.menu-new.in-lobby #nm-hero-canvas { width: min(440px, 86%); }
+      body.menu-new.in-lobby .lobby-cols { max-width: min(55vw, 690px); }
       #nm-hero-kicker { font-family: 'Sora', sans-serif; font-size: 10px; letter-spacing: .34em; text-transform: uppercase; color: #ffd24a; margin-bottom: 6px; }
       #nm-hero-name { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 26px; color: #fff; }
       #nm-hero-sub { font-family: 'Sora', sans-serif; font-size: 12px; color: rgba(255,255,255,.55); margin-top: 3px; }
@@ -923,7 +929,7 @@
     </div>
     <div id="nm-wordmark" aria-hidden="true">MB<span>PLANES</span><div id="nm-ver"></div></div>
     <div id="nm-hero" aria-hidden="true">
-      <canvas id="nm-hero-canvas" width="560" height="560"></canvas>
+      <div id="nm-hero-roll"><canvas id="nm-hero-canvas" width="560" height="560"></canvas></div>
       <div id="nm-hero-cap">
         <div id="nm-hero-kicker">Now boarding</div>
         <div id="nm-hero-name"></div>

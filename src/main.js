@@ -413,6 +413,10 @@ function updateMpPhase() {
     inLobby = true;
     lobby.show();
     document.body.classList.add('in-lobby');
+    // Spin the player's plane in the shared hero straight away (the lobby
+    // render then keeps it on the lead-voted plane).
+    const sel = menu.getSelection();
+    menu.heroSet(sel.type, lobby.getMyColor() ?? sel.color);
   } else {
     inLobby = false;
     lobby.hide();
@@ -433,6 +437,8 @@ if (raceBtn) {
     lobby.join(menu.getSelection());
   });
 }
+// Spin the lead-voted plane in the shared 3D hero while in the lobby.
+lobby.onHero = (plane, color) => menu.heroSet(plane, color);
 lobby.onLeave = () => {
   mp.leaveLobby();
   // The server only broadcasts lobby updates to remaining members, so our

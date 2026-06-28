@@ -7,7 +7,7 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.7.3';
+export const GAME_VERSION = '0.7.4';
 export const GAME_CODENAME = 'Golf';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 
@@ -16,6 +16,15 @@ export const GAME_CHANNEL = 'PRE-RELEASE';
 // CSS and markup are untouched.
 export const USE_NEW_MENU = true;
 export const CHANGELOG = [
+  {
+    version: '0.7.4',
+    codename: 'Golf',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-28',
+    notes: [
+      'Menu polish: the showcased aircraft no longer gets clipped by an invisible edge as it spins (the camera now frames the whole plane at every angle), changing aircraft plays a smooth slot-machine roll, and the race lobby now spins the lead-voted plane in 3D just like the main menu.',
+    ],
+  },
   {
     version: '0.7.3',
     codename: 'Golf',

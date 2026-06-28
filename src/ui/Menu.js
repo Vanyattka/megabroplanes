@@ -394,7 +394,11 @@ export class Menu {
     });
     for (const { preview } of this.previews) preview.setColor(this.selectedColor);
     if (this.newSkin && this.heroPreview) {
-      this.heroPreview.setType(this.selectedType);
+      if (this.selectedType !== this.heroPreview.type) {
+        const order = Object.keys(PLANE_TYPES);
+        const dir = order.indexOf(this.selectedType) >= order.indexOf(this.heroPreview.type) ? 1 : -1;
+        this._nmRollHero(this.selectedType, dir); // roll swaps the model at the midpoint
+      }
       this.heroPreview.setColor(this.selectedColor);
       this._nmUpdateHeroCaption();
     }
@@ -568,11 +572,14 @@ export class Menu {
     return m[t] || m.auto;
   }
 
+  // Runs while the hero element is visible — which is the menu (menu-open) AND
+  // the race lobby (in-lobby), so the lobby gets the same spinning plane.
   _startHeroRaf() {
     if (!this.newSkin || !this.heroPreview || this._heroRaf != null) return;
     let last = performance.now();
     const loop = () => {
-      if (!this.isOpen()) { this._heroRaf = null; return; }
+      const el = this._heroEl || (this._heroEl = document.getElementById('nm-hero'));
+      if (!el || getComputedStyle(el).display === 'none') { this._heroRaf = null; return; }
       const now = performance.now();
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
@@ -580,6 +587,36 @@ export class Menu {
       this._heroRaf = requestAnimationFrame(loop);
     };
     this._heroRaf = requestAnimationFrame(loop);
+  }
+
+  // Public: point the hero at a plane/colour and make sure it's spinning.
+  // Used by the race lobby (via main.js) to show the lead-voted plane.
+  heroSet(type, color) {
+    if (!this.newSkin || !this.heroPreview) return;
+    if (type && type !== this.heroPreview.type) this.heroPreview.setType(type);
+    if (color != null) this.heroPreview.setColor(color);
+    this._startHeroRaf();
+  }
+
+  // Slot-machine roll on plane change: slide the current plane out, swap the
+  // model at the midpoint, slide the new one in from the other side.
+  _nmRollHero(newType, dir) {
+    const roll = document.getElementById('nm-hero-roll');
+    if (!roll) { this.heroPreview.setType(newType); return; }
+    const off = 80;
+    roll.style.transition = 'transform .15s ease-in, opacity .15s ease-in';
+    roll.style.transform = `translateY(${-dir * off}px)`;
+    roll.style.opacity = '0';
+    clearTimeout(this._rollT);
+    this._rollT = setTimeout(() => {
+      this.heroPreview.setType(newType);
+      roll.style.transition = 'none';
+      roll.style.transform = `translateY(${dir * off}px)`;
+      void roll.offsetHeight; // reflow so the snap-back animates
+      roll.style.transition = 'transform .36s cubic-bezier(.16,1,.3,1), opacity .3s ease-out';
+      roll.style.transform = 'translateY(0)';
+      roll.style.opacity = '1';
+    }, 150);
   }
 
   _stopHeroRaf() {
