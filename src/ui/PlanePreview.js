@@ -78,8 +78,6 @@ export class PlanePreview {
     this.camera.position.set(0, _ctr.y + r * 0.3, dist);
     this.camera.lookAt(0, _ctr.y, 0);
     this.camera.updateProjectionMatrix();
-    // Nose points -Z, so the tail/nozzle sits at +max.z.
-    this._nozLocal = new Vector3(0, _ctr.y, _box.max.z * 0.96);
     this._exhaustScale = this.canvas.height * this._pr * 0.62;
   }
 
@@ -117,6 +115,8 @@ export class PlanePreview {
     this._exAge = new Float32Array(EXHAUST_N).fill(1e9);
     this._exLife = new Float32Array(EXHAUST_N).fill(1);
     this._exHead = 0;
+    // Local nozzle point — set from the jet's afterburner anchor in _refreshExhaust.
+    this._nozLocal = new Vector3(0, 0, 5);
 
     const geo = new BufferGeometry();
     geo.setAttribute('position', new BufferAttribute(this._exPos, 3));
@@ -161,6 +161,12 @@ export class PlanePreview {
     const on = this.type === 'jet';
     if (this._exhaust) this._exhaust.visible = on;
     if (on && this._exhaust) {
+      // Emit from the jet's actual afterburner anchor (ab-core, z≈5.2 in the
+      // model), NOT the bounding-box rear — the box includes the hidden flame
+      // cone geometry and would put the plume well behind the plane.
+      const ab = this.mesh.getObjectByName('ab-core');
+      if (ab) this._nozLocal.copy(ab.position);
+      else this._nozLocal.set(0, 0, 5);
       this._exhaust.material.uniforms.uScale.value = this._exhaustScale || 800;
       this._exAge.fill(1e9); // clear any stale particles
       this._exAlpha.fill(0);
