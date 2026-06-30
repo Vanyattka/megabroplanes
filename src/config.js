@@ -20,7 +20,7 @@ export const CHANGELOG = [
     version: '0.7.7',
     codename: 'Golf',
     channel: 'PRE-RELEASE',
-    date: '2026-06-28',
+    date: '2026-06-30',
     notes: [
       'Fixed the brief flash of the old menu on load — the new sunset menu now shows from the very first frame.',
     ],
