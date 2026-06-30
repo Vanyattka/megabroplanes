@@ -35,7 +35,7 @@ const _pos = new Vector3();
 const _scale = new Vector3();
 const _offset = new Vector3(0, 0, 0);
 const _nozNow = new Vector3();
-const _nozVel = new Vector3();
+const _linVel = new Vector3();
 const _back = new Vector3();
 const _tmpColor = new Color();
 
@@ -101,9 +101,13 @@ export class JetExhaust {
     this._next = (this._next + 1) % JET_EXHAUST_MAX;
 
     p.pos.lerpVectors(this._prevNoz, _nozNow, frac);
-    // Inherit the nozzle's true velocity (covers the sideways sweep of a hard
-    // turn that plane.velocity alone misses) plus the backward jet thrust.
-    p.vel.copy(_nozVel).addScaledVector(_back, JET_EXHAUST_SPEED);
+    // Inherit the plane's LINEAR velocity plus the backward jet thrust. (We must
+    // NOT inherit the nozzle's full finite-difference velocity: the offset nozzle
+    // sweeps tangentially when the nose pitches or the plane yaws, and that
+    // tangential term points partly forward — it would hurl particles ahead of
+    // the jet. The sub-frame position lerp above already keeps the plume base
+    // glued to the swept nozzle path, so the base stays attached without it.)
+    p.vel.copy(_linVel).addScaledVector(_back, JET_EXHAUST_SPEED);
     p.vel.x += (Math.random() - 0.5) * JET_EXHAUST_SPREAD;
     p.vel.y += (Math.random() - 0.5) * JET_EXHAUST_SPREAD;
     p.vel.z += (Math.random() - 0.5) * JET_EXHAUST_SPREAD;
@@ -119,20 +123,17 @@ export class JetExhaust {
     }
     this.mesh.visible = true;
 
-    // Current nozzle world position; its velocity = how far it moved this frame
-    // (linear flight + the rotational sweep of the offset nozzle).
+    // Current nozzle world position. We track it frame-to-frame only so the
+    // sub-frame spawn lerp can fill the swept path (keeps the base attached on
+    // hard turns); the inherited particle velocity is the plane's LINEAR
+    // velocity, NOT the nozzle's swept velocity — see _spawn().
     _offset.set(0, 0, JET_EXHAUST_OFFSET_Z).applyQuaternion(plane.quaternion);
     _nozNow.copy(plane.position).add(_offset);
     if (!this._hasPrevNoz) this._prevNoz.copy(_nozNow);
     // A >60 m/frame jump is a teleport (respawn at a gate, dev TP), not flight —
-    // fall back to plane.velocity so we don't fling the plume across the sky.
-    const teleported = _nozNow.distanceToSquared(this._prevNoz) > 3600;
-    if (this._hasPrevNoz && dt > 1e-5 && !teleported) {
-      _nozVel.copy(_nozNow).sub(this._prevNoz).multiplyScalar(1 / dt);
-    } else {
-      _nozVel.copy(plane.velocity);
-      if (teleported) this._prevNoz.copy(_nozNow); // base spawns at the new nozzle, no smear
-    }
+    // collapse prevNoz onto it so the spawn lerp doesn't smear across the sky.
+    if (_nozNow.distanceToSquared(this._prevNoz) > 3600) this._prevNoz.copy(_nozNow);
+    _linVel.copy(plane.velocity);
     _back.set(0, 0, 1).applyQuaternion(plane.quaternion); // world backward
 
     // Emission rate scales with throttle.
