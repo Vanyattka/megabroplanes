@@ -7,7 +7,7 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.7.6';
+export const GAME_VERSION = '0.7.7';
 export const GAME_CODENAME = 'Golf';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 
@@ -16,6 +16,15 @@ export const GAME_CHANNEL = 'PRE-RELEASE';
 // CSS and markup are untouched.
 export const USE_NEW_MENU = true;
 export const CHANGELOG = [
+  {
+    version: '0.7.7',
+    codename: 'Golf',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-28',
+    notes: [
+      'Fixed the brief flash of the old menu on load — the new sunset menu now shows from the very first frame.',
+    ],
+  },
   {
     version: '0.7.6',
     codename: 'Golf',

@@ -280,8 +280,10 @@ let gameState = 'menu';
 // time preset applies.
 let currentMode = 'singleplayer';
 // New menu/lobby skin — gated behind a single body class so the old UI stays
-// fully intact (flip USE_NEW_MENU in config.js to revert).
-if (USE_NEW_MENU) document.body.classList.add('menu-new');
+// fully intact (flip USE_NEW_MENU in config.js to revert). The class is also
+// pre-set in index.html so the first paint is already the new skin (no flash);
+// this toggle enforces the flag, so USE_NEW_MENU=false still drops the class.
+document.body.classList.toggle('menu-new', USE_NEW_MENU);
 const menu = new Menu();
 
 // Apply a time-of-day preset to the DayNight cycle (or resume auto mode).

@@ -847,7 +847,11 @@
       }
     </style>
   </head>
-  <body>
+  <!-- menu-new + menu-open are set here (not just by JS) so the FIRST paint is
+       already the new sunset skin — no flash of the old centred menu before
+       main.js runs. main.js still toggles menu-new from USE_NEW_MENU, so
+       flipping that flag off cleanly reverts to the old UI. -->
+  <body class="menu-new menu-open">
     <div id="hud">
       <div class="row"><span class="label">SPD</span><span id="hud-speed">0 kt</span></div>
       <div class="row"><span class="label">ALT</span><span id="hud-alt">0 ft</span></div>
