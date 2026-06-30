@@ -123,18 +123,29 @@ export class JetExhaust {
     }
     this.mesh.visible = true;
 
+    // Emit from the SAME interpolated transform the plane MESH is drawn with
+    // (renderPosition/renderQuaternion, set by Plane.updateRender(alpha)) — NOT
+    // the raw post-physics plane.position/quaternion. The post-physics transform
+    // leads the rendered mesh by up to one physics step; at the 6.4 m nozzle
+    // offset that small quaternion lag throws the plume base sideways off the
+    // nozzle during a left/right turn, and it's most obvious when the camera
+    // (also render-interpolated) swings. Fall back to the physics transform for
+    // callers that don't supply a render one.
+    const pos = plane.renderPosition || plane.position;
+    const quat = plane.renderQuaternion || plane.quaternion;
+
     // Current nozzle world position. We track it frame-to-frame only so the
     // sub-frame spawn lerp can fill the swept path (keeps the base attached on
     // hard turns); the inherited particle velocity is the plane's LINEAR
     // velocity, NOT the nozzle's swept velocity — see _spawn().
-    _offset.set(0, 0, JET_EXHAUST_OFFSET_Z).applyQuaternion(plane.quaternion);
-    _nozNow.copy(plane.position).add(_offset);
+    _offset.set(0, 0, JET_EXHAUST_OFFSET_Z).applyQuaternion(quat);
+    _nozNow.copy(pos).add(_offset);
     if (!this._hasPrevNoz) this._prevNoz.copy(_nozNow);
     // A >60 m/frame jump is a teleport (respawn at a gate, dev TP), not flight —
     // collapse prevNoz onto it so the spawn lerp doesn't smear across the sky.
     if (_nozNow.distanceToSquared(this._prevNoz) > 3600) this._prevNoz.copy(_nozNow);
     _linVel.copy(plane.velocity);
-    _back.set(0, 0, 1).applyQuaternion(plane.quaternion); // world backward
+    _back.set(0, 0, 1).applyQuaternion(quat); // world backward
 
     // Emission rate scales with throttle.
     const rate = JET_EXHAUST_RATE * plane.throttle;

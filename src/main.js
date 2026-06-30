@@ -84,6 +84,8 @@ const _photoExhaustPlane = {
   throttle: 0,
   position: null,
   quaternion: null,
+  renderPosition: null,
+  renderQuaternion: null,
   velocity: new Vector3(0, 0, 0),
 };
 
@@ -998,6 +1000,11 @@ function renderStep(alpha) {
     _photoExhaustPlane.throttle = plane.throttle;
     _photoExhaustPlane.position = plane.position;
     _photoExhaustPlane.quaternion = plane.quaternion;
+    // Emit from the same interpolated transform the mesh uses (JetExhaust reads
+    // renderPosition/renderQuaternion first). In photo mode the snapshots are
+    // collapsed so these equal position/quaternion, but keep them aligned.
+    _photoExhaustPlane.renderPosition = plane.renderPosition;
+    _photoExhaustPlane.renderQuaternion = plane.renderQuaternion;
     jetExhaust.update(renderDt, _photoExhaustPlane);
   }
   remotes.update(renderDt);
