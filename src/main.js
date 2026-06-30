@@ -953,7 +953,11 @@ function renderStep(alpha) {
     renderer.scene.fog.far = fogFarFor(plane);
   }
   sky.update(renderer.camera, plane.position);
-  requestShadowIfNeeded(plane.position.x, plane.position.z);
+  // Center the shadow frustum on the INTERPOLATED render position (what the
+  // mesh is drawn at), not the post-physics position, so the shadow tracks the
+  // plane frame-accurately.
+  const _shadowCenter = plane.renderPosition || plane.position;
+  requestShadowIfNeeded(_shadowCenter.x, _shadowCenter.z);
   stars.update(renderer.camera);
   const waterExtras = computeWaterExtras();
   // Use the render-interpolated position so water tracks under the camera

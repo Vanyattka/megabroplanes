@@ -43,11 +43,15 @@ export class PlaneShadow {
   }
 
   update(plane, getHeight) {
-    const ground = getHeight(plane.position.x, plane.position.z);
-    const alt = Math.max(0, plane.position.y - ground);
+    // Track the INTERPOLATED render position (what the mesh is drawn at), not
+    // the post-physics position which only changes at the 60 Hz physics tick —
+    // otherwise the blob snaps tick-by-tick under a smoothly-moving plane.
+    const p = plane.renderPosition || plane.position;
+    const ground = getHeight(p.x, p.z);
+    const alt = Math.max(0, p.y - ground);
     const fade = Math.max(0, 1 - alt / PLANE_SHADOW_FADE_ALT);
     this.mat.opacity = PLANE_SHADOW_OPACITY * fade;
     this.mesh.visible = fade > 0.02;
-    this.mesh.position.set(plane.position.x, ground + 0.15, plane.position.z);
+    this.mesh.position.set(p.x, ground + 0.15, p.z);
   }
 }
