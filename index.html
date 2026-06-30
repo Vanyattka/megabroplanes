@@ -822,7 +822,11 @@
       body.menu-new .note-list { font-family: 'Sora', sans-serif; font-size: 12.5px; line-height: 1.6; color: rgba(255,255,255,.78); }
 
       /* ---- race lobby ---- */
-      body.menu-new.in-lobby #nm-bg, body.menu-new.in-lobby #nm-wordmark { display: block; }
+      /* Keep the sunset background in the lobby, but NOT the MB PLANES wordmark:
+         the lobby has its own "Multiplayer · Combat Race / Race Lobby" header,
+         and the wordmark's version sub-line collided with that kicker (and with
+         the timer on mobile). */
+      body.menu-new.in-lobby #nm-bg { display: block; }
       body.menu-new #lobby { background: transparent; align-items: flex-start; justify-content: center; gap: 15px; padding: 104px 54px 34px; font-family: 'Sora', sans-serif; }
       body.menu-new #lobby > #lobby-title { margin-top: 6px; }
       body.menu-new #lobby-title { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: clamp(28px,3.4vw,38px); letter-spacing: .01em; text-transform: none; margin: 0; }
@@ -857,7 +861,10 @@
 
       /* responsive — stack on narrow / touch */
       @media (max-width: 760px) {
-        body.menu-new #lobby { padding: 64px 18px 24px; align-items: stretch; }
+        /* Top-align (not center): the stacked columns are taller than a phone
+           screen, and centering an overflowing flex column clips the top out of
+           the scrollable area. flex-start keeps the title reachable + scrollable. */
+        body.menu-new #lobby { padding: 64px 18px 24px; align-items: stretch; justify-content: flex-start; }
         body.menu-new .lobby-cols { max-width: none; flex-direction: column; }
         /* Stacked: full width, don't let the chat stretch — fixed scroll height. */
         body.menu-new.in-lobby .lobby-cols { width: auto; max-width: none; }
