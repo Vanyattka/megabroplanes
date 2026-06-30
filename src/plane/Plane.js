@@ -63,11 +63,22 @@ export class Plane {
     this._landingLight = null;
     this._landingTarget = null;
 
+    // Whether this plane casts into the real sun shadow map. The LOCAL plane
+    // turns this off (setCastShadows(false)) and uses the soft blob shadow
+    // instead — casting a fast mover into the perf-throttled shadow map made
+    // its shadow snap/jerk and vanish under it when parked.
+    this._castShadows = true;
     this.mesh = buildPlaneMesh(this.type, this.color);
     this._installLandingLight();
     this._installJetLight();
+    this._applyCastShadow();
     if (this.scene) this.scene.add(this.mesh);
     this.reset();
+  }
+
+  setCastShadows(on) { this._castShadows = !!on; this._applyCastShadow(); }
+  _applyCastShadow() {
+    this.mesh.traverse((o) => { if (o.isMesh) o.castShadow = this._castShadows; });
   }
 
   _installJetLight() {
@@ -153,6 +164,7 @@ export class Plane {
     // The fresh mesh is built gear-down; restore the live gear pose so a
     // loadout swap mid-flight doesn't visually drop the wheels.
     applyGearPose(this.mesh, this.gearT);
+    this._applyCastShadow(); // the fresh mesh defaults to castShadow=true; re-apply our setting
     if (this.scene) this.scene.add(this.mesh);
     this.syncMesh();
   }

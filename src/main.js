@@ -129,6 +129,12 @@ const waterReflection = new WaterReflection(renderer.scene);
 const clouds = new Clouds(renderer.scene);
 
 const plane = new Plane(renderer.scene);
+// The local plane uses the soft blob shadow (always present, smooth every
+// frame), so it does NOT cast into the real sun shadow map — that map is
+// perf-throttled (re-rendered only every SHADOW_UPDATE_DIST), which made a fast
+// mover's cast shadow snap/jerk in flight and vanish under it when parked. The
+// static world keeps its real shadows.
+plane.setCastShadows(false);
 // Hidden initially — menu state will animate an orbit camera over the world.
 plane.mesh.visible = false;
 
@@ -953,11 +959,7 @@ function renderStep(alpha) {
     renderer.scene.fog.far = fogFarFor(plane);
   }
   sky.update(renderer.camera, plane.position);
-  // Center the shadow frustum on the INTERPOLATED render position (what the
-  // mesh is drawn at), not the post-physics position, so the shadow tracks the
-  // plane frame-accurately.
-  const _shadowCenter = plane.renderPosition || plane.position;
-  requestShadowIfNeeded(_shadowCenter.x, _shadowCenter.z);
+  requestShadowIfNeeded(plane.position.x, plane.position.z);
   stars.update(renderer.camera);
   const waterExtras = computeWaterExtras();
   // Use the render-interpolated position so water tracks under the camera
@@ -981,12 +983,12 @@ function renderStep(alpha) {
     renderer.camera,
     worldTime.horizonColor
   );
-  // The soft blob shadow is only a stand-in for presets where the real sun
-  // shadow can't land on the terrain (Low: no shadow map; or terrain shadows
-  // off). With real shadows on, the plane casts a true silhouette and the
-  // blob underneath it just reads as a second, fake shadow.
-  const realPlaneShadow = gfx.settings.shadows > 0 && gfx.settings.shadowTerrain;
-  if (!plane.crashed && !realPlaneShadow) planeShadow.update(plane, getPhysicsFloor);
+  // The local plane ALWAYS uses the soft blob shadow now (on every preset): it
+  // tracks the interpolated render position so it's smooth in flight and is
+  // always present at low altitude (parked / taxiing). The plane no longer
+  // casts into the real sun shadow map (plane.setCastShadows(false)), so there's
+  // no second, jerky silhouette to clash with it.
+  if (!plane.crashed) planeShadow.update(plane, getPhysicsFloor);
   else planeShadow.mesh.visible = false;
   // Particle systems in photo mode: explosions and contrails freeze (they only
   // make sense with motion), but the jet exhaust — the signature — keeps

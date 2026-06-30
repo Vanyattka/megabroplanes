@@ -553,11 +553,10 @@ export const COASTAL_SEAHITS_MAX = 9;
 // the shadow centre (plane / orbit camera) moves more than this, the sun moves,
 // or the world changed — otherwise the cached map is reused. Small enough that
 // shadows never visibly lag behind the plane.
-export const SHADOW_UPDATE_DIST = 0.5;      // meters of XZ movement before a shadow refresh.
-// Small on purpose: a plane in flight always moves >0.5 m per frame, so the sun
-// shadow map refreshes EVERY frame while flying (smooth, no snapping) and only
-// skips when the plane is parked. (Was 6 m — that made the plane's own cast
-// shadow jump in ~6 m steps as it flew, reading as a per-tick stutter.)
+export const SHADOW_UPDATE_DIST = 6;        // meters of XZ movement before a shadow refresh.
+// Only the STATIC world casts into the throttled sun shadow map now (the plane
+// uses the always-smooth blob shadow and no longer casts into it), so a coarse
+// 6 m refresh is invisible (terrain shadows don't move) and keeps the GPU win.
 export const SHADOW_SUN_EPS = 0.0015;       // change in sunDir.y before a shadow refresh
 
 // Street props (instanced per village). Density + caps keep cities cozy not
