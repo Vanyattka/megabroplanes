@@ -7,7 +7,7 @@
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.7.7';
+export const GAME_VERSION = '0.7.8';
 export const GAME_CODENAME = 'Golf';
 export const GAME_CHANNEL = 'PRE-RELEASE';
 
@@ -16,6 +16,17 @@ export const GAME_CHANNEL = 'PRE-RELEASE';
 // CSS and markup are untouched.
 export const USE_NEW_MENU = true;
 export const CHANGELOG = [
+  {
+    version: '0.7.8',
+    codename: 'Golf',
+    channel: 'PRE-RELEASE',
+    date: '2026-06-30',
+    notes: [
+      'Race lobby now has a chat — say hi, coordinate, trash-talk. Each lobby starts fresh and the chat clears when the race launches.',
+      'The lobby launch countdown now ticks down live every second instead of only updating when someone changes a vote.',
+      'Fixed a ghost “second” exhaust trail that split off beside the jet during hard turns and camera moves.',
+    ],
+  },
   {
     version: '0.7.7',
     codename: 'Golf',

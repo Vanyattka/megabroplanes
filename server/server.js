@@ -453,6 +453,17 @@ function attachClientHandlers(ws) {
           sendLobbyState();
         }
         break;
+      case 'lobby_chat': {
+        // Live lobby chat — relayed to everyone currently in the lobby (incl.
+        // the sender, so their own line echoes). No history is stored: a fresh
+        // lobby session simply starts empty. Collapse whitespace + cap length;
+        // drop empties. The client renders text as plain text (no HTML).
+        if (c.room === 'lobby' && typeof msg.text === 'string') {
+          const text = msg.text.replace(/\s+/g, ' ').trim().slice(0, 160);
+          if (text) broadcastToRoom('lobby', { type: 'lobby_chat', id, name: c.name || `P${id}`, text });
+        }
+        break;
+      }
       case 'cp':
         if (race.phase === 'racing' && c.room === 'race' && c.race && !c.dead) {
           // Accept idx >= expected (not just ==): if a cp message was lost

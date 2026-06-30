@@ -104,8 +104,17 @@ export class Contrails {
       0,
       CONTRAIL_BACK_OFFSET + (Math.random() - 0.5) * 0.4
     );
-    _offset.applyQuaternion(plane.quaternion);
-    p.pos.copy(plane.position).add(_offset);
+    // Anchor to the SAME interpolated transform the mesh (and JetExhaust) are
+    // drawn with — NOT the raw post-physics plane.position/quaternion. The
+    // post-physics transform leads the rendered airframe by up to one physics
+    // step; with the side+back offset that lag spawned fresh puffs off to the
+    // side/forward of the nozzle (near the wing root), reading as a SECOND
+    // plume during turns/camera motion. (Exhaust was already fixed this way;
+    // the contrail lag is what was still showing as the doubled trail.)
+    const quat = plane.renderQuaternion || plane.quaternion;
+    const pos = plane.renderPosition || plane.position;
+    _offset.applyQuaternion(quat);
+    p.pos.copy(pos).add(_offset);
 
     // Contrails in real life hang in place while the plane flies off — no
     // inherited plane velocity. Tiny random drift so they slowly diffuse

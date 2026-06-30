@@ -21,6 +21,7 @@ export class MultiplayerClient {
     this._raceListener = null;
     this._lobbyListener = null;
     this._fireListener = null;
+    this._chatListener = null;
     // Latest race / lobby state from the server (null until first message).
     this.race = null;
     this.lobby = null;
@@ -77,6 +78,7 @@ export class MultiplayerClient {
   onRace(fn) { this._raceListener = fn; }
   onLobby(fn) { this._lobbyListener = fn; }
   onFire(fn) { this._fireListener = fn; }
+  onChat(fn) { this._chatListener = fn; }
 
   // Toggle the multiplayer system. When off, close the socket, drop
   // remotes, and stop the reconnect loop. Used by the singleplayer mode:
@@ -229,6 +231,8 @@ export class MultiplayerClient {
       if (this._lobbyListener) this._lobbyListener(msg);
     } else if (msg.type === 'fire') {
       if (this._fireListener) this._fireListener(msg); // {id, o, d}
+    } else if (msg.type === 'lobby_chat') {
+      if (this._chatListener) this._chatListener(msg); // {id, name, text}
     }
   }
 
@@ -264,6 +268,8 @@ export class MultiplayerClient {
   }
   lobbySet(patch) { this._send({ type: 'lobby_set', ...patch }); }
   lobbyStart() { this._send({ type: 'lobby_start' }); }
+  // Send a lobby chat line (server relays it to all lobby members).
+  sendLobbyChat(text) { this._send({ type: 'lobby_chat', text }); }
 
   // Report clearing the next checkpoint. The server validates ordering.
   sendCheckpoint(idx) { this._send({ type: 'cp', idx }); }
