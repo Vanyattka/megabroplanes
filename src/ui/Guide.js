@@ -5,7 +5,7 @@
 // It lives over the MENU (never during flight), so it can own the keyboard while
 // open without fighting the flight controls.
 
-import { t, onLangChange } from './I18n.js';
+import { t, onLangChange, getLang, setLang, LANGUAGES } from './I18n.js';
 import { GUIDE_STEPS } from './strings.js';
 
 const SEEN_KEY = 'mbp:guideSeen';
@@ -25,6 +25,7 @@ export class Guide {
     this.bodyEl = document.getElementById('guide-body');
     this.keysEl = document.getElementById('guide-keys');
     this.dotsEl = document.getElementById('guide-dots');
+    this.langEl = document.getElementById('guide-lang');
     this.prevBtn = document.getElementById('guide-prev');
     this.nextBtn = document.getElementById('guide-next');
     this.skipBtn = document.getElementById('guide-skip');
@@ -32,6 +33,7 @@ export class Guide {
     this.i = 0;
     this.open = false;
 
+    this._buildLangSwitch();
     if (this.prevBtn) this.prevBtn.addEventListener('click', () => this.go(-1));
     if (this.nextBtn) this.nextBtn.addEventListener('click', () => this.go(1));
     if (this.skipBtn) this.skipBtn.addEventListener('click', () => this.close());
@@ -50,6 +52,31 @@ export class Guide {
 
     // Re-render in place when the language changes mid-guide.
     onLangChange(() => { if (this.open) this._render(); });
+  }
+
+  // Short EN / RU pills in the card header. Built once; the highlight is
+  // refreshed by _render() (which also runs on every language change).
+  _buildLangSwitch() {
+    if (!this.langEl) return;
+    this.langEl.innerHTML = '';
+    for (const l of LANGUAGES) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'guide-lang-btn';
+      b.dataset.lang = l.key;
+      // Two-letter code keeps the header compact; Settings shows full names.
+      b.textContent = l.key.toUpperCase();
+      b.title = l.label;
+      b.addEventListener('click', () => setLang(l.key));
+      this.langEl.appendChild(b);
+    }
+  }
+
+  _syncLangSwitch() {
+    if (!this.langEl) return;
+    for (const b of this.langEl.querySelectorAll('.guide-lang-btn')) {
+      b.classList.toggle('on', b.dataset.lang === getLang());
+    }
   }
 
   // Show the guide on a first-ever visit. Returns true if it opened.
@@ -85,6 +112,7 @@ export class Guide {
   }
 
   _render() {
+    this._syncLangSwitch();
     const n = this.i + 1;
     const key = `guide.s${n}`;
     if (this.titleEl) this.titleEl.textContent = t(`${key}.title`);

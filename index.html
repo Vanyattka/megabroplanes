@@ -1087,7 +1087,13 @@
          and re-openable from Settings. Content is written by src/ui/Guide.js. ===== -->
     <div id="guide" class="hidden">
       <div id="guide-card" role="dialog" aria-modal="true">
-        <div id="guide-step"></div>
+        <!-- Language switch lives here too, not just in Settings: the guide is
+             the very first thing a new player sees, and the default is English,
+             so Russian has to be reachable without hunting for a menu. -->
+        <div id="guide-head">
+          <div id="guide-step"></div>
+          <div id="guide-lang"></div>
+        </div>
         <h2 id="guide-title"></h2>
         <p id="guide-body"></p>
         <div id="guide-keys"></div>
@@ -1114,7 +1120,17 @@
         box-shadow: 0 30px 80px rgba(0,0,0,0.5);
         color: #fff; font-family: 'Sora', sans-serif;
       }
+      #guide-head { display: flex; align-items: center; gap: 12px; }
       #guide-step { font-size: 10px; letter-spacing: .28em; text-transform: uppercase; color: #ffd24a; }
+      #guide-lang { margin-left: auto; display: flex; gap: 4px; flex: none; }
+      .guide-lang-btn {
+        padding: 4px 9px; border-radius: 999px; cursor: pointer;
+        border: 1px solid rgba(255,255,255,0.16); background: transparent;
+        color: rgba(255,255,255,0.55); font-family: 'Sora', sans-serif;
+        font-size: 10px; font-weight: 600; letter-spacing: .1em;
+      }
+      .guide-lang-btn:hover { color: #fff; border-color: rgba(255,210,74,0.5); }
+      .guide-lang-btn.on { background: rgba(255,210,74,0.16); border-color: rgba(255,210,74,0.75); color: #ffd24a; }
       #guide-title {
         font-family: 'Space Grotesk', sans-serif; font-weight: 600;
         font-size: clamp(21px, 3vw, 27px); margin: 8px 0 12px; letter-spacing: .01em;

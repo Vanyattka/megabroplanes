@@ -2,17 +2,17 @@
 //
 // ⚠️ DRAFT — written to match what the code actually does (see the audit in
 // git history), but it is NOT legal advice and has not been reviewed by a
-// lawyer. Read it before publishing, fill in CONTACT_EMAIL and JURISDICTION,
-// and keep it in sync if data handling ever changes.
+// lawyer. Read it before publishing, add the missing contact + governing-law
+// paragraphs (see TODO below), and keep it in sync if data handling changes.
 //
 // Kept out of strings.js on purpose: it's long-form prose, not UI labels, and
 // it should be editable without touching the interface dictionary.
 
-// TODO(owner): put a real address here before sharing the game publicly.
-export const CONTACT_EMAIL = 'you@example.com';
-// TODO(owner): the country/region whose law governs the terms.
-const JURISDICTION_EN = '[your country]';
-const JURISDICTION_RU = '[твоя страна]';
+// TODO(owner): still missing, to be added once decided —
+//   * a contact address (abuse reports / data questions), and
+//   * a governing-law clause.
+// The paragraphs that would have carried them were removed rather than shipped
+// with visible placeholders; re-add both sections when the details exist.
 
 export const LEGAL_UPDATED = '2026-07-25';
 
@@ -67,13 +67,6 @@ export const LEGAL = {
       body: [
         'An obscenity filter and rate limits run on the server, but the chat is public and is not moderated in real time. You may be disconnected or blocked for breaking the rules above.',
         'Because of the open chat, the game is intended for players aged 13 and over. It is not directed at younger children, and it collects no personal data from them beyond the truncated connection log described above. If you are under the age of majority where you live, please play with your parents\' knowledge.',
-        `To report abuse or ask about your data, write to ${CONTACT_EMAIL}.`,
-      ],
-    },
-    {
-      title: 'Terms · law',
-      body: [
-        `These terms are governed by the law of ${JURISDICTION_EN}. If any part of them is unenforceable, the rest still applies.`,
       ],
     },
     {
@@ -143,13 +136,6 @@ export const LEGAL = {
       body: [
         'На сервере работают фильтр нецензурной лексики и ограничение частоты сообщений, но чат публичный и не модерируется в реальном времени. За нарушение правил выше тебя могут отключить или заблокировать.',
         'Из-за открытого чата игра предназначена для игроков 13 лет и старше. Она не адресована детям младшего возраста и не собирает у них персональных данных, кроме обрезанного лога подключений, описанного выше. Если ты не достиг совершеннолетия по законам своей страны, играй с ведома родителей.',
-        `Сообщить о нарушении или спросить про свои данные можно письмом на ${CONTACT_EMAIL}.`,
-      ],
-    },
-    {
-      title: 'Условия · право',
-      body: [
-        `Эти условия регулируются законодательством ${JURISDICTION_RU}. Если какая-то их часть окажется недействительной, остальные продолжают действовать.`,
       ],
     },
     {

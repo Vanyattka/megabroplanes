@@ -20,14 +20,14 @@ export const LANGUAGES = [
   { key: 'ru', label: 'Русский' },
 ];
 
+// First run is ENGLISH by design — the browser language is deliberately NOT
+// sniffed. Russian is one tap away: the language switch sits right on the
+// first-run flight guide, as well as in Settings. Once a player picks a
+// language it is remembered.
 function detectLang() {
   try {
     const saved = localStorage.getItem(LANG_KEY);
     if (saved && STRINGS[saved]) return saved;
-  } catch {}
-  try {
-    const nav = (navigator.languages && navigator.languages[0]) || navigator.language || 'en';
-    if (String(nav).toLowerCase().startsWith('ru')) return 'ru';
   } catch {}
   return 'en';
 }
