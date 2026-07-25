@@ -4,10 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>mbplanes</title>
-    <!-- New menu/lobby design fonts (used only by the body.menu-new skin). -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <!-- New menu/lobby design fonts (used only by the body.menu-new skin).
+         SELF-HOSTED on purpose: loading these from fonts.googleapis.com handed
+         every visitor's IP address to a third party just to fetch a typeface.
+         Served from our own origin now — no external request, nothing to
+         disclose, and one less dependency. See public/fonts/fonts.css. -->
+    <link rel="stylesheet" href="/fonts/fonts.css" />
     <script>
       // Headless-verification aid (opt-in, off for players): when the
       // mbp:forceRaf flag is set and the tab is hidden — an automated preview
@@ -290,7 +292,7 @@
         opacity: 0.8;
         margin: 0;
       }
-      #menu-main, #menu-planes, #menu-settings, #menu-notes {
+      #menu-main, #menu-planes, #menu-settings, #menu-notes, #menu-legal {
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -370,12 +372,21 @@
       }
       #seed-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
       #seed-current { color: #ffd23a; font-weight: bold; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      #menu-main.hidden, #menu-planes.hidden, #menu-settings.hidden, #menu-notes.hidden { display: none; }
-      #menu-planes h2, #menu-settings h2, #menu-notes h2 { margin: 0; font-size: 20px; letter-spacing: 3px; }
+      #menu-main.hidden, #menu-planes.hidden, #menu-settings.hidden, #menu-notes.hidden, #menu-legal.hidden { display: none; }
+      #menu-planes h2, #menu-settings h2, #menu-notes h2, #menu-legal h2 { margin: 0; font-size: 20px; letter-spacing: 3px; }
       #menu-planes h3, #menu-settings h3 { margin: 0; font-size: 14px; letter-spacing: 2px; opacity: 0.85; }
       /* Release notes */
-      #menu-notes { max-width: 640px; }
-      #notes-list { width: 100%; max-height: 60vh; overflow-y: auto; text-align: left; }
+      #menu-notes, #menu-legal { max-width: 640px; }
+      #notes-list, #legal-list { width: 100%; max-height: 60vh; overflow-y: auto; text-align: left; }
+      /* Legal screen (privacy / terms / licences) — same scroll box as the
+         release notes, prose instead of bullet-only entries. */
+      #legal-updated { width: 100%; text-align: left; font-size: 11px; opacity: 0.55; margin-bottom: 10px; }
+      .legal-sec { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.18); border-radius: 8px; padding: 14px 18px; margin-bottom: 12px; }
+      .legal-sec h4 { margin: 0 0 8px; font-size: 13px; letter-spacing: 1.5px; color: #ffd23a; }
+      .legal-sec p { margin: 0 0 8px; font-size: 12.5px; line-height: 1.65; opacity: 0.9; }
+      .legal-sec p:last-child { margin-bottom: 0; }
+      .legal-sec ul { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; line-height: 1.6; opacity: 0.9; }
+      .legal-sec li { margin-bottom: 4px; }
       .note-release { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.18); border-radius: 8px; padding: 14px 18px; margin-bottom: 14px; }
       .note-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
       .note-ver { font-size: 18px; font-weight: bold; letter-spacing: 1px; }
@@ -720,7 +731,7 @@
       #nm-hero-sub { font-family: 'Sora', sans-serif; font-size: 12px; color: rgba(255,255,255,.55); margin-top: 3px; }
       /* hero only fronts the main + aircraft screens; on settings/notes it eases aside */
       body.menu-new.nm-screen-settings #nm-hero { opacity: .28; transform: translateX(10%) scale(.9); }
-      body.menu-new.nm-screen-notes #nm-hero { opacity: 0; transform: translateX(16%) scale(.92); }
+      body.menu-new.nm-screen-notes #nm-hero, body.menu-new.nm-screen-legal #nm-hero { opacity: 0; transform: translateX(16%) scale(.92); }
       body.menu-new:not(.nm-screen-main) #nm-hero-cap { opacity: 0; }
 
       /* ---- #menu → left panel stage ---- */
@@ -728,11 +739,20 @@
       body.menu-new #menu-main,
       body.menu-new #menu-planes,
       body.menu-new #menu-settings,
-      body.menu-new #menu-notes {
+      body.menu-new #menu-notes,
+      body.menu-new #menu-legal {
         position: absolute; left: 54px; top: 50%; transform: translateY(-50%);
         width: min(46%, 560px); align-items: stretch; text-align: left; gap: 20px;
       }
-      body.menu-new #menu-planes, body.menu-new #menu-settings, body.menu-new #menu-notes { max-width: none; }
+      body.menu-new #menu-planes, body.menu-new #menu-settings, body.menu-new #menu-notes, body.menu-new #menu-legal { max-width: none; }
+      /* Legal is a long reading screen: anchor it under the wordmark and let it
+         use the full height, instead of vertically centring a tall block (which
+         drifts up into the wordmark on shorter windows). */
+      body.menu-new #menu-legal {
+        top: 118px; bottom: 34px; transform: none;
+        display: flex; flex-direction: column; gap: 10px;
+      }
+      body.menu-new #legal-list { max-height: none; flex: 1 1 auto; }
 
       /* section kickers + titles */
       body.menu-new #menu h2 { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 34px; letter-spacing: .01em; text-transform: none; }
@@ -766,7 +786,8 @@
       body.menu-new #btn-planes::before { content: '01'; }
       body.menu-new #btn-settings::before { content: '02'; }
       body.menu-new #btn-notes::before { content: '03'; }
-      body.menu-new #btn-planes::before, body.menu-new #btn-settings::before, body.menu-new #btn-notes::before {
+      body.menu-new #btn-legal::before { content: '04'; }
+      body.menu-new #btn-planes::before, body.menu-new #btn-settings::before, body.menu-new #btn-notes::before, body.menu-new #btn-legal::before {
         color: #ffd24a; opacity: .6; font-family: 'Space Grotesk', sans-serif; font-size: 12px; font-weight: 500; letter-spacing: .1em; min-width: 22px;
       }
 
@@ -775,7 +796,7 @@
         background: transparent; border: none; padding: 0; min-width: 0; width: fit-content; align-self: flex-start;
         color: rgba(255,255,255,.55); font-family: 'Sora', sans-serif; font-weight: 600; font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
       }
-      body.menu-new #btn-back-planes::before, body.menu-new #btn-back-settings::before, body.menu-new #btn-back-notes::before { content: '‹ '; }
+      body.menu-new #btn-back-planes::before, body.menu-new #btn-back-settings::before, body.menu-new #btn-back-notes::before, body.menu-new #btn-back-legal::before { content: '‹ '; }
       body.menu-new #btn-back-planes:hover, body.menu-new #btn-back-settings:hover, body.menu-new #btn-back-notes:hover { color: #fff; background: transparent; border: none; }
 
       /* aircraft rows (the old .plane-card, canvases hidden — hero shows the 3D) */
@@ -819,7 +840,7 @@
       body.menu-new #time-mp-note, body.menu-new #seed-mp-note { font-family: 'Sora', sans-serif; font-style: italic; color: rgba(255,255,255,.5); text-align: left; }
 
       /* release-notes cards */
-      body.menu-new #menu-notes { width: min(46%, 560px); }
+      body.menu-new #menu-notes, body.menu-new #menu-legal { width: min(46%, 560px); }
       body.menu-new #notes-list { max-height: 56vh; }
       body.menu-new .note-release { border: 1px solid rgba(255,255,255,.1); border-radius: 14px; background: rgba(0,0,0,.18); padding: 15px 18px; }
       body.menu-new .note-ver { font-family: 'Space Grotesk', sans-serif; font-size: 15px; font-weight: 600; }
@@ -882,11 +903,11 @@
         body.menu-new #nm-hero-canvas { width: 64%; }
         body.menu-new #nm-hero-cap { display: none; }
         body.menu-new #nm-wordmark { top: 18px; left: 20px; font-size: 19px; }
-        body.menu-new #menu-main, body.menu-new #menu-planes, body.menu-new #menu-settings, body.menu-new #menu-notes {
+        body.menu-new #menu-main, body.menu-new #menu-planes, body.menu-new #menu-settings, body.menu-new #menu-notes, body.menu-new #menu-legal {
           left: 0; right: 0; top: 43%; bottom: 0; width: 100%; transform: none;
           padding: 14px 20px env(safe-area-inset-bottom,18px); overflow-y: auto; justify-content: flex-start;
         }
-        body.menu-new.nm-screen-settings #nm-hero, body.menu-new.nm-screen-notes #nm-hero { opacity: 0; }
+        body.menu-new.nm-screen-settings #nm-hero, body.menu-new.nm-screen-notes #nm-hero, body.menu-new.nm-screen-legal #nm-hero { opacity: 0; }
       }
     </style>
   </head>
@@ -1012,6 +1033,7 @@
         <button class="menu-btn" id="btn-planes" data-i18n="menu.aircraft">Aircraft</button>
         <button class="menu-btn" id="btn-settings" data-i18n="menu.settings">Settings</button>
         <button class="menu-btn" id="btn-notes" data-i18n="menu.notes">Release Notes</button>
+        <button class="menu-btn" id="btn-legal" data-i18n="menu.legal">Privacy &amp; Terms</button>
       </div>
       <div id="menu-planes" class="hidden">
         <h2 data-i18n="menu.aircraft">Aircraft</h2>
@@ -1049,6 +1071,12 @@
         <h2 data-i18n="menu.notes">Release Notes</h2>
         <div id="notes-list"></div>
         <button class="menu-btn" id="btn-back-notes" data-i18n="menu.back">Back</button>
+      </div>
+      <div id="menu-legal" class="hidden">
+        <h2 data-i18n="menu.legal">Privacy &amp; Terms</h2>
+        <div id="legal-updated"></div>
+        <div id="legal-list"></div>
+        <button class="menu-btn" id="btn-back-legal" data-i18n="menu.back">Back</button>
       </div>
       <div id="menu-footer-hint" data-i18n="menu.footerHint">WASD · QE · shift/ctrl · space · R · drag mouse to look</div>
     </div>

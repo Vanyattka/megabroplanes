@@ -16,6 +16,7 @@ import { PlanePreview } from './PlanePreview.js';
 import { gfx, view } from './GraphicsSettings.js';
 import { getWorldSeed, DEFAULT_WORLD_SEED } from '../world/WorldSeed.js';
 import { t, tf, getLang, setLang, onLangChange, LANGUAGES } from './I18n.js';
+import { LEGAL, LEGAL_UPDATED } from './legal.js';
 
 const STORAGE_KEY = 'mbp:loadout';
 const MODES = ['singleplayer', 'multiplayer'];
@@ -51,6 +52,7 @@ export class Menu {
     this.planesScreen = document.getElementById('menu-planes');
     this.settingsScreen = document.getElementById('menu-settings');
     this.notesScreen = document.getElementById('menu-notes');
+    this.legalScreen = document.getElementById('menu-legal');
     this.planeList = document.getElementById('plane-list');
     this.colorList = document.getElementById('color-list');
     this.timeList = document.getElementById('time-list');
@@ -85,6 +87,7 @@ export class Menu {
     this._renderLangs();
     this._renderVersion();
     this._renderNotes();
+    this._renderLegal();
     this._renderSeed();
     this._wireButtons();
     this._wireModeToggle();
@@ -152,39 +155,30 @@ export class Menu {
     if (cont) cont.hidden = !this._continueAvailable;
   }
 
-  _showMain() {
-    this.main.classList.remove('hidden');
-    this.planesScreen.classList.add('hidden');
-    this.settingsScreen.classList.add('hidden');
-    if (this.notesScreen) this.notesScreen.classList.add('hidden');
-    this._stopRaf();
-    this._nmSetScreen('main');
+  // One switch for every menu screen — each _show* used to re-list all the
+  // others, which meant adding a screen touched every method.
+  _showScreen(name) {
+    const screens = {
+      main: this.main,
+      planes: this.planesScreen,
+      settings: this.settingsScreen,
+      notes: this.notesScreen,
+      legal: this.legalScreen,
+    };
+    for (const key of Object.keys(screens)) {
+      const el = screens[key];
+      if (el) el.classList.toggle('hidden', key !== name);
+    }
+    // Only the aircraft screen spins the per-card previews (old skin).
+    if (name === 'planes') { this._ensurePreviews(); this._startRaf(); }
+    else this._stopRaf();
+    this._nmSetScreen(name);
   }
-  _showPlanes() {
-    this.main.classList.add('hidden');
-    this.planesScreen.classList.remove('hidden');
-    this.settingsScreen.classList.add('hidden');
-    if (this.notesScreen) this.notesScreen.classList.add('hidden');
-    this._ensurePreviews();
-    this._startRaf();
-    this._nmSetScreen('planes');
-  }
-  _showSettings() {
-    this.main.classList.add('hidden');
-    this.planesScreen.classList.add('hidden');
-    this.settingsScreen.classList.remove('hidden');
-    if (this.notesScreen) this.notesScreen.classList.add('hidden');
-    this._stopRaf();
-    this._nmSetScreen('settings');
-  }
-  _showNotes() {
-    this.main.classList.add('hidden');
-    this.planesScreen.classList.add('hidden');
-    this.settingsScreen.classList.add('hidden');
-    if (this.notesScreen) this.notesScreen.classList.remove('hidden');
-    this._stopRaf();
-    this._nmSetScreen('notes');
-  }
+  _showMain() { this._showScreen('main'); }
+  _showPlanes() { this._showScreen('planes'); }
+  _showSettings() { this._showScreen('settings'); }
+  _showNotes() { this._showScreen('notes'); }
+  _showLegal() { this._showScreen('legal'); }
 
   _renderLangs() {
     if (!this.langList) return;
@@ -219,6 +213,7 @@ export class Menu {
     this._renderViewPresets();
     this._renderVersion();
     // (release notes are English-only — nothing to re-render there)
+    this._renderLegal();
     this._renderSeed();
     if (this.newSkin) {
       this._nmSyncVer();
@@ -260,6 +255,24 @@ export class Menu {
         </div>
         <ul class="note-list">${items}</ul>
       </div>`;
+    }).join('');
+  }
+
+  // Privacy notice / terms / third-party licences. Localised prose from
+  // legal.js; escaped because it goes in via innerHTML.
+  _renderLegal() {
+    const list = document.getElementById('legal-list');
+    if (!list) return;
+    const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const upd = document.getElementById('legal-updated');
+    if (upd) upd.textContent = t('legal.updated', { date: LEGAL_UPDATED });
+    const sections = LEGAL[getLang()] || LEGAL.en;
+    list.innerHTML = sections.map((sec) => {
+      const paras = (sec.body || []).map((p) => `<p>${esc(p)}</p>`).join('');
+      const items = sec.list && sec.list.length
+        ? `<ul>${sec.list.map((li) => `<li>${esc(li)}</li>`).join('')}</ul>`
+        : '';
+      return `<div class="legal-sec"><h4>${esc(sec.title)}</h4>${paras}${items}</div>`;
     }).join('');
   }
 
@@ -539,6 +552,10 @@ export class Menu {
     document.getElementById('btn-back-settings').addEventListener('click', () => this._showMain());
     const backNotes = document.getElementById('btn-back-notes');
     if (backNotes) backNotes.addEventListener('click', () => this._showMain());
+    const legalBtn = document.getElementById('btn-legal');
+    if (legalBtn) legalBtn.addEventListener('click', () => this._showLegal());
+    const backLegal = document.getElementById('btn-back-legal');
+    if (backLegal) backLegal.addEventListener('click', () => this._showMain());
     if (this.btnRegen) {
       this.btnRegen.addEventListener('click', () => { if (this.onRegenerate) this.onRegenerate(); });
     }
@@ -619,7 +636,7 @@ export class Menu {
   _nmSetScreen(name) {
     if (!this.newSkin) return;
     const b = document.body;
-    b.classList.remove('nm-screen-main', 'nm-screen-planes', 'nm-screen-settings', 'nm-screen-notes');
+    b.classList.remove('nm-screen-main', 'nm-screen-planes', 'nm-screen-settings', 'nm-screen-notes', 'nm-screen-legal');
     b.classList.add('nm-screen-' + name);
   }
 

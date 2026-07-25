@@ -87,6 +87,27 @@ const RESPAWN_MS = 3500;
 const DEFAULT_PLANE = 'piper';
 const DEFAULT_TIME = 'day';
 
+// ---- Chat moderation -----------------------------------------------------
+// Flood limits: a floor between consecutive lines, plus a burst cap over a
+// short window (so you can fire off a few quick replies but not scroll the
+// panel). Both are enforced server-side; the client caps length at 160.
+const CHAT_MIN_INTERVAL_MS = 600;
+const CHAT_WINDOW_MS = 6000;
+const CHAT_WINDOW_MAX = 6;
+// Starter obscenity filter — matched roots are masked, the line still sends.
+// Deliberately small and root-based (Russian mat inflects heavily); extend as
+// needed. This is a politeness filter, not a safety guarantee: the chat is
+// public, unmoderated in real time, and the Terms say so.
+const PROFANITY = [
+  'хуй', 'хуё', 'хуе', 'пизд', 'ебат', 'ебал', 'ебан', 'ебуч', 'бляд', 'блять',
+  'сука', 'мудак', 'пидор', 'пидар', 'гандон', 'долбоёб', 'долбоеб', 'уёбок', 'уебок',
+  'fuck', 'shit', 'cunt', 'bitch', 'asshole', 'nigg',
+];
+const PROFANITY_RE = new RegExp(`(${PROFANITY.join('|')})[a-zA-Zа-яёА-ЯЁ]*`, 'gi');
+function maskProfanity(s) {
+  return s.replace(PROFANITY_RE, (m) => m[0] + '*'.repeat(Math.max(1, m.length - 1)));
+}
+
 const httpServer = http.createServer(serveStatic);
 const wss = new WebSocketServer({ server: httpServer });
 const clients = new Map(); // id -> client
@@ -96,6 +117,25 @@ let lobby = { hostId: null, launchAt: null };
 let race = makeIdleRace();
 function makeIdleRace() {
   return { phase: 'idle', seed: 0, course: [], startAt: 0, endAt: 0, timeKey: DEFAULT_TIME, plane: DEFAULT_PLANE };
+}
+
+// A full IP address is personal data, and these logs are kept indefinitely by
+// the container runtime. We only ever needed a coarse "where from" for abuse
+// triage, so drop the host part: IPv4 keeps two octets, IPv6 keeps its /32
+// prefix. Nothing that identifies an individual subscriber survives.
+function maskIp(addr) {
+  if (!addr) return 'unknown';
+  let a = String(addr);
+  if (a.startsWith('::ffff:')) a = a.slice(7); // IPv4-mapped IPv6
+  if (a.includes('.')) {
+    const p = a.split('.');
+    return p.length === 4 ? `${p[0]}.${p[1]}.x.x` : 'unknown';
+  }
+  if (a.includes(':')) {
+    const p = a.split(':').filter(Boolean);
+    return p.length >= 2 ? `${p[0]}:${p[1]}::/32` : 'unknown';
+  }
+  return 'unknown';
 }
 
 function membersIn(room) {
@@ -459,8 +499,19 @@ function attachClientHandlers(ws) {
         // lobby session simply starts empty. Collapse whitespace + cap length;
         // drop empties. The client renders text as plain text (no HTML).
         if (c.room === 'lobby' && typeof msg.text === 'string') {
-          const text = msg.text.replace(/\s+/g, ' ').trim().slice(0, 160);
-          if (text) broadcastToRoom('lobby', { type: 'lobby_chat', id, name: c.name || `P${id}`, text });
+          const now = Date.now();
+          // Flood guard: a minimum gap between lines plus a short-window burst
+          // cap. Silently dropped — a spammer gets no feedback to tune against,
+          // and honest players never hit either limit while typing.
+          if (now - (c.lastChatAt || 0) < CHAT_MIN_INTERVAL_MS) break;
+          c.chatWindow = (c.chatWindow || []).filter((ts) => now - ts < CHAT_WINDOW_MS);
+          if (c.chatWindow.length >= CHAT_WINDOW_MAX) break;
+          const text = maskProfanity(msg.text.replace(/\s+/g, ' ').trim().slice(0, 160));
+          if (text) {
+            c.lastChatAt = now;
+            c.chatWindow.push(now);
+            broadcastToRoom('lobby', { type: 'lobby_chat', id, name: c.name || `P${id}`, text });
+          }
         }
         break;
       }
@@ -551,8 +602,7 @@ wss.on('connection', (ws, req) => {
   });
   ws._cid = id;
   attachClientHandlers(ws);
-  const addr = req?.socket?.remoteAddress || 'unknown';
-  console.log(`[+] player ${id} connected from ${addr} (total: ${clients.size})`);
+  console.log(`[+] player ${id} connected from ${maskIp(req?.socket?.remoteAddress)} (total: ${clients.size})`);
   // token lets this client reclaim its session on a brief reconnect.
   ws.send(JSON.stringify({ type: 'welcome', id, hue, token }));
 });
