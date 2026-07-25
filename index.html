@@ -748,9 +748,12 @@
       /* Legal is a long reading screen: anchor it under the wordmark and let it
          use the full height, instead of vertically centring a tall block (which
          drifts up into the wordmark on shorter windows). */
+      /* NB: no `display` here on purpose. The base #menu-* rule already sets
+         flex column, and `body.menu-new #menu-legal` outranks `#menu-legal.hidden`
+         — declaring display:flex here kept the screen permanently visible (it
+         opened itself on load and Back appeared to do nothing). */
       body.menu-new #menu-legal {
-        top: 118px; bottom: 34px; transform: none;
-        display: flex; flex-direction: column; gap: 10px;
+        top: 118px; bottom: 34px; transform: none; gap: 10px;
       }
       body.menu-new #legal-list { max-height: none; flex: 1 1 auto; }
 
