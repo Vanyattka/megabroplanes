@@ -2,20 +2,34 @@
 
 // ---------------------------------------------------------------------------
 // Version + release notes (main menu → RELEASE NOTES).
-// Scheme: v0.x while pre-1.0 (pre-release). Each release gets a NATO phonetic
-// codename (Alpha, Bravo, Charlie, …) — fitting for an aviation game.
+// Scheme: v0.x was pre-1.0 (channel PRE-RELEASE); 1.0.0 onward ships as
+// RELEASE. Each release gets a NATO phonetic codename (Alpha, Bravo, Charlie,
+// … Golf, Hotel) — fitting for an aviation game.
 // On every update: bump GAME_VERSION/GAME_CODENAME and add a new entry to the
 // TOP of CHANGELOG (newest first).
+// CHANGELOG notes stay ENGLISH-ONLY on purpose — it's a technical log, not
+// interface copy (the UI itself is translated, see src/ui/strings.js).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '0.7.8';
-export const GAME_CODENAME = 'Golf';
-export const GAME_CHANNEL = 'PRE-RELEASE';
+export const GAME_VERSION = '1.0.0';
+export const GAME_CODENAME = 'Hotel';
+export const GAME_CHANNEL = 'RELEASE';
 
 // New main-menu + race-lobby skin (v0.7.3). Flip to false to fall straight back
 // to the old UI — everything is gated behind the body.menu-new class, the old
 // CSS and markup are untouched.
 export const USE_NEW_MENU = true;
 export const CHANGELOG = [
+  {
+    version: '1.0.0',
+    codename: 'Hotel',
+    channel: 'RELEASE',
+    date: '2026-07-25',
+    notes: [
+      'First release! Everything from the last year of building — the procedural world, three aircraft, multiplayer combat races, day/night, photo mode — is now a 1.0.',
+      'The interface speaks Russian. Pick your language in Settings; it applies instantly, no reload needed, and is remembered next time.',
+      'New players get a short flight guide on first launch: throttle and takeoff, pitch/roll/yaw, gear, landing, camera and racing. You can replay it any time from Settings.',
+    ],
+  },
   {
     version: '0.7.8',
     codename: 'Golf',

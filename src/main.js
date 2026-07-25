@@ -57,7 +57,13 @@ import { ChaseCamera } from './camera/ChaseCamera.js';
 import { Hud } from './ui/Hud.js';
 import { PostFx } from './effects/PostFx.js';
 import { gfx, view } from './ui/GraphicsSettings.js';
+import { t, plural, initI18n, onLangChange } from './ui/I18n.js';
+import { Guide } from './ui/Guide.js';
 import { profiler } from './debug/Profiler.js';
+
+// Translate the static markup before any UI work happens, so the first paint is
+// already in the player's language (no English flash).
+initI18n();
 
 const renderer = new Renderer();
 // Scratch Vector3 reused by the per-frame jet reflection query so we
@@ -209,8 +215,8 @@ const audio = new Audio();
 const audioIndicatorEl = document.getElementById('audio-indicator');
 function updateAudioIndicator() {
   if (!audioIndicatorEl) return;
-  if (!audio.isStarted()) { audioIndicatorEl.textContent = '🔈 off'; return; }
-  audioIndicatorEl.textContent = audio.isMuted() ? '🔇 muted' : '🔊 on';
+  if (!audio.isStarted()) { audioIndicatorEl.textContent = t('audio.off'); return; }
+  audioIndicatorEl.textContent = audio.isMuted() ? t('audio.muted') : t('audio.on');
 }
 function firstInput() {
   audio.start();
@@ -248,6 +254,15 @@ const bullets = new Bullets(renderer.scene, mp.id);
 let playerName = '';
 try { playerName = (localStorage.getItem('mbp:name') || '').slice(0, 16); } catch {}
 let _namedId = null;
+// Last status seen, so a language switch can re-render the pill without waiting
+// for the next snapshot.
+let _mpStatus = { connected: false, count: 0, id: null };
+function renderMpStatus() {
+  if (!mpStatusEl) return;
+  const { connected, count, id } = _mpStatus;
+  if (!connected) mpStatusEl.textContent = t('mp.offline');
+  else mpStatusEl.textContent = t('mp.online', { id: id ?? '?', count, others: plural('mp.other', count) });
+}
 mp.onStatusChange(({ connected, count, id }) => {
   if (id != null) bullets.setLocalId(id);
   // Send our name once per connection (a fresh id == a new/re-connect). Status
@@ -257,9 +272,8 @@ mp.onStatusChange(({ connected, count, id }) => {
     if (playerName.trim()) mp.setName(playerName.trim());
   }
   if (!connected) _namedId = null;
-  if (!mpStatusEl) return;
-  if (!connected) mpStatusEl.textContent = 'mp: offline';
-  else mpStatusEl.textContent = `mp: P${id ?? '?'} · ${count} other${count === 1 ? '' : 's'}`;
+  _mpStatus = { connected, count, id };
+  renderMpStatus();
 });
 const nameInputEl = document.getElementById('name-input');
 if (nameInputEl) {
@@ -287,6 +301,20 @@ let currentMode = 'singleplayer';
 // this toggle enforces the flag, so USE_NEW_MENU=false still drops the class.
 document.body.classList.toggle('menu-new', USE_NEW_MENU);
 const menu = new Menu();
+
+// Flight onboarding. Auto-opens once on a first-ever visit (over the menu), and
+// is re-openable from Settings; `mbp:guideSeen` in localStorage remembers it.
+const guide = new Guide();
+menu.onOpenGuide = () => guide.show(0);
+guide.maybeShowFirstRun();
+
+// Strings the game writes outside the menu/lobby (hint bar, net status, audio
+// pill) also have to follow a language switch.
+onLangChange(() => {
+  if (hintEl) hintEl.textContent = hintText(currentMpPhase());
+  updateAudioIndicator();
+  renderMpStatus();
+});
 
 // Apply a time-of-day preset to the DayNight cycle (or resume auto mode).
 // Only called in singleplayer — multiplayer overrides every frame from
@@ -397,9 +425,9 @@ let lastMpPhase = 'free';
 // Control-hint bar text — swapped in a race so players know SPACE fires (not
 // brakes) and R respawns at the next gate. Captured once so we can restore it.
 const hintEl = document.getElementById('hint');
-const DEFAULT_HINT = hintEl ? hintEl.textContent : '';
-const RACE_HINT =
-  'S/W nose · A/D roll · Q/E yaw · Shift/Ctrl throttle · SPACE fire · G gear · R respawn at gate · L lights · drag to look';
+// Looked up per language (they used to be a DOM snapshot + a JS constant, which
+// froze the English text in place after a language switch).
+const hintText = (phase) => (phase === 'race' ? t('hint.race') : t('hint.free'));
 
 function currentMpPhase() {
   if (raceManager.inRace) return 'race';
@@ -426,7 +454,7 @@ function updateMpPhase() {
     lobby.hide();
     document.body.classList.remove('in-lobby');
   }
-  if (hintEl) hintEl.textContent = phase === 'race' ? RACE_HINT : DEFAULT_HINT;
+  if (hintEl) hintEl.textContent = hintText(phase);
   // Race-only UI (e.g. the touch FIRE button) keys off this class.
   document.body.classList.toggle('in-race', phase === 'race');
   refreshRaceButton();

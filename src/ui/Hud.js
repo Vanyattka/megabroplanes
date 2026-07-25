@@ -1,4 +1,5 @@
 import { Vector3 } from 'three';
+import { t as tr } from './I18n.js';
 
 const MS_TO_KNOTS = 1.944;
 const M_TO_FT = 3.281;
@@ -22,13 +23,13 @@ export class Hud {
     const speed = plane.velocity.length() * MS_TO_KNOTS;
     const alt = plane.position.y * M_TO_FT;
     const thr = Math.round(plane.throttle * 100);
-    if (this.speedEl) this.speedEl.innerHTML = `${Math.round(speed)}<span class="u">kt</span>`;
-    if (this.altEl) this.altEl.innerHTML = `${Math.round(alt)}<span class="u">ft</span>`;
+    if (this.speedEl) this.speedEl.innerHTML = `${Math.round(speed)}<span class="u">${tr('unit.kt')}</span>`;
+    if (this.altEl) this.altEl.innerHTML = `${Math.round(alt)}<span class="u">${tr('unit.ft')}</span>`;
     if (this.thrEl) this.thrEl.innerHTML = `${thr}<span class="u">%</span>`;
     if (this.gearEl) {
       const t = plane.gearT ?? 1;
       const transit = t > 0.02 && t < 0.98;
-      this.gearEl.textContent = transit ? '· · ·' : t >= 0.98 ? 'DOWN' : 'UP';
+      this.gearEl.textContent = transit ? '· · ·' : t >= 0.98 ? tr('hud.gear.down') : tr('hud.gear.up');
       // Green when locked down, amber in transit, dim when tucked away.
       this.gearEl.style.color = transit ? '#ffd23a' : t >= 0.98 ? '#39ff8a' : 'rgba(255,255,255,0.55)';
     }

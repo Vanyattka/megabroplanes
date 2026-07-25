@@ -15,6 +15,7 @@ import {
 import { PlanePreview } from './PlanePreview.js';
 import { gfx, view } from './GraphicsSettings.js';
 import { getWorldSeed, DEFAULT_WORLD_SEED } from '../world/WorldSeed.js';
+import { t, tf, getLang, setLang, onLangChange, LANGUAGES } from './I18n.js';
 
 const STORAGE_KEY = 'mbp:loadout';
 const MODES = ['singleplayer', 'multiplayer'];
@@ -55,6 +56,8 @@ export class Menu {
     this.timeList = document.getElementById('time-list');
     this.gfxList = document.getElementById('gfx-list');
     this.viewList = document.getElementById('view-list');
+    this.langList = document.getElementById('lang-list');
+    this.btnGuide = document.getElementById('btn-open-guide');
 
     const saved = loadSaved();
     this.selectedType = saved?.type || DEFAULT_PLANE_TYPE;
@@ -79,6 +82,7 @@ export class Menu {
     this._renderTimePresets();
     this._renderGfxPresets();
     this._renderViewPresets();
+    this._renderLangs();
     this._renderVersion();
     this._renderNotes();
     this._renderSeed();
@@ -91,6 +95,14 @@ export class Menu {
     this.onTimeChange = null;
     this.onModeChange = null;
     this.onRegenerate = null;
+    // Wired by main.js — opens the flight guide from the settings screen.
+    this.onOpenGuide = null;
+    if (this.btnGuide) {
+      this.btnGuide.addEventListener('click', () => { if (this.onOpenGuide) this.onOpenGuide(); });
+    }
+    // Everything the menu writes from JS has to be re-rendered on a language
+    // switch (applyStatic() only covers markup with data-i18n).
+    onLangChange(() => this._onLangChanged());
 
     document.body.classList.add('menu-open');
     this._refreshMainButtons();
@@ -174,21 +186,70 @@ export class Menu {
     this._nmSetScreen('notes');
   }
 
+  _renderLangs() {
+    if (!this.langList) return;
+    this.langList.innerHTML = '';
+    for (const l of LANGUAGES) {
+      const btn = document.createElement('button');
+      btn.className = 'time-btn' + (l.key === getLang() ? ' selected' : '');
+      btn.dataset.lang = l.key;
+      // Language names stay in their own language (English / Русский) — that's
+      // the convention players expect from a language picker.
+      btn.textContent = l.label;
+      btn.addEventListener('click', () => setLang(l.key));
+      this.langList.appendChild(btn);
+    }
+  }
+  _updateLangs() {
+    if (!this.langList) return;
+    for (const b of this.langList.querySelectorAll('.time-btn')) {
+      b.classList.toggle('selected', b.dataset.lang === getLang());
+    }
+  }
+
+  // Re-render every JS-written string after a language switch. The static
+  // markup is already handled by I18n.applyStatic().
+  _onLangChanged() {
+    this._updateLangs();
+    this._renderPlaneCards();
+    this._updatePlaneCards();
+    this._renderColors();
+    this._renderTimePresets();
+    this._renderGfxPresets();
+    this._renderViewPresets();
+    this._renderVersion();
+    // (release notes are English-only — nothing to re-render there)
+    this._renderSeed();
+    if (this.newSkin) {
+      this._nmSyncVer();
+      this._nmUpdateHeroCaption();
+    }
+    // Cards were rebuilt, so the per-card previews (old skin) are stale.
+    this.previews = [];
+    this._previewsInitialized = false;
+    if (!this.newSkin && this.isOpen() && !this.planesScreen.classList.contains('hidden')) {
+      this._ensurePreviews();
+      this._startRaf();
+    }
+  }
+
   _renderVersion() {
     const el = document.getElementById('menu-version');
-    if (el) el.textContent = `v${GAME_VERSION} “${GAME_CODENAME}” · ${GAME_CHANNEL}`;
+    if (el) el.textContent = `v${GAME_VERSION} “${GAME_CODENAME}” · ${tf('channel.' + GAME_CHANNEL, GAME_CHANNEL)}`;
   }
 
   _renderSeed() {
     if (!this.seedCurrentEl) return;
     const s = getWorldSeed();
-    this.seedCurrentEl.textContent = s === DEFAULT_WORLD_SEED ? 'default' : s;
+    this.seedCurrentEl.textContent = s === DEFAULT_WORLD_SEED ? t('set.seedDefault') : s;
   }
 
   _renderNotes() {
     const list = document.getElementById('notes-list');
     if (!list) return;
     const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    // Release notes are deliberately English-only — a technical changelog, not
+    // interface copy. Only the screen's own title/nav label is translated.
     list.innerHTML = (CHANGELOG || []).map((r) => {
       const items = (r.notes || []).map((n) => `<li>${esc(n)}</li>`).join('');
       return `<div class="note-release">
@@ -205,7 +266,8 @@ export class Menu {
   _renderPlaneCards() {
     this.planeList.innerHTML = '';
     for (const key of Object.keys(PLANE_TYPES)) {
-      const t = PLANE_TYPES[key];
+      // Named `pt`, not `t` — `t` is the imported translate function.
+      const pt = PLANE_TYPES[key];
       const card = document.createElement('div');
       card.className = 'plane-card' + (key === this.selectedType ? ' selected' : '');
       card.dataset.type = key;
@@ -218,18 +280,18 @@ export class Menu {
 
       const name = document.createElement('div');
       name.className = 'pc-name';
-      name.textContent = t.name.toUpperCase();
+      name.textContent = pt.name.toUpperCase();
       card.appendChild(name);
 
       const desc = document.createElement('div');
       desc.className = 'pc-desc';
-      desc.textContent = t.description;
+      desc.textContent = tf(`plane.${key}.description`, pt.description);
       card.appendChild(desc);
 
-      if (t.tagline) {
+      if (pt.tagline) {
         const tag = document.createElement('div');
         tag.className = 'pc-tagline';
-        tag.textContent = `"${t.tagline}"`;
+        tag.textContent = `"${tf(`plane.${key}.tagline`, pt.tagline)}"`;
         card.appendChild(tag);
       }
 
@@ -291,7 +353,7 @@ export class Menu {
       s.className = 'color-swatch' + (c.hex === this.selectedColor ? ' selected' : '');
       s.dataset.hex = String(c.hex);
       s.style.background = `#${c.hex.toString(16).padStart(6, '0')}`;
-      s.title = c.name;
+      s.title = tf(`color.${c.name}`, c.name);
       s.addEventListener('click', () => {
         this.selectedColor = c.hex;
         this._updateColors();
@@ -314,7 +376,7 @@ export class Menu {
       const btn = document.createElement('button');
       btn.className = 'time-btn' + (key === this.selectedTimePreset ? ' selected' : '');
       btn.dataset.preset = key;
-      btn.textContent = p.label.toUpperCase();
+      btn.textContent = tf(`time.${key}`, p.label).toUpperCase();
       btn.addEventListener('click', () => {
         this.selectedTimePreset = key;
         this._updateTimePresets();
@@ -346,7 +408,7 @@ export class Menu {
       const btn = document.createElement('button');
       btn.className = 'time-btn' + (key === current ? ' selected' : '');
       btn.dataset.gfx = key;
-      btn.textContent = p.label.toUpperCase();
+      btn.textContent = tf(`gfx.${key}`, p.label).toUpperCase();
       btn.addEventListener('click', () => {
         gfx.set(key);
         this._updateGfxPresets();
@@ -370,7 +432,7 @@ export class Menu {
       const btn = document.createElement('button');
       btn.className = 'time-btn' + (key === current ? ' selected' : '');
       btn.dataset.view = key;
-      btn.textContent = p.label.toUpperCase();
+      btn.textContent = tf(`view.${key}`, p.label).toUpperCase();
       btn.addEventListener('click', () => {
         view.set(key);
         this._updateViewPresets();
@@ -484,8 +546,7 @@ export class Menu {
 
   // ---- new skin (v0.7.3) -------------------------------------------------
   _setupNewSkin() {
-    const ver = document.getElementById('nm-ver');
-    if (ver) ver.textContent = `v${GAME_VERSION} · ${GAME_CODENAME} · ${GAME_CHANNEL}`;
+    this._nmSyncVer();
     this._nmBuildBackground();
     this._nmInitHero();
     this._nmSetScreen('main');
@@ -530,12 +591,29 @@ export class Menu {
   }
 
   _nmUpdateHeroCaption() {
-    const t = PLANE_TYPES[this.selectedType];
-    if (!t) return;
+    // `pt`, not `t` — `t` is the imported translate function.
+    const key = this.selectedType;
+    const pt = PLANE_TYPES[key];
+    if (!pt) return;
     const nameEl = document.getElementById('nm-hero-name');
     const subEl = document.getElementById('nm-hero-sub');
-    if (nameEl) nameEl.textContent = t.name;
-    if (subEl) subEl.textContent = t.tagline || t.description || '';
+    if (nameEl) nameEl.textContent = pt.name;
+    if (subEl) {
+      const sub = pt.tagline
+        ? tf(`plane.${key}.tagline`, pt.tagline)
+        : pt.description
+          ? tf(`plane.${key}.description`, pt.description)
+          : '';
+      subEl.textContent = sub;
+    }
+  }
+
+  // Version badge in the new skin (channel word is translated).
+  _nmSyncVer() {
+    const ver = document.getElementById('nm-ver');
+    if (ver) {
+      ver.textContent = `v${GAME_VERSION} · ${GAME_CODENAME} · ${tf('channel.' + GAME_CHANNEL, GAME_CHANNEL)}`;
+    }
   }
 
   _nmSetScreen(name) {

@@ -1,4 +1,5 @@
 import { PLANE_TYPES, BODY_COLORS, TIME_PRESETS, RACE_GATE_OPTIONS } from '../config.js';
+import { t, tf, onLangChange } from '../ui/I18n.js';
 
 // Time options offered in the lobby vote (skip 'auto' — a race wants a fixed,
 // shared sky).
@@ -25,6 +26,7 @@ export class Lobby {
     this.leaveBtn = document.getElementById('lobby-leave');
     this.voteNoteEl = document.getElementById('lobby-vote-note');
     this.chatLogEl = document.getElementById('lobby-chat-log');
+    this.chatEmptyEl = document.getElementById('lobby-chat-empty');
     this.chatInputEl = document.getElementById('lobby-chat-input');
     this.chatSendEl = document.getElementById('lobby-chat-send');
 
@@ -46,6 +48,15 @@ export class Lobby {
     if (this.leaveBtn) this.leaveBtn.addEventListener('click', () => { if (this.onLeave) this.onLeave(); });
 
     this.client.onLobby((r) => this._render(r));
+
+    // Rebuild the JS-rendered lobby bits (option buttons, timer, member rows)
+    // when the language changes; static markup is handled by applyStatic().
+    onLangChange(() => {
+      this._buildOptionButtons();
+      this._renderTimer();
+      const last = this.client.lobby;
+      if (last) this._render(last);
+    });
   }
 
   _buildOptionButtons() {
@@ -68,7 +79,7 @@ export class Lobby {
         b.className = 'lobby-opt';
         b.dataset.kind = 'time';
         b.dataset.val = key;
-        b.textContent = TIME_PRESETS[key].label.toUpperCase();
+        b.textContent = tf(`time.${key}`, TIME_PRESETS[key].label).toUpperCase();
         b.addEventListener('click', () => this.client.lobbySet({ time: key }));
         this.timeEl.appendChild(b);
       }
@@ -80,7 +91,7 @@ export class Lobby {
         b.className = 'lobby-opt';
         b.dataset.kind = 'gates';
         b.dataset.val = String(n);
-        b.textContent = `${n} FLAGS`;
+        b.textContent = t('lobby.flags', { n });
         b.addEventListener('click', () => this.client.lobbySet({ gates: n }));
         this.gatesEl.appendChild(b);
       }
@@ -92,7 +103,7 @@ export class Lobby {
         s.className = 'lobby-swatch';
         s.dataset.hex = String(c.hex);
         s.style.background = `#${c.hex.toString(16).padStart(6, '0')}`;
-        s.title = c.name;
+        s.title = tf(`color.${c.name}`, c.name);
         s.addEventListener('click', () => this.client.lobbySet({ color: c.hex }));
         this.colorEl.appendChild(s);
       }
@@ -151,30 +162,37 @@ export class Lobby {
     name.textContent = m.name || `P${m.id}`;
     row.appendChild(name);
     row.appendChild(document.createTextNode(m.text));
-    // Keep the DOM bounded.
-    while (this.chatLogEl.children.length >= 80) this.chatLogEl.removeChild(this.chatLogEl.firstChild);
+    // Keep the DOM bounded — count/trim only message rows, never the
+    // empty-state hint that lives inside the log.
+    const rows = this.chatLogEl.querySelectorAll('.lc-msg');
+    for (let i = 0; i <= rows.length - 80; i++) rows[i].remove();
     const nearBottom =
       this.chatLogEl.scrollHeight - this.chatLogEl.scrollTop - this.chatLogEl.clientHeight < 40;
     this.chatLogEl.appendChild(row);
+    if (this.chatEmptyEl) this.chatEmptyEl.style.display = 'none';
     if (nearBottom) this.chatLogEl.scrollTop = this.chatLogEl.scrollHeight;
   }
 
   clearChat() {
-    if (this.chatLogEl) this.chatLogEl.innerHTML = '';
+    // Remove message rows only, so the (translated) empty-state hint survives.
+    if (this.chatLogEl) {
+      for (const el of this.chatLogEl.querySelectorAll('.lc-msg')) el.remove();
+    }
+    if (this.chatEmptyEl) this.chatEmptyEl.style.display = '';
     if (this.chatInputEl) this.chatInputEl.value = '';
   }
 
   // --- Launch countdown ticker -------------------------------------------
   _renderTimer() {
     if (!this.timerEl) return;
+    const n = this._memberCount;
+    const full = this._full;
     if (this._launchAt) {
       const secs = Math.max(0, Math.ceil((this._launchAt - Date.now()) / 1000));
-      this.timerEl.textContent = `Launching in ${secs}s …  (${this._memberCount}/${this._full})`;
+      this.timerEl.textContent = t('lobby.launching', { secs, n, full });
     } else {
       this.timerEl.textContent =
-        this._memberCount < 2
-          ? `Waiting for players …  (${this._memberCount}/${this._full}) — host can start anytime`
-          : `(${this._memberCount}/${this._full})`;
+        n < 2 ? t('lobby.waiting', { n, full }) : t('lobby.count', { n, full });
     }
   }
 
@@ -202,7 +220,10 @@ export class Lobby {
       this.membersEl.innerHTML = r.members
         .map((m) => {
           const dot = `<span class="lm-dot" style="background:#${(m.color != null ? m.color : 0xffffff).toString(16).padStart(6, '0')}"></span>`;
-          return `<div class="lm-row${m.id === myId ? ' me' : ''}">${dot}<span>${m.name}${m.host ? ' 👑' : ''}${m.id === myId ? ' (you)' : ''}</span><span class="lm-vote">${PLANE_TYPES[m.plane]?.name || m.plane} · ${m.time}</span></div>`;
+          // m.time is a raw server key ('day'), so run it through the preset
+          // label instead of printing the key.
+          const timeLabel = tf(`time.${m.time}`, TIME_PRESETS[m.time]?.label || m.time);
+          return `<div class="lm-row${m.id === myId ? ' me' : ''}">${dot}<span>${m.name}${m.host ? ' 👑' : ''}${m.id === myId ? t('lobby.you') : ''}</span><span class="lm-vote">${PLANE_TYPES[m.plane]?.name || m.plane} · ${timeLabel}</span></div>`;
         })
         .join('');
     }
@@ -221,7 +242,11 @@ export class Lobby {
 
     // Vote result.
     if (this.voteNoteEl && r.vote) {
-      this.voteNoteEl.textContent = `Racing: ${PLANE_TYPES[r.vote.plane]?.name || r.vote.plane} · ${TIME_PRESETS[r.vote.time]?.label || r.vote.time} · ${r.vote.gates} flags (majority vote)`;
+      this.voteNoteEl.textContent = t('lobby.voteNote', {
+        plane: PLANE_TYPES[r.vote.plane]?.name || r.vote.plane,
+        time: tf(`time.${r.vote.time}`, TIME_PRESETS[r.vote.time]?.label || r.vote.time),
+        gates: r.vote.gates,
+      });
     }
 
     // Host start button.

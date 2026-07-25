@@ -3,6 +3,7 @@ import { biomeAt } from '../world/Biome.js';
 import { riverWaterLevelAt } from '../world/TerrainShape.js';
 import { terrainHeightAt } from '../world/Ground.js';
 import { getVillage } from '../world/Villages.js';
+import { t } from './I18n.js';
 import { getRuin } from '../world/Ruins.js';
 import { listRoadSegmentsNear } from '../world/Roads.js';
 import {
@@ -364,6 +365,6 @@ export class Minimap {
     ctx.font = 'bold 11px monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('N', nx, ny);
+    ctx.fillText(t('compass.n'), nx, ny);
   }
 }

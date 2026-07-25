@@ -18,6 +18,7 @@ import {
   GUN_MUZZLE_OFFSET,
   RACE_RESPAWN_MS,
 } from '../config.js';
+import { t } from '../ui/I18n.js';
 
 // Owns the full race experience once the lobby launches: the isolated session
 // (the server only sends us other racers), the gate rings, checkpoint
@@ -442,7 +443,7 @@ export class RaceManager {
       if (this.phase === 'countdown') {
         const secs = Math.max(0, Math.ceil((r.startAt - now) / 1000));
         this.elCountdown.style.display = 'block';
-        this.elCountdown.textContent = secs > 0 ? String(secs) : 'GO!';
+        this.elCountdown.textContent = secs > 0 ? String(secs) : t('race.go');
       } else this.elCountdown.style.display = 'none';
     }
 
@@ -456,8 +457,8 @@ export class RaceManager {
         const gate = finished ? total : this._localCp;
         this.elStatus.style.display = 'block';
         this.elStatus.innerHTML = finished
-          ? `<span class="rs-fin">FINISHED · ${this._fmt(row.f)}</span>`
-          : `GATE <b>${Math.min(gate + 1, total)}/${total}</b> &nbsp;·&nbsp; ⏱ <b>${(elapsed / 1000).toFixed(1)}s</b>` +
+          ? `<span class="rs-fin">${t('race.finished')} · ${this._fmt(row.f)}</span>`
+          : `${t('race.gate')} <b>${Math.min(gate + 1, total)}/${total}</b> &nbsp;·&nbsp; ⏱ <b>${(elapsed / 1000).toFixed(1)}s</b>` +
             (myRank ? ` &nbsp;·&nbsp; P<b>${myRank}/${r.standings.length}</b>` : '');
       } else this.elStatus.style.display = 'none';
     }
@@ -468,7 +469,7 @@ export class RaceManager {
         const hp = Math.max(0, Math.min(100, this.plane.hp));
         const col = hp > 55 ? '#39ff8a' : hp > 25 ? '#ffd23a' : '#ff5040';
         this.elHp.style.display = 'block';
-        this.elHp.innerHTML = `<div class="hp-label">HULL</div><div class="hp-track"><div class="hp-fill" style="width:${hp}%;background:${col}"></div></div>`;
+        this.elHp.innerHTML = `<div class="hp-label">${t('race.hull')}</div><div class="hp-track"><div class="hp-fill" style="width:${hp}%;background:${col}"></div></div>`;
       } else this.elHp.style.display = 'none';
     }
 
@@ -478,10 +479,10 @@ export class RaceManager {
           const me = s.id === this.client.id;
           const prog = s.f != null ? this._fmt(s.f) : `${s.n}/${total}`;
           const dead = s.hp != null && s.hp <= 0 ? ' 💥' : '';
-          return `<div class="lb-row${me ? ' me' : ''}"><span>${i + 1}. ${s.name || 'P' + s.id}${me ? ' (you)' : ''}${dead}</span><span>${prog}</span></div>`;
+          return `<div class="lb-row${me ? ' me' : ''}"><span>${i + 1}. ${s.name || 'P' + s.id}${me ? t('lobby.you') : ''}${dead}</span><span>${prog}</span></div>`;
         }).join('');
         this.elBoard.style.display = 'block';
-        this.elBoard.innerHTML = `<div class="lb-title">RACE</div>${rows}`;
+        this.elBoard.innerHTML = `<div class="lb-title">${t('race.title')}</div>${rows}`;
       } else this.elBoard.style.display = 'none';
     }
 
@@ -492,14 +493,14 @@ export class RaceManager {
         const lines = fin.map((s, i) => {
           const me = s.id === this.client.id;
           const medal = ['🥇', '🥈', '🥉'][i] || `${i + 1}.`;
-          return `<div class="res-row${me ? ' me' : ''}">${medal} ${s.name || 'P' + s.id}${me ? ' (you)' : ''} — ${this._fmt(s.f)}</div>`;
+          return `<div class="res-row${me ? ' me' : ''}">${medal} ${s.name || 'P' + s.id}${me ? t('lobby.you') : ''} — ${this._fmt(s.f)}</div>`;
         });
         for (const s of dnf) {
           const me = s.id === this.client.id;
-          lines.push(`<div class="res-row${me ? ' me' : ''}">— ${s.name || 'P' + s.id}${me ? ' (you)' : ''} — DNF (${s.n}/${total})</div>`);
+          lines.push(`<div class="res-row${me ? ' me' : ''}">— ${s.name || 'P' + s.id}${me ? t('lobby.you') : ''} — ${t('race.dnf')} (${s.n}/${total})</div>`);
         }
         this.elResults.style.display = 'block';
-        this.elResults.innerHTML = `<div class="res-title">🏁 RESULTS</div>${lines.join('')}<div class="res-foot">returning to the lobby…</div>`;
+        this.elResults.innerHTML = `<div class="res-title">${t('race.results')}</div>${lines.join('')}<div class="res-foot">${t('race.returning')}</div>`;
       } else this.elResults.style.display = 'none';
     }
   }
