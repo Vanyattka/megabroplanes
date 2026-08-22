@@ -92,10 +92,11 @@ export class Bullets {
       b.life -= dt;
 
       // Hit-test only our own bullets, swept against the step segment so fast
-      // tracers don't tunnel through planes.
+      // tracers don't tunnel through planes. A target may carry its own hit
+      // radius `r` (battle balloons are bigger than planes).
       if (b.owner === this.localId && targets) {
         for (const t of targets) {
-          if (this._segHit(b.prev, b.pos, t.position)) {
+          if (this._segHit(b.prev, b.pos, t.position, t.r)) {
             b.active = false;
             if (this.onHit) this.onHit(t.id);
             break;
@@ -122,14 +123,15 @@ export class Bullets {
     if (dirty) this.mesh.instanceMatrix.needsUpdate = true;
   }
 
-  // Distance from point `c` to segment a→b within BULLET_HIT_RADIUS.
-  _segHit(a, b, c) {
+  // Distance from point `c` to segment a→b within the hit radius (per-target
+  // override, defaulting to the plane-sized BULLET_HIT_RADIUS).
+  _segHit(a, b, c, r = BULLET_HIT_RADIUS) {
     _seg.subVectors(b, a);
     const segLen2 = _seg.lengthSq();
     let t = segLen2 > 1e-6 ? _toTarget.subVectors(c, a).dot(_seg) / segLen2 : 0;
     t = t < 0 ? 0 : t > 1 ? 1 : t;
     _proj.copy(a).addScaledVector(_seg, t);
-    return _proj.distanceToSquared(c) <= BULLET_HIT_RADIUS * BULLET_HIT_RADIUS;
+    return _proj.distanceToSquared(c) <= r * r;
   }
 
   dispose() {

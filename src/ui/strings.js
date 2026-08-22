@@ -26,7 +26,7 @@ export const STRINGS = {
     'hint.race':
       'S/W nose · A/D roll · Q/E yaw · Shift/Ctrl throttle · SPACE fire · G gear · R respawn at gate · L lights · drag to look',
     'hint.battle':
-      'S/W nose · A/D roll · Q/E yaw · Shift/Ctrl throttle · SPACE fire · stay inside the wall · grab the ? orbs',
+      'S/W nose · A/D roll · Q/E yaw · Shift/Ctrl throttle · SPACE fire · stay inside the wall · shoot down the ? balloons',
     'menu.footerHint': 'WASD · QE · shift/ctrl · space · R · drag mouse to look',
 
     // ---- in-flight bar ----
@@ -137,7 +137,7 @@ export const STRINGS = {
     'lobby.hint':
       "Everyone races the majority-voted aircraft + time on a separate course. Fly through the gold gates · SPACE shoots · don't get shot down.",
     'lobby.hintBattle':
-      'Free-for-all dogfight: most kills when the clock runs out wins. The arena shrinks — outside the wall your hull burns. Mystery ? orbs give a random effect, good or bad, at equal odds.',
+      'Free-for-all dogfight over random terrain: most kills when the clock runs out wins. The arena shrinks — outside the wall your hull burns. Shoot down the mystery ? balloons for a random effect, good or bad, at equal odds.',
     'lobby.flags': '{n} FLAGS',
     'lobby.launching': 'Launching in {secs}s …  ({n}/{full})',
     'lobby.waitingShort': 'Waiting for players …',
@@ -162,6 +162,7 @@ export const STRINGS = {
     'battle.results': '☠ RESULTS',
     'battle.zoneWarn': 'OUTSIDE THE ZONE — hull burning!',
     'battle.storm': '⛈ THE ARENA IS SHRINKING FASTER!',
+    'battle.aaDeployed': '🎯 AA SITE DEPLOYED — WATCH THE GROUND!',
     'battle.plusKill': '+1 ☠',
     // Mystery-pickup effect names (revealed only on collect).
     'fx.heal': '🔧 FULL REPAIR',
@@ -171,6 +172,8 @@ export const STRINGS = {
     'fx.fragile': '🥚 FRAGILE HULL +50% DMG TAKEN',
     'fx.sputter': '💨 ENGINE SPUTTER — THROTTLE CAPPED',
     'fx.storm': '⛈ STORM — you sped up the arena!',
+    'fx.rockets': '🚀 5 HOMING ROCKETS — hold fire to launch',
+    'fx.aa': '🎯 YOU DEPLOYED AN AA SITE!',
 
     // ---- touch ----
     'touch.brake': 'BRK',
@@ -234,7 +237,7 @@ export const STRINGS = {
     'hint.race':
       'S/W — нос · A/D — крен · Q/E — рыскание · Shift/Ctrl — газ · SPACE — огонь · G — шасси · R — респавн у ворот · L — фары · зажми мышь для обзора',
     'hint.battle':
-      'S/W — нос · A/D — крен · Q/E — рыскание · Shift/Ctrl — газ · SPACE — огонь · держись внутри стены · собирай шары «?»',
+      'S/W — нос · A/D — крен · Q/E — рыскание · Shift/Ctrl — газ · SPACE — огонь · держись внутри стены · сбивай шары «?»',
     'menu.footerHint': 'WASD · QE · shift/ctrl · space · R · зажми мышь для обзора',
 
     // ---- in-flight bar ----
@@ -346,7 +349,7 @@ export const STRINGS = {
     'lobby.hint':
       'Все летят на самолёте и во времени, выбранных большинством, по отдельной трассе. Пролетай через золотые ворота · SPACE — огонь · не дай себя сбить.',
     'lobby.hintBattle':
-      'Все против всех: побеждает тот, у кого больше сбитых к концу матча. Арена сужается — за стеной корпус горит. Шары «?» дают случайный эффект, хороший или плохой, шансы равны.',
+      'Все против всех над случайной местностью: побеждает тот, у кого больше сбитых к концу матча. Арена сужается — за стеной корпус горит. Сбивай шары «?» — случайный эффект, хороший или плохой, шансы равны.',
     'lobby.flags': '{n} ВОРОТ',
     'lobby.launching': 'Старт через {secs} с …  ({n}/{full})',
     'lobby.waitingShort': 'Ждём игроков …',
@@ -371,6 +374,7 @@ export const STRINGS = {
     'battle.results': '☠ ИТОГИ БОЯ',
     'battle.zoneWarn': 'ВНЕ ЗОНЫ — корпус горит!',
     'battle.storm': '⛈ АРЕНА СЖИМАЕТСЯ БЫСТРЕЕ!',
+    'battle.aaDeployed': '🎯 РАЗВЁРНУТА УСТАНОВКА ПВО — СЛЕДИ ЗА ЗЕМЛЁЙ!',
     'battle.plusKill': '+1 ☠',
     // Названия эффектов-«сюрпризов» (раскрываются только при подборе).
     'fx.heal': '🔧 ПОЛНЫЙ РЕМОНТ',
@@ -380,6 +384,8 @@ export const STRINGS = {
     'fx.fragile': '🥚 ХРУПКИЙ КОРПУС +50% К УРОНУ ПО ТЕБЕ',
     'fx.sputter': '💨 ДВИГАТЕЛЬ ЧИХАЕТ — ГАЗ ОГРАНИЧЕН',
     'fx.storm': '⛈ ШТОРМ — ты ускорил арену!',
+    'fx.rockets': '🚀 5 САМОНАВОДЯЩИХСЯ РАКЕТ — зажми огонь для пуска',
+    'fx.aa': '🎯 ТЫ РАЗВЕРНУЛ УСТАНОВКУ ПВО!',
 
     // ---- touch ----
     'touch.brake': 'ТОРМ',

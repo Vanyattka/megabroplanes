@@ -405,6 +405,7 @@ if (import.meta.env && import.meta.env.DEV) {
   window.__tp = (x, y, z) =>
     plane.spawnAirborne(new Vector3(x, y, z), plane.quaternion.clone(), new Vector3(0, 0, 0), 0.2);
   window.__plane = plane;
+  window.__mp = mp;
   window.__gh = (x, z) => groundHeight(x, z);
   window.__cp = (i) => mp.sendCheckpoint(i);
   window.__rinfo = () => {

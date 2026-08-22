@@ -339,6 +339,21 @@ export class Minimap {
       ctx.strokeRect(-3, -3, 6, 6);
       ctx.restore();
     }
+    // Deployed AA sites — red triangles, so pilots know which ground to avoid.
+    for (const tr of r.turrets || []) {
+      const pos = this._worldToCanvas(tr.x, tr.z, plane);
+      if (!this._inside(pos)) continue;
+      ctx.fillStyle = '#ff5040';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(pos.x, pos.y - 4);
+      ctx.lineTo(pos.x + 4, pos.y + 3.5);
+      ctx.lineTo(pos.x - 4, pos.y + 3.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
   }
 
   _drawRemotes(plane) {

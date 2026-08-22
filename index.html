@@ -284,6 +284,7 @@
       body.menu-open #race-results,
       body.menu-open #battle-warning,
       body.menu-open #battle-storm,
+      body.menu-open #battle-aa,
       body.menu-open #battle-fx,
       body.menu-open #battle-kill { display: none !important; }
       #menu-title {
@@ -672,6 +673,28 @@
         box-shadow: var(--hud-shadow);
         animation: battle-warn-pulse 0.7s ease-in-out infinite;
       }
+      /* AA-deployed notice — same transient slot family, amber/red accent.
+         Sits just under the storm slot in case both fire together. */
+      #battle-aa {
+        position: absolute;
+        top: 142px; left: 50%; transform: translateX(-50%);
+        color: #ffb066;
+        background: rgba(44, 22, 8, 0.6);
+        -webkit-backdrop-filter: var(--hud-blur);
+        backdrop-filter: var(--hud-blur);
+        border: 1px solid rgba(255, 150, 60, 0.65);
+        padding: 7px 16px;
+        border-radius: 999px;
+        font-family: monospace;
+        font-size: 13px;
+        font-weight: bold;
+        letter-spacing: 1px;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+        display: none;
+        pointer-events: none;
+        box-shadow: var(--hud-shadow);
+        animation: battle-warn-pulse 0.7s ease-in-out infinite;
+      }
       /* Active mystery-effect banner — above the hull bar and the control hint
          (the in-race hint sits at bottom:64px). Gold = buff, red = debuff. */
       #battle-fx {
@@ -771,7 +794,8 @@
       body.in-lobby #hud, body.in-lobby #hint, body.in-lobby #minimap,
       body.in-lobby #horizon, body.in-lobby #settings, body.in-lobby #touch-ui { display: none !important; }
       body.photo #race-hp, body.photo #race-crosshair, body.photo #lobby,
-      body.photo #battle-warning, body.photo #battle-storm, body.photo #battle-fx, body.photo #battle-kill { display: none !important; }
+      body.photo #battle-warning, body.photo #battle-storm, body.photo #battle-aa,
+      body.photo #battle-fx, body.photo #battle-kill { display: none !important; }
       body.menu-open #race-hp, body.menu-open #race-crosshair, body.menu-open #lobby { display: none !important; }
 
       /* ==================================================================
@@ -1037,6 +1061,7 @@
     <!-- Battle-mode extras (v1.1) — all hidden by default, driven by BattleManager. -->
     <div id="battle-warning" data-i18n="battle.zoneWarn">OUTSIDE THE ZONE — hull burning!</div>
     <div id="battle-storm" data-i18n="battle.storm">⛈ THE ARENA IS SHRINKING FASTER!</div>
+    <div id="battle-aa" data-i18n="battle.aaDeployed">🎯 AA SITE DEPLOYED — WATCH THE GROUND!</div>
     <div id="battle-fx"></div>
     <div id="battle-kill"></div>
     <div id="lobby" class="hidden">

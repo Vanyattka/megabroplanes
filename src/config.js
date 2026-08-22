@@ -10,7 +10,7 @@
 // CHANGELOG notes stay ENGLISH-ONLY on purpose — it's a technical log, not
 // interface copy (the UI itself is translated, see src/ui/strings.js).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '1.1.1';
+export const GAME_VERSION = '1.2.0';
 export const GAME_CODENAME = 'India';
 export const GAME_CHANNEL = 'RELEASE';
 
@@ -19,6 +19,18 @@ export const GAME_CHANNEL = 'RELEASE';
 // CSS and markup are untouched.
 export const USE_NEW_MENU = true;
 export const CHANGELOG = [
+  {
+    version: '1.2.0',
+    codename: 'India',
+    channel: 'RELEASE',
+    date: '2026-08-22',
+    notes: [
+      'The battle arena now lands somewhere different every match — foothills, forests, open sea, mountain ridges — instead of always circling the home plains.',
+      'Mystery pickups are hot-air BALLOONS now, floating over the terrain with a golden “?” basket. You don\'t fly through them any more — you SHOOT them down.',
+      'New mystery effect: 🚀 5 homing rockets. While you have ammo, holding fire also launches a rocket every second or so; it locks onto the nearest plane ahead of your nose and chases it. Rockets hit for ~3x a bullet and burn up when you go down.',
+      'The arena wall is far less in-your-face: a faint curtain of vertical light streaks that fades out at a distance and brightens as you approach it (still red when you\'re outside).',
+    ],
+  },
   {
     version: '1.1.1',
     codename: 'India',
@@ -1370,14 +1382,33 @@ export const RACE_RESPAWN_MS = 3500;      // matches server; downed → respawn 
 // ---------------------------------------------------------------------------
 export const BATTLE_WALL_HEIGHT = 2600;       // arena wall cylinder height (m)
 export const BATTLE_WALL_SEGMENTS = 96;       // cylinder roundness
-export const BATTLE_WALL_OPACITY = 0.16;      // resting wall translucency
+// The wall is a faint curtain of vertical light streaks (canvas texture), NOT
+// a solid veil: nearly invisible from the arena centre, brightening as you
+// approach it so the boundary still reads clearly up close.
+export const BATTLE_WALL_OPACITY = 0.06;      // resting (far-away) translucency
+export const BATTLE_WALL_NEAR_OPACITY = 0.34; // right at the wall
+export const BATTLE_WALL_NEAR_DIST = 600;     // fade-in starts this far from the wall (m)
+export const BATTLE_WALL_STREAKS = 220;       // vertical streaks around the circumference
 export const BATTLE_ZONE_COLOR = 0x39c6ff;    // wall color inside the zone (cyan)
 export const BATTLE_ZONE_COLOR_OUT = 0xff5040;// wall color while you're outside (red)
-export const BATTLE_PICKUP_RADIUS = 36;       // fly-through collect distance (m)
-export const BATTLE_PICKUP_COLOR = 0xffd23a;  // outer shell (gold, blooms)
-export const BATTLE_PICKUP_CORE = 0xff9df5;   // inner core (magenta, blooms)
-export const BATTLE_PICKUP_SIZE = 9;          // outer shell radius (m)
+// Mystery pickups are hot-air balloons, shot down by bullets (no fly-through).
+export const BATTLE_BALLOON_RADIUS = 7;       // envelope radius (m)
+export const BATTLE_BALLOON_HIT_RADIUS = 14;  // bullet-to-balloon hit distance (m)
+export const BATTLE_BALLOON_ALT_MIN = 130;    // metres above terrain (min)
+export const BATTLE_BALLOON_ALT_SPAN = 150;   // + deterministic per-id variation
+export const BATTLE_PICKUP_COLOR = 0xffd23a;  // basket color (gold, blooms — the beacon)
+export const BATTLE_BALLOON_COLORS = [0xff5a4e, 0x3f8cff, 0xffb347, 0x9c6bff, 0x39d98a]; // envelope palette by id
 export const BATTLE_DURATION_OPTIONS = [2, 5, 7]; // votable match length (minutes) — must match the server
+// Homing rockets (the `rockets` mystery effect). Ammo is server-authoritative
+// (spent on launch, lost on death); these drive the client-side missile sim.
+export const ROCKET_SPEED = 190;              // m/s (faster than any plane)
+export const ROCKET_TURN_RATE = 2.4;          // rad/s steering toward the target
+export const ROCKET_LIFE = 7;                 // seconds before it fizzles
+export const ROCKET_INTERVAL = 1.2;           // seconds between launches while firing
+export const ROCKET_HIT_RADIUS = 14;          // m from target centre = hit
+export const ROCKET_LOCK_RANGE = 1600;        // max lock-on distance (m)
+export const ROCKET_LOCK_CONE_COS = 0.5;      // prefer targets within ~60° of the nose
+export const ROCKET_MAX = 12;                 // live rockets in the scene (own + remote)
 // Mystery-pickup effects. Which effect a pickup holds is rolled SERVER-side at
 // equal odds and stays hidden until collected; the server then tells only the
 // collector its key + expiry. Client-side physics effects (thrust/throttle)
@@ -1390,6 +1421,8 @@ export const BATTLE_EFFECTS = {
   fragile: { good: false },                   // +50% damage taken (server)
   sputter: { good: false, throttleCap: 0.55 },// throttle capped
   storm:   { good: false },                   // arena shrinks faster — hits everyone (server rebases the zone)
+  rockets: { good: true },                    // +5 homing rockets (server-side ammo)
+  aa:      { good: false },                   // deploys a ground AA rocket site — chaos for everyone
 };
 
 // ---------------------------------------------------------------------------

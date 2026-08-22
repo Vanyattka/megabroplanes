@@ -102,12 +102,41 @@ const BATTLE_DURATION_OVERRIDE_MS = Number(process.env.BATTLE_DURATION_MS) || nu
 const BATTLE_ZONE_SHRINK_OVERRIDE_MS = Number(process.env.BATTLE_ZONE_SHRINK_MS) || null;
 const BATTLE_ZONE_START_R = 2600;
 const BATTLE_ZONE_END_R = 380;
+// The arena centre is thrown a seeded random distance out from the home
+// plains, so every match fights over different terrain — foothills, sea,
+// forest, mountains (the flat-spawn suppression only covers ~1.5 km around
+// the origin). Players are teleported in, so distance costs nothing.
+const BATTLE_ARENA_MIN_DIST = 3000;
+const BATTLE_ARENA_MAX_DIST = 15000;
 // The storm pickup divides the REMAINING shrink time by this factor.
 const BATTLE_STORM_FACTOR = 2;
+// Homing rockets (the `rockets` pickup): ammo is granted/spent SERVER-side —
+// +5 per pickup (capped), one spent per rocket launch (`fire` with r:1), all
+// lost on death. A rocket hit claim (`hit` with w:'r') is only honored within
+// a launch window, and deals ROCKET_DMG instead of GUN_DMG.
+const ROCKET_AMMO_PER_PICKUP = 5;
+const ROCKET_AMMO_CAP = 10;
+const ROCKET_DMG = 34;
+const ROCKET_HIT_WINDOW_MS = 12000; // launch-to-hit validity (covers flight time)
+// AA sites (the `aa` pickup): a ground launcher is deployed under the shot
+// balloon and fires a homing rocket at a RANDOM in-range player every
+// AA_FIRE_INTERVAL_MS, for chaos. The server only picks target + timing and
+// broadcasts the launch (`fire` with aa:turretId); clients simulate the
+// rocket, and the victim self-reports the hit (`aa_hit`, damage to SELF only
+// — same trust shape as the self-reported terrain crash).
+const AA_FIRE_INTERVAL_MS = 10000;
+const AA_RANGE = 1800;
+const AA_DMG = 30;
+const AA_MAX_SITES = 8;
+const AA_HIT_MIN_INTERVAL_MS = 900; // self-report flood floor
 const BATTLE_ZONE_DPS = 7;              // hp/s while outside the arena
 const BATTLE_PICKUP_INTERVAL_MS = Number(process.env.BATTLE_PICKUP_INTERVAL_MS) || 7000;
 const BATTLE_PICKUP_MAX = 6;            // concurrent pickups in the arena
-const BATTLE_PICKUP_CLAIM_DIST = 320;   // sanity cap on a claim vs 20 Hz state (m)
+// Pickups are balloons SHOT DOWN by bullets now, not flown through — a tracer
+// reaches ~900 m and the shooter keeps flying while it travels, so the claim
+// sanity cap is generous and horizontal-only (the balloon's altitude is
+// derived client-side from the terrain; the server doesn't know it).
+const BATTLE_PICKUP_CLAIM_DIST = 1300;
 // Effect table: ms = duration (0 = instant), dmgMul = outgoing damage factor,
 // takeMul = incoming damage factor. thrust/throttle effects are client-side
 // physics — the server only relays the key + expiry to the collector.
@@ -119,8 +148,14 @@ const BATTLE_FX = {
   fragile: { ms: 20000, takeMul: 1.5 },   // +50% damage taken
   sputter: { ms: 15000 },                 // throttle capped (client-side)
   storm:   { ms: 0 },                     // arena shrinks faster — hits EVERYONE, permanent
+  rockets: { ms: 0 },                     // +5 homing rockets (server-side ammo)
+  aa:      { ms: 0 },                     // deploys a ground AA rocket site (permanent)
 };
-const BATTLE_FX_KEYS = Object.keys(BATTLE_FX);
+// Effects excluded from the random roll. The machinery stays fully wired
+// (BATTLE_FX_FORCE can still pin them for tests) — delete a key from this set
+// to put the effect back into rotation.
+const BATTLE_FX_DISABLED = new Set(['aa']);
+const BATTLE_FX_KEYS = Object.keys(BATTLE_FX).filter((k) => !BATTLE_FX_DISABLED.has(k));
 // Test seam: force every pickup to hold one specific effect (env-gated so the
 // 1-in-7 roll can be pinned in an integration test; unset in production).
 const BATTLE_FX_FORCE = BATTLE_FX[process.env.BATTLE_FX_FORCE] ? process.env.BATTLE_FX_FORCE : null;
@@ -161,8 +196,8 @@ function makeIdleRace() {
   return {
     phase: 'idle', mode: DEFAULT_MODE, seed: 0, course: [], startAt: 0, endAt: 0,
     timeKey: DEFAULT_TIME, plane: DEFAULT_PLANE,
-    durationMs: RACE_TIMEOUT_MS, zone: null, pickups: [],
-    _nextPickupId: 1, _lastPickupAt: 0,
+    durationMs: RACE_TIMEOUT_MS, zone: null, pickups: [], turrets: [],
+    _nextPickupId: 1, _lastPickupAt: 0, _nextTurretId: 1,
   };
 }
 
@@ -382,15 +417,20 @@ function launchRace() {
   // Battle length comes from the lobby vote (minutes); the zone finishes
   // shrinking at a fixed fraction of it. Env overrides win for tests.
   const battleMs = BATTLE_DURATION_OVERRIDE_MS || vote.duration * 60000;
-  // The battle arena sits over the gentle spawn plains, with a seeded offset so
-  // successive matches don't all pivot on the exact same spot.
+  // The battle arena lands somewhere genuinely different each match: a seeded
+  // random bearing + distance well outside the flattened spawn plains, so the
+  // terrain under the fight varies (hills, sea, forest, mountains). Clients
+  // derive spawn/balloon altitudes from the local terrain, so the server never
+  // needs to know the relief.
   let zone = null;
   if (mode === 'battle') {
     let s = seed >>> 0;
     const rand = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+    const ang = rand() * Math.PI * 2;
+    const dist = BATTLE_ARENA_MIN_DIST + rand() * (BATTLE_ARENA_MAX_DIST - BATTLE_ARENA_MIN_DIST);
     zone = {
-      x: Math.round((rand() - 0.5) * 1200),
-      z: Math.round((rand() - 0.5) * 1200),
+      x: Math.round(Math.cos(ang) * dist),
+      z: Math.round(Math.sin(ang) * dist),
       r0: BATTLE_ZONE_START_R,
       r1: BATTLE_ZONE_END_R,
       shrinkMs: BATTLE_ZONE_SHRINK_OVERRIDE_MS || Math.round(battleMs * BATTLE_SHRINK_FRAC),
@@ -412,8 +452,10 @@ function launchRace() {
     durationMs: mode === 'battle' ? battleMs : RACE_TIMEOUT_MS,
     zone,
     pickups: [],
+    turrets: [],
     _nextPickupId: 1,
     _lastPickupAt: 0,
+    _nextTurretId: 1,
   };
   for (const [, c] of members) {
     c.room = 'race';
@@ -422,6 +464,7 @@ function launchRace() {
     c.dead = false;
     c.respawnAt = 0;
     c.fx = null;
+    c.rockets = 0;
     c.plane.pt = vote.plane; // everyone flies the voted type; color stays personal
     c.lastHit = {};
     c.lastHitAny = 0;
@@ -451,6 +494,7 @@ function endRaceToFree() {
     c.room = 'free';
     c.race = null;
     c.fx = null;
+    c.rockets = 0;
   }
   // A lobby may have filled while this race ran; now that we're idle again,
   // (re)arm its launch countdown and refresh the waiting room.
@@ -468,6 +512,7 @@ function standings() {
       hp: c.hp ?? MAX_HP,
       k: c.race ? c.race.kills || 0 : 0,
       d: c.race ? c.race.deaths || 0 : 0,
+      rk: c.rockets || 0, // homing-rocket ammo (the owner reads their own row)
     });
   }
   if (race.mode === 'battle') {
@@ -497,8 +542,10 @@ function raceMessage() {
     timeKey: race.timeKey,
     plane: race.plane,
     zone: race.zone,
-    // Positions only — the rolled effect stays hidden until collected.
-    pickups: race.pickups.map((p) => ({ id: p.id, x: p.x, y: p.y, z: p.z })),
+    // Positions only — the rolled effect stays hidden until shot down.
+    pickups: race.pickups.map((p) => ({ id: p.id, x: p.x, z: p.z })),
+    // Deployed AA sites (battle). Height is derived client-side from terrain.
+    turrets: race.turrets.map((tr) => ({ id: tr.id, x: tr.x, z: tr.z })),
     standings: standings(),
   };
 }
@@ -596,6 +643,7 @@ function attachClientHandlers(ws) {
           c.dead = false;
           c.hp = MAX_HP;
           c.fx = null;
+          c.rockets = 0;
         }
         break;
       case 'lobby_set':
@@ -652,6 +700,28 @@ function attachClientHandlers(ws) {
           }
         }
         break;
+      case 'aa_hit':
+        // An AA rocket caught this player — self-reported, damage to SELF only
+        // (same trust shape as 'down'). Rate-floored so a bug/abuse can't melt
+        // a hull faster than the sites can actually fire.
+        if (race.phase === 'racing' && race.mode === 'battle' && c.room === 'race' && c.race && !c.dead) {
+          const nowAa = Date.now();
+          if (nowAa - (c.lastAaHitAt || 0) < AA_HIT_MIN_INTERVAL_MS) break;
+          if (!race.turrets.length) break; // no sites deployed — nothing could have fired
+          c.lastAaHitAt = nowAa;
+          let dmg = AA_DMG;
+          const fxT = activeFx(c, nowAa);
+          if (fxT && fxT.takeMul) dmg *= fxT.takeMul;
+          c.hp = Math.max(0, (c.hp ?? MAX_HP) - dmg);
+          if (c.hp <= 0 && !c.dead) {
+            c.dead = true;
+            c.respawnAt = nowAa + RESPAWN_MS;
+            c.race.deaths++; // no kill credit — the flak got them
+            c.fx = null;
+            c.rockets = 0;
+          }
+        }
+        break;
       case 'down':
         // Self-reported crash (e.g. flew into terrain). A client can only down
         // itself, and damage is server-authoritative anyway, so trust it: mark
@@ -661,15 +731,26 @@ function attachClientHandlers(ws) {
           c.hp = 0;
           c.dead = true;
           c.respawnAt = Date.now() + RESPAWN_MS;
-          if (race.mode === 'battle') { c.race.deaths++; c.fx = null; }
+          if (race.mode === 'battle') { c.race.deaths++; c.fx = null; c.rockets = 0; }
         }
         break;
-      case 'fire':
-        // Relay tracer to other racers so they see the shots.
+      case 'fire': {
+        // Relay tracer to other racers so they see the shots. A rocket launch
+        // (r:1, battle only) spends server-side ammo and carries its homing
+        // target id so victims see the rocket actually chasing them; with no
+        // ammo the r flag is stripped and it relays as a plain tracer.
         if (c.room === 'race' && race.phase === 'racing' && !c.dead && msg.o && msg.d) {
-          broadcastToRoom('race', { type: 'fire', id, o: msg.o, d: msg.d }, id);
+          const out = { type: 'fire', id, o: msg.o, d: msg.d };
+          if (msg.r && race.mode === 'battle' && (c.rockets || 0) > 0) {
+            c.rockets--;
+            c.lastRocketAt = Date.now();
+            out.r = 1;
+            if (typeof msg.t === 'number') out.t = msg.t;
+          }
+          broadcastToRoom('race', out, id);
         }
         break;
+      }
       case 'hit': {
         // Shooter claims a hit; server is the authority on HP.
         if (race.phase !== 'racing' || c.room !== 'race' || c.dead) break;
@@ -684,7 +765,13 @@ function attachClientHandlers(ws) {
         c.lastHitAny = now;
         // Battle-mode mystery effects scale the damage: the shooter's dmgMul
         // (double damage / pea-shooter) and the target's takeMul (fragile hull).
+        // A rocket hit (w:'r') deals ROCKET_DMG instead — honored only within
+        // the launch window (ammo was already spent on the `fire` r:1 launch).
         let dmg = GUN_DMG;
+        if (race.mode === 'battle' && msg.w === 'r') {
+          if (now - (c.lastRocketAt || 0) > ROCKET_HIT_WINDOW_MS) break;
+          dmg = ROCKET_DMG;
+        }
         if (race.mode === 'battle') {
           const fxS = activeFx(c, now);
           const fxT = activeFx(tgt, now);
@@ -698,7 +785,8 @@ function attachClientHandlers(ws) {
           if (race.mode === 'battle') {
             if (c.race) c.race.kills++;
             if (tgt.race) tgt.race.deaths++;
-            tgt.fx = null; // effects don't survive going down
+            tgt.fx = null;     // effects don't survive going down
+            tgt.rockets = 0;   // neither does rocket ammo
           }
         }
         break;
@@ -711,12 +799,12 @@ function attachClientHandlers(ws) {
         const i = race.pickups.findIndex((p) => p.id === msg.id);
         if (i < 0) break; // already taken (or bogus id) — first claim wins
         const p = race.pickups[i];
-        // Generous distance sanity check against the 20 Hz state stream, in the
-        // spirit of the existing trust model (cp is trusted; this just stops a
-        // client from hoovering the whole arena from one spot).
+        // Generous horizontal distance sanity check against the 20 Hz state
+        // stream, in the spirit of the existing trust model (cp is trusted;
+        // this just stops a client from sniping the whole arena from one spot).
         if (c.state && c.state.p) {
-          const dx = c.state.p[0] - p.x, dy = c.state.p[1] - p.y, dz = c.state.p[2] - p.z;
-          if (dx * dx + dy * dy + dz * dz > BATTLE_PICKUP_CLAIM_DIST * BATTLE_PICKUP_CLAIM_DIST) break;
+          const dx = c.state.p[0] - p.x, dz = c.state.p[2] - p.z;
+          if (dx * dx + dz * dz > BATTLE_PICKUP_CLAIM_DIST * BATTLE_PICKUP_CLAIM_DIST) break;
         }
         race.pickups.splice(i, 1);
         const now2 = Date.now();
@@ -724,6 +812,14 @@ function attachClientHandlers(ws) {
         const until = spec.ms ? now2 + spec.ms : 0;
         if (p.effect === 'heal') {
           c.hp = MAX_HP;
+        } else if (p.effect === 'rockets') {
+          c.rockets = Math.min(ROCKET_AMMO_CAP, (c.rockets || 0) + ROCKET_AMMO_PER_PICKUP);
+        } else if (p.effect === 'aa') {
+          // Deploy a ground AA site right under the popped balloon. Permanent
+          // for the match; fires at a random in-range player on its own clock.
+          if (race.turrets.length < AA_MAX_SITES) {
+            race.turrets.push({ id: race._nextTurretId++, x: p.x, z: p.z, lastFireAt: now2 });
+          }
         } else if (p.effect === 'storm') {
           // The storm hits EVERYONE: rebase the shrink segment at the current
           // radius and divide the remaining time. Permanent, and stacks — a
@@ -773,7 +869,7 @@ wss.on('connection', (ws, req) => {
     room: 'free',
     state: null,
     plane: { pt: DEFAULT_PLANE, pc: null },
-    hp: MAX_HP, dead: false, respawnAt: 0, lastHit: {}, lastHitAny: 0, fx: null,
+    hp: MAX_HP, dead: false, respawnAt: 0, lastHit: {}, lastHitAny: 0, fx: null, rockets: 0, lastRocketAt: 0,
     race: null,
     lobby: { plane: DEFAULT_PLANE, time: DEFAULT_TIME, color: null, gates: DEFAULT_GATES, mode: DEFAULT_MODE, duration: DEFAULT_BATTLE_MINS, ready: false },
   });
@@ -831,6 +927,7 @@ setInterval(() => {
               c.respawnAt = now + RESPAWN_MS;
               if (c.race) c.race.deaths++;
               c.fx = null;
+              c.rockets = 0;
             }
           }
         }
@@ -846,13 +943,30 @@ setInterval(() => {
           race._lastPickupAt = now;
           const ang = Math.random() * Math.PI * 2;
           const rad = Math.sqrt(Math.random()) * zr * 0.85;
+          // No y — the balloon's altitude is derived deterministically from
+          // the terrain on every client (same world seed → same answer).
           race.pickups.push({
             id: race._nextPickupId++,
             x: Math.round(race.zone.x + Math.cos(ang) * rad),
-            y: Math.round(150 + Math.random() * 270),
             z: Math.round(race.zone.z + Math.sin(ang) * rad),
             effect: BATTLE_FX_FORCE || BATTLE_FX_KEYS[Math.floor(Math.random() * BATTLE_FX_KEYS.length)],
           });
+        }
+        // AA sites: each fires a homing rocket at a RANDOM alive player within
+        // range on its own clock. The launch is just a broadcast — clients
+        // simulate the rocket and the victim self-reports the hit.
+        for (const tr of race.turrets) {
+          if (now - tr.lastFireAt < AA_FIRE_INTERVAL_MS) continue;
+          const candidates = [];
+          for (const [cid, cc] of conn) {
+            if (cc.dead || !cc.state || !cc.state.p) continue;
+            const dx = cc.state.p[0] - tr.x, dz = cc.state.p[2] - tr.z;
+            if (dx * dx + dz * dz <= AA_RANGE * AA_RANGE) candidates.push(cid);
+          }
+          if (!candidates.length) continue; // hold fire until someone strays close
+          tr.lastFireAt = now;
+          const target = candidates[Math.floor(Math.random() * candidates.length)];
+          broadcastToRoom('race', { type: 'fire', aa: tr.id, t: target });
         }
         if (now - race.startAt > race.durationMs) { finishRace(); raceChanged = true; }
       } else {

@@ -286,8 +286,22 @@ export class MultiplayerClient {
   // roughly in lockstep with the client's local respawn.
   sendDown() { this._send({ type: 'down' }); }
   // Combat: broadcast a tracer + claim a hit (server is HP authority).
-  sendFire(o, d) { this._send({ type: 'fire', o, d }); }
-  sendHit(target) { this._send({ type: 'hit', target }); }
+  // A rocket launch passes {rocket: true, target} — the server spends the
+  // ammo and relays the homing target so victims see the rocket chase them.
+  sendFire(o, d, opts) {
+    const msg = { type: 'fire', o, d };
+    if (opts && opts.rocket) { msg.r = 1; if (typeof opts.target === 'number') msg.t = opts.target; }
+    this._send(msg);
+  }
+  // weapon: undefined = guns, 'r' = homing rocket (bigger server-side damage).
+  sendHit(target, weapon) {
+    const msg = { type: 'hit', target };
+    if (weapon) msg.w = weapon;
+    this._send(msg);
+  }
+  // Battle: an AA-site rocket caught ME. Self-reported like a terrain crash
+  // ('down') — a client can only hurt itself with this, so the server trusts it.
+  sendAaHit() { this._send({ type: 'aa_hit' }); }
   // Battle mode: claim a mystery pickup we just flew through. The server
   // validates (first claim wins) and answers with an `fx` reveal message.
   sendPickup(id) { this._send({ type: 'pickup', id }); }

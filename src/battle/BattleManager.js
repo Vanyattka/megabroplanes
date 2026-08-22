@@ -4,27 +4,111 @@ import {
   Vector3,
   Quaternion,
   CylinderGeometry,
-  OctahedronGeometry,
-  IcosahedronGeometry,
+  SphereGeometry,
+  ConeGeometry,
+  BoxGeometry,
   MeshBasicMaterial,
+  MeshStandardMaterial,
+  CanvasTexture,
+  RepeatWrapping,
   DoubleSide,
 } from 'three';
 import {
   GUN_FIRE_INTERVAL,
   GUN_MUZZLE_OFFSET,
   RACE_RESPAWN_MS,
+  WATER_LEVEL,
   BATTLE_WALL_HEIGHT,
   BATTLE_WALL_SEGMENTS,
   BATTLE_WALL_OPACITY,
+  BATTLE_WALL_NEAR_OPACITY,
+  BATTLE_WALL_NEAR_DIST,
+  BATTLE_WALL_STREAKS,
   BATTLE_ZONE_COLOR,
   BATTLE_ZONE_COLOR_OUT,
-  BATTLE_PICKUP_RADIUS,
+  BATTLE_BALLOON_RADIUS,
+  BATTLE_BALLOON_HIT_RADIUS,
+  BATTLE_BALLOON_ALT_MIN,
+  BATTLE_BALLOON_ALT_SPAN,
   BATTLE_PICKUP_COLOR,
-  BATTLE_PICKUP_CORE,
-  BATTLE_PICKUP_SIZE,
+  BATTLE_BALLOON_COLORS,
   BATTLE_EFFECTS,
+  ROCKET_SPEED,
+  ROCKET_TURN_RATE,
+  ROCKET_LIFE,
+  ROCKET_INTERVAL,
+  ROCKET_HIT_RADIUS,
+  ROCKET_LOCK_RANGE,
+  ROCKET_LOCK_CONE_COS,
+  ROCKET_MAX,
 } from '../config.js';
+import { groundHeight } from '../world/Ground.js';
 import { t } from '../ui/I18n.js';
+
+// ---- shared balloon / rocket assets (lazy module singletons — never
+// disposed per-instance, so add/remove of pickups is alloc-free) -------------
+let _balloonAssets = null;
+function balloonAssets() {
+  if (_balloonAssets) return _balloonAssets;
+  const envelope = new SphereGeometry(BATTLE_BALLOON_RADIUS, 14, 12);
+  envelope.scale(1, 1.15, 1);
+  const basket = new BoxGeometry(2.6, 2.2, 2.6);
+  const rope = new CylinderGeometry(0.07, 0.07, 1, 4);
+  const envelopeMats = BATTLE_BALLOON_COLORS.map(
+    (c) => new MeshStandardMaterial({ color: c, roughness: 0.65, metalness: 0.05 })
+  );
+  // The gold basket is the HDR beacon — it blooms, so the pickup reads at range.
+  const basketMat = new MeshBasicMaterial({ color: BATTLE_PICKUP_COLOR, toneMapped: false });
+  const ropeMat = new MeshStandardMaterial({ color: 0x4a4038, roughness: 0.9 });
+  _balloonAssets = { envelope, basket, rope, envelopeMats, basketMat, ropeMat };
+  return _balloonAssets;
+}
+
+let _rocketAssets = null;
+function rocketAssets() {
+  if (_rocketAssets) return _rocketAssets;
+  // Built pointing along +Z so Object3D.lookAt(pos + vel) aims the nose.
+  const body = new CylinderGeometry(0.28, 0.28, 2.4, 8);
+  body.rotateX(Math.PI / 2);
+  const nose = new ConeGeometry(0.3, 1.0, 8);
+  nose.rotateX(Math.PI / 2);
+  nose.translate(0, 0, 1.7);
+  const glow = new SphereGeometry(0.6, 8, 6);
+  glow.translate(0, 0, -1.6);
+  const bodyMat = new MeshStandardMaterial({ color: 0xd8d8de, roughness: 0.4, metalness: 0.4 });
+  const glowMat = new MeshBasicMaterial({ color: 0xffa23a, toneMapped: false }); // HDR exhaust, blooms
+  _rocketAssets = { body, nose, glow, bodyMat, glowMat };
+  return _rocketAssets;
+}
+
+// Faint vertical light streaks for the arena wall — transparent between the
+// streaks with a whisper of haze, so the wall reads as a curtain of light
+// rather than a solid veil.
+let _wallTexture = null;
+function wallTexture() {
+  if (_wallTexture) return _wallTexture;
+  const cnv = document.createElement('canvas');
+  cnv.width = 32;
+  cnv.height = 8;
+  const ctx = cnv.getContext('2d');
+  ctx.fillStyle = 'rgba(255,255,255,0.10)'; // between-streak haze
+  ctx.fillRect(0, 0, 32, 8);
+  ctx.fillStyle = 'rgba(255,255,255,0.55)'; // streak shoulders
+  ctx.fillRect(14, 0, 4, 8);
+  ctx.fillStyle = 'rgba(255,255,255,1)';    // streak core
+  ctx.fillRect(15, 0, 2, 8);
+  _wallTexture = new CanvasTexture(cnv);
+  _wallTexture.wrapS = RepeatWrapping;
+  _wallTexture.wrapT = RepeatWrapping;
+  _wallTexture.repeat.set(BATTLE_WALL_STREAKS, 1);
+  return _wallTexture;
+}
+
+// Deterministic per-id balloon variation (color pick + altitude), identical on
+// every client without any extra wire data.
+function idHash(id) {
+  return (((id * 2654435761) >>> 0) % 100000) / 100000;
+}
 
 // Owns the BATTLE match experience (v1.1): a free-for-all dogfight inside a
 // shrinking arena. The server authors the match (zone parameters, mystery
@@ -41,6 +125,8 @@ const _mz = new Vector3();
 const _v = new Vector3();
 const _seg = new Vector3();
 const _proj = new Vector3();
+const _desired = new Vector3();
+const _axis = new Vector3();
 
 // Radius from the zone's live shrink segment (baseR at baseAt → r1 over
 // shrinkMs). The server rebases the segment in place when a storm pickup
@@ -77,8 +163,11 @@ export class BattleManager {
     this.inBattle = false;
     this._zone = null;
     this._wall = null;
-    this._pickupMeshes = new Map(); // id -> { group, shell, core, baseY }
-    this._lastPos = new Vector3();
+    this._pickupMeshes = new Map(); // id -> { group, envelope, baseY } (balloons)
+    this._turretMeshes = new Map(); // id -> { group, barrel } (AA sites)
+    // Live homing rockets — a fixed pool of reusable meshes, own + remote + AA.
+    this._rockets = [];
+    this._rocketCd = 0;
     this._fireCd = 0;
     this._localDowned = false;
     // Same re-death guard as the race: only arm gunfire-death once the server
@@ -96,6 +185,9 @@ export class BattleManager {
     // increase flashes the room-wide "arena sped up" banner.
     this._lastStorms = 0;
     this._stormFlashUntil = 0;
+    // Same pattern for AA sites: a growing turret list flashes its own notice.
+    this._lastTurrets = 0;
+    this._aaFlashUntil = 0;
 
     this.elStatus = document.getElementById('race-status');
     this.elCountdown = document.getElementById('race-countdown');
@@ -105,14 +197,47 @@ export class BattleManager {
     this.elCross = document.getElementById('race-crosshair');
     this.elWarn = document.getElementById('battle-warning');
     this.elStorm = document.getElementById('battle-storm');
+    this.elAa = document.getElementById('battle-aa');
     this.elFx = document.getElementById('battle-fx');
     this.elKill = document.getElementById('battle-kill');
 
     this.client.onFire((msg) => {
-      if (!this.inBattle || !msg.o || !msg.d) return;
-      this.bullets.spawn(_v.fromArray(msg.o), _mz.fromArray(msg.d), msg.id);
+      if (!this.inBattle) return;
+      // aa: a ground AA turret launched a homing rocket at player `t`. The
+      // server only knows the turret id — the launch position (terrain height)
+      // is derived locally, identically on every client.
+      if (msg.aa != null) {
+        const tm = this._turretMeshes.get(msg.aa);
+        if (!tm) return;
+        _v.copy(tm.group.position);
+        _v.y += 6;
+        _mz.set(0, 1, 0); // straight up out of the launcher, then it steers
+        this._launchRocket(_v, _mz, typeof msg.t === 'number' ? msg.t : null, 'aa');
+        return;
+      }
+      if (!msg.o || !msg.d) return;
+      // r:1 = a remote player's homing-rocket launch (t = its target id) —
+      // simulate it locally so the victim sees the rocket actually chasing them.
+      if (msg.r) {
+        this._launchRocket(
+          _v.fromArray(msg.o), _mz.fromArray(msg.d),
+          typeof msg.t === 'number' ? msg.t : null, 'remote'
+        );
+      } else {
+        this.bullets.spawn(_v.fromArray(msg.o), _mz.fromArray(msg.d), msg.id);
+      }
     });
-    this.bullets.onHit = (targetId) => this.client.sendHit(targetId);
+    // This assignment (constructed after RaceManager) is the live one for BOTH
+    // modes: race targets are always numeric player ids and take the sendHit
+    // branch, so the race path is unchanged. String 'pk:N' ids are the battle
+    // balloons — a bullet popping one claims the pickup.
+    this.bullets.onHit = (targetId) => {
+      if (typeof targetId === 'string' && targetId.startsWith('pk:')) {
+        this._popBalloon(Number(targetId.slice(3)));
+      } else {
+        this.client.sendHit(targetId);
+      }
+    };
     this.client.onFx((msg) => this._onFx(msg));
     this.client.onRace((r) => this._onRace(r));
   }
@@ -154,6 +279,10 @@ export class BattleManager {
       this._killFlashUntil = 0;
       this._lastStorms = (r.zone && r.zone.storms) || 0;
       this._stormFlashUntil = 0;
+      this._lastTurrets = (r.turrets || []).length;
+      this._aaFlashUntil = 0;
+      this._clearRockets();
+      this._rocketCd = 0;
       this.bullets.clear();
       const slot = Math.max(0, r.standings.findIndex((s) => s.id === this.client.id));
       const pose = this._spawnPose(slot, r.standings.length);
@@ -183,6 +312,8 @@ export class BattleManager {
     this.group.visible = false;
     this._disposeWall();
     this._disposeAllPickups();
+    this._disposeAllTurrets();
+    this._clearRockets();
     this.bullets.clear();
     this._localDowned = false;
     this._deadRemotes.clear();
@@ -203,6 +334,10 @@ export class BattleManager {
     const geo = new CylinderGeometry(1, 1, BATTLE_WALL_HEIGHT, BATTLE_WALL_SEGMENTS, 1, true);
     const mat = new MeshBasicMaterial({
       color: BATTLE_ZONE_COLOR,
+      // Vertical light streaks instead of a solid veil — unobtrusive from the
+      // arena centre, unmistakable up close (opacity also scales with distance
+      // to the wall, see update()).
+      map: wallTexture(),
       transparent: true,
       opacity: BATTLE_WALL_OPACITY,
       side: DoubleSide,
@@ -228,34 +363,46 @@ export class BattleManager {
     this._wall = null;
   }
 
-  // --- mystery pickup orbs -------------------------------------------------
+  // --- mystery pickup balloons ---------------------------------------------
+  // Ground level under a point, water counting as ground (a balloon over the
+  // sea floats above the surface, not above the seabed).
+  _surfaceY(x, z) {
+    return Math.max(groundHeight(x, z), WATER_LEVEL);
+  }
+
+  // A hot-air balloon: bright envelope (deterministic per-id color), rope
+  // lines, and a glowing gold basket — the "?" prize crate. Shot down by
+  // bullets, not flown through. All geometry/materials are shared module
+  // assets, so building/removing is alloc-light.
   _addPickupMesh(p) {
+    const a = balloonAssets();
+    const h = idHash(p.id);
     const group = new Group();
-    // Outer gold wireframe shell + inner magenta core, both HDR so they bloom
-    // — reads as an obvious "grab me", says nothing about what's inside.
-    const shell = new Mesh(
-      new IcosahedronGeometry(BATTLE_PICKUP_SIZE, 0),
-      new MeshBasicMaterial({ color: BATTLE_PICKUP_COLOR, wireframe: true, toneMapped: false })
-    );
-    const core = new Mesh(
-      new OctahedronGeometry(BATTLE_PICKUP_SIZE * 0.45, 0),
-      new MeshBasicMaterial({ color: BATTLE_PICKUP_CORE, toneMapped: false })
-    );
-    group.add(shell);
-    group.add(core);
-    group.position.set(p.x, p.y, p.z);
+    const envelope = new Mesh(a.envelope, a.envelopeMats[p.id % a.envelopeMats.length]);
+    envelope.castShadow = true;
+    group.add(envelope);
+    const drop = BATTLE_BALLOON_RADIUS * 1.15 + 4.6;
+    const basket = new Mesh(a.basket, a.basketMat);
+    basket.position.y = -drop;
+    group.add(basket);
+    for (const [rx, rz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      const rope = new Mesh(a.rope, a.ropeMat);
+      rope.scale.y = drop - 3;
+      rope.position.set(rx * 1.1, -(drop - 3) / 2 - 2.6, rz * 1.1);
+      group.add(rope);
+    }
+    // Altitude rides the LOCAL terrain (identical on every client — same world
+    // seed) plus a per-id spread, so balloons hug valleys and crown ridges.
+    const baseY = this._surfaceY(p.x, p.z) + BATTLE_BALLOON_ALT_MIN + h * BATTLE_BALLOON_ALT_SPAN;
+    group.position.set(p.x, baseY, p.z);
     this.group.add(group);
-    this._pickupMeshes.set(p.id, { group, shell, core, baseY: p.y });
+    this._pickupMeshes.set(p.id, { group, envelope, baseY });
   }
 
   _removePickupMesh(id) {
     const m = this._pickupMeshes.get(id);
     if (!m) return;
-    this.group.remove(m.group);
-    m.shell.geometry.dispose();
-    m.shell.material.dispose();
-    m.core.geometry.dispose();
-    m.core.material.dispose();
+    this.group.remove(m.group); // shared assets — nothing to dispose
     this._pickupMeshes.delete(id);
   }
 
@@ -263,7 +410,19 @@ export class BattleManager {
     for (const id of [...this._pickupMeshes.keys()]) this._removePickupMesh(id);
   }
 
-  // Sync local orbs to the server's pickup list (spawn new, drop taken/culled).
+  // A bullet popped balloon `id`: bang + claim. The server resolves the race
+  // if someone else shot it in the same tick — first claim wins, and the loser
+  // just sees the balloon vanish with no reveal.
+  _popBalloon(id) {
+    const m = this._pickupMeshes.get(id);
+    if (!m) return;
+    this.explosion.trigger(m.group.position, _mz.set(0, 2, 0));
+    this.audio.boom();
+    this.client.sendPickup(id);
+    this._removePickupMesh(id);
+  }
+
+  // Sync local balloons to the server's pickup list (spawn new, drop taken/culled).
   _syncPickups(pickups) {
     const seen = new Set();
     for (const p of pickups) {
@@ -275,9 +434,59 @@ export class BattleManager {
     }
   }
 
+  // --- AA turret sites (the `aa` mystery effect) ---------------------------
+  // A simple ground launcher: concrete base, pivot box, and an angled launch
+  // tube that slowly sweeps. Placement height is derived from local terrain
+  // (floats on the surface over water).
+  _addTurretMesh(tr) {
+    const group = new Group();
+    const base = new Mesh(new CylinderGeometry(4.2, 5, 2.4, 12), new MeshStandardMaterial({ color: 0x777d84, roughness: 0.85 }));
+    base.position.y = 1.2;
+    group.add(base);
+    const body = new Mesh(new BoxGeometry(3.4, 2.6, 3.4), new MeshStandardMaterial({ color: 0x4b5560, roughness: 0.7 }));
+    body.position.y = 3.6;
+    group.add(body);
+    const barrel = new Mesh(new CylinderGeometry(0.55, 0.7, 7.5, 8), new MeshStandardMaterial({ color: 0x2e343c, roughness: 0.6 }));
+    barrel.geometry.translate(0, 3.75, 0);
+    barrel.position.y = 4.6;
+    barrel.rotation.z = 0.6; // raked launch tube
+    group.add(barrel);
+    const light = new Mesh(new SphereGeometry(0.5, 8, 6), new MeshBasicMaterial({ color: 0xff4030, toneMapped: false }));
+    light.position.y = 5.4;
+    group.add(light);
+    group.position.set(tr.x, this._surfaceY(tr.x, tr.z), tr.z);
+    this.group.add(group);
+    this._turretMeshes.set(tr.id, { group, barrel, mats: [base.material, body.material, barrel.material, light.material], geos: [base.geometry, body.geometry, barrel.geometry, light.geometry] });
+  }
+
+  _removeTurretMesh(id) {
+    const m = this._turretMeshes.get(id);
+    if (!m) return;
+    this.group.remove(m.group);
+    for (const g of m.geos) g.dispose();
+    for (const mat of m.mats) mat.dispose();
+    this._turretMeshes.delete(id);
+  }
+
+  _disposeAllTurrets() {
+    for (const id of [...this._turretMeshes.keys()]) this._removeTurretMesh(id);
+  }
+
+  _syncTurrets(turrets) {
+    const seen = new Set();
+    for (const tr of turrets) {
+      seen.add(tr.id);
+      if (!this._turretMeshes.has(tr.id)) this._addTurretMesh(tr);
+    }
+    for (const id of [...this._turretMeshes.keys()]) {
+      if (!seen.has(id)) this._removeTurretMesh(id);
+    }
+  }
+
   // --- spawn/respawn poses -------------------------------------------------
   // Match start: evenly spaced on a ring at half the initial radius, everyone
-  // facing the arena centre.
+  // facing the arena centre. The arena lands on arbitrary terrain now, so the
+  // altitude rides the local surface instead of assuming flat plains.
   _spawnPose(slot, total) {
     const z = this._zone || { x: 0, z: 0, r0: 2000 };
     const ang = (slot / Math.max(1, total)) * Math.PI * 2;
@@ -286,13 +495,14 @@ export class BattleManager {
     const pz = z.z + Math.sin(ang) * rad;
     let dx = z.x - px, dz = z.z - pz;
     const len = Math.hypot(dx, dz) || 1; dx /= len; dz /= len;
-    const pos = new Vector3(px, 260, pz);
+    const pos = new Vector3(px, this._surfaceY(px, pz) + 280, pz);
     const q = new Quaternion().setFromUnitVectors(new Vector3(0, 0, -1), new Vector3(dx, 0, dz));
     const vel = new Vector3(dx, 0, dz).multiplyScalar(75);
     return { pos, q, vel };
   }
 
-  // Respawn: a random spot well inside the CURRENT zone, facing the centre.
+  // Respawn: a random spot well inside the CURRENT zone, facing the centre,
+  // at a safe height above whatever terrain is underneath.
   _respawnPose() {
     const z = this._zone || { x: 0, z: 0, r1: 400, baseR: 2000, baseAt: 0, shrinkMs: 1 };
     const zr = z.baseAt ? zoneRadius(z, Date.now()) : z.r1;
@@ -302,10 +512,132 @@ export class BattleManager {
     const pz = z.z + Math.sin(ang) * rad;
     let dx = z.x - px, dz = z.z - pz;
     const len = Math.hypot(dx, dz) || 1; dx /= len; dz /= len;
-    const pos = new Vector3(px, 200 + Math.random() * 160, pz);
+    const pos = new Vector3(px, this._surfaceY(px, pz) + 220 + Math.random() * 120, pz);
     const q = new Quaternion().setFromUnitVectors(new Vector3(0, 0, -1), new Vector3(dx, 0, dz));
     const vel = new Vector3(dx, 0, dz).multiplyScalar(75);
     return { pos, q, vel };
+  }
+
+  // --- homing rockets ------------------------------------------------------
+  // One pooled rocket record: { active, kind, target, life, vel, mesh }.
+  // kind: 'own'    — my launch; I do the hit test and claim `hit w:'r'`.
+  //       'remote' — another player's launch; purely visual (they claim hits).
+  //       'aa'     — a ground AA site's launch; if it targets ME, *I* detect
+  //                  the hit on myself and self-report it (`aa_hit`), like the
+  //                  existing self-reported terrain crash.
+  _getRocketSlot() {
+    let slot = this._rockets.find((r) => !r.active);
+    if (!slot) {
+      if (this._rockets.length >= ROCKET_MAX) return null;
+      const a = rocketAssets();
+      const mesh = new Group();
+      mesh.add(new Mesh(a.body, a.bodyMat));
+      mesh.add(new Mesh(a.nose, a.bodyMat));
+      mesh.add(new Mesh(a.glow, a.glowMat));
+      mesh.visible = false;
+      this.group.add(mesh);
+      slot = { active: false, kind: 'remote', target: null, life: 0, vel: new Vector3(), mesh };
+      this._rockets.push(slot);
+    }
+    return slot;
+  }
+
+  _launchRocket(origin, dir, targetId, kind) {
+    const slot = this._getRocketSlot();
+    if (!slot) return;
+    slot.active = true;
+    slot.kind = kind === 'own' || kind === 'aa' ? kind : 'remote';
+    slot.target = targetId;
+    slot.life = ROCKET_LIFE;
+    slot.vel.copy(dir).normalize().multiplyScalar(ROCKET_SPEED);
+    slot.mesh.position.copy(origin);
+    slot.mesh.visible = true;
+  }
+
+  _clearRockets() {
+    for (const r of this._rockets) { r.active = false; r.mesh.visible = false; }
+  }
+
+  // Where rocket `targetId` currently is: me, a remote plane, or gone (null).
+  _targetPos(targetId, remoteTargets) {
+    if (targetId == null) return null;
+    if (targetId === this.client.id) return this.plane.position;
+    if (remoteTargets) {
+      for (const rt of remoteTargets) if (rt.id === targetId) return rt.position;
+    }
+    return null;
+  }
+
+  // Lock-on for my own launches: nearest plane within the nose cone, falling
+  // back to nearest in range at any bearing.
+  _acquireTarget(remoteTargets) {
+    if (!remoteTargets || !remoteTargets.length) return null;
+    _fwd.set(0, 0, -1).applyQuaternion(this.plane.quaternion);
+    let bestCone = null, bestConeD = Infinity;
+    let bestAny = null, bestAnyD = Infinity;
+    for (const rt of remoteTargets) {
+      const d = rt.position.distanceTo(this.plane.position);
+      if (d > ROCKET_LOCK_RANGE) continue;
+      _desired.subVectors(rt.position, this.plane.position).normalize();
+      const inCone = _desired.dot(_fwd) > ROCKET_LOCK_CONE_COS;
+      if (inCone && d < bestConeD) { bestCone = rt; bestConeD = d; }
+      if (d < bestAnyD) { bestAny = rt; bestAnyD = d; }
+    }
+    return bestCone || bestAny;
+  }
+
+  _detonateRocket(r) {
+    r.active = false;
+    r.mesh.visible = false;
+    this.explosion.trigger(r.mesh.position, _mz.set(0, 0, 0));
+    this.audio.boom();
+  }
+
+  _updateRockets(dt, remoteTargets) {
+    for (const r of this._rockets) {
+      if (!r.active) continue;
+      const targetPos = this._targetPos(r.target, remoteTargets);
+      // Steer the velocity toward the target with a capped turn rate — enough
+      // to chase a plane, not enough to be inescapable in a hard break turn.
+      if (targetPos) {
+        _desired.subVectors(targetPos, r.mesh.position).normalize();
+        _v.copy(r.vel).normalize();
+        const dot = Math.max(-1, Math.min(1, _v.dot(_desired)));
+        const ang = Math.acos(dot);
+        const maxAng = ROCKET_TURN_RATE * dt;
+        if (ang > 1e-4) {
+          if (ang <= maxAng) {
+            _v.copy(_desired);
+          } else {
+            _axis.crossVectors(_v, _desired);
+            if (_axis.lengthSq() < 1e-8) _axis.set(0, 1, 0); // dead-astern: pick any pivot
+            _axis.normalize();
+            _v.applyAxisAngle(_axis, maxAng);
+          }
+        }
+        r.vel.copy(_v).multiplyScalar(ROCKET_SPEED);
+      }
+      r.mesh.position.addScaledVector(r.vel, dt);
+      _proj.copy(r.mesh.position).add(r.vel);
+      r.mesh.lookAt(_proj);
+      r.life -= dt;
+
+      // Detonation: on the target, on the ground/sea, or fizzle at end of life.
+      const p = r.mesh.position;
+      if (targetPos && p.distanceTo(targetPos) < ROCKET_HIT_RADIUS) {
+        if (r.kind === 'own') {
+          this.client.sendHit(r.target, 'r');
+        } else if (r.kind === 'aa' && r.target === this.client.id) {
+          this.client.sendAaHit();
+        }
+        this._detonateRocket(r);
+      } else if (p.y < this._surfaceY(p.x, p.z)) {
+        this._detonateRocket(r);
+      } else if (r.life <= 0) {
+        r.active = false;
+        r.mesh.visible = false;
+      }
+    }
   }
 
   // True while the player must take damage / explosions are forced on.
@@ -370,41 +702,25 @@ export class BattleManager {
     }
     this._outside = outside;
 
-    // Pickup orbs: sync with the server list, spin + bob, detect fly-through.
+    // Balloons: sync with the server list, drift gently. Collection is by
+    // SHOOTING them down (see the shootables fed to bullets.update below) —
+    // flying through does nothing.
     this._syncPickups(r.pickups || []);
     for (const [id, m] of this._pickupMeshes) {
-      m.group.rotation.y += dt * 1.6;
-      m.core.rotation.x += dt * 2.4;
-      m.group.position.y = m.baseY + Math.sin(now / 500 + id) * 3;
+      m.group.rotation.y += dt * 0.35;
+      m.group.position.y = m.baseY + Math.sin(now / 900 + id) * 4;
     }
-    if (racing && !this._localDowned && !this.plane.crashed) {
-      const moved = this._lastPos.distanceTo(this.plane.position);
-      for (const [id, m] of this._pickupMeshes) {
-        _v.copy(m.group.position);
-        // Swept segment test (same as gate detection) so a fast plane can't
-        // tunnel past an orb between frames; falls back to a point test
-        // across a teleport.
-        let d;
-        if (moved > 0.001 && moved < 120) {
-          _seg.subVectors(this.plane.position, this._lastPos);
-          const len2 = _seg.lengthSq();
-          let t01 = _proj.subVectors(_v, this._lastPos).dot(_seg) / len2;
-          t01 = t01 < 0 ? 0 : t01 > 1 ? 1 : t01;
-          _proj.copy(this._lastPos).addScaledVector(_seg, t01);
-          d = _proj.distanceTo(_v);
-        } else {
-          d = _v.distanceTo(this.plane.position);
-        }
-        if (d < BATTLE_PICKUP_RADIUS) {
-          // Optimistically remove the orb; the server confirms with an `fx`
-          // reveal (first claim wins — if someone beat us to it by a tick,
-          // the orb is gone either way and no effect arrives).
-          this.client.sendPickup(id);
-          this._removePickupMesh(id);
-          break;
-        }
-      }
+
+    // AA turret sites: sync + a slow menacing sweep of the launch tube; a new
+    // site flashes the room-wide notice.
+    this._syncTurrets(r.turrets || []);
+    for (const [id, m] of this._turretMeshes) {
+      m.group.rotation.y += dt * 0.5;
+      void id;
     }
+    const nTurrets = (r.turrets || []).length;
+    if (nTurrets > this._lastTurrets) this._aaFlashUntil = now + 4000;
+    this._lastTurrets = nTurrets;
 
     // Local HP / death / respawn — mirrors the race flow.
     const row = this._localRow();
@@ -448,6 +764,7 @@ export class BattleManager {
     // Combat: fire + bullet sim (shared pool with the race — only one of the
     // two managers is ever active).
     this._fireCd -= dt;
+    this._rocketCd -= dt;
     const combat = racing && !this._localDowned && !this.plane.crashed;
     const firing = combat && !this.plane.onGround &&
       (this.input.isPressed('Space') || !!(this.touch && this.touch.fire));
@@ -455,10 +772,21 @@ export class BattleManager {
       this._fire();
       this._fireCd = GUN_FIRE_INTERVAL;
     }
+    // Bullets hit remote planes AND the balloons (string 'pk:' ids with a
+    // bigger per-target radius — see bullets.onHit for the routing).
     const targets = this.getRemoteTargets ? this.getRemoteTargets() : null;
-    this.bullets.update(dt, combat ? targets : null);
+    let shootables = null;
+    if (combat) {
+      shootables = targets ? [...targets] : [];
+      for (const [id, m] of this._pickupMeshes) {
+        shootables.push({ id: 'pk:' + id, position: m.group.position, r: BATTLE_BALLOON_HIT_RADIUS });
+      }
+    }
+    this.bullets.update(dt, shootables);
+    // Homing rockets (mine chase + claim, remote/AA ones chase for show — and
+    // an AA rocket aimed at ME is the one that hurts).
+    this._updateRockets(dt, targets);
 
-    this._lastPos.copy(this.plane.position);
     this._updateDom(now, zr);
   }
 
@@ -490,12 +818,29 @@ export class BattleManager {
     this.plane.mesh.localToWorld(_mz);
     this.client.sendFire([_mz.x, _mz.y, _mz.z], [_fwd.x, _fwd.y, _fwd.z]);
     this.audio.gunShot();
+
+    // While rocket ammo remains (server-side count, read off my standings
+    // row), holding fire also rides a homing rocket out every ROCKET_INTERVAL.
+    // The launch itself spends the ammo on the server (`fire` with r:1).
+    const row = this._localRow();
+    if (row && (row.rk || 0) > 0 && this._rocketCd <= 0) {
+      this._rocketCd = ROCKET_INTERVAL;
+      const rts = this.getRemoteTargets ? this.getRemoteTargets() : null;
+      const lock = this._acquireTarget(rts);
+      _mz.set(0, -0.9, -3.5); // belly rail
+      this.plane.mesh.localToWorld(_mz);
+      this._launchRocket(_mz, _fwd, lock ? lock.id : null, 'own');
+      this.client.sendFire(
+        [_mz.x, _mz.y, _mz.z], [_fwd.x, _fwd.y, _fwd.z],
+        { rocket: true, target: lock ? lock.id : undefined }
+      );
+    }
   }
 
   // --- HUD -----------------------------------------------------------------
   _hideAllDom() {
     for (const el of [this.elStatus, this.elCountdown, this.elBoard, this.elResults,
-                      this.elHp, this.elWarn, this.elStorm, this.elFx, this.elKill]) {
+                      this.elHp, this.elWarn, this.elStorm, this.elAa, this.elFx, this.elKill]) {
       if (el) el.style.display = 'none';
     }
   }
@@ -522,9 +867,10 @@ export class BattleManager {
     if (this.elStatus) {
       if (this.phase === 'racing') {
         const left = Math.max(0, r.startAt + (r.durationMs || 0) - now);
+        const ammo = row && row.rk ? ` &nbsp;·&nbsp; 🚀 <b>${row.rk}</b>` : '';
         this.elStatus.style.display = 'block';
         this.elStatus.innerHTML =
-          `⏱ <b>${this._fmtClock(left)}</b> &nbsp;·&nbsp; ☠ <b>${row ? row.k : 0}</b>` +
+          `⏱ <b>${this._fmtClock(left)}</b> &nbsp;·&nbsp; ☠ <b>${row ? row.k : 0}</b>${ammo}` +
           (myRank ? ` &nbsp;·&nbsp; P<b>${myRank}/${r.standings.length}</b>` : '');
       } else this.elStatus.style.display = 'none';
     }
@@ -538,6 +884,12 @@ export class BattleManager {
     if (this.elStorm) {
       this.elStorm.style.display =
         now < this._stormFlashUntil && this.phase === 'racing' ? 'block' : 'none';
+    }
+
+    // Room-wide AA notice (a new turret was just deployed).
+    if (this.elAa) {
+      this.elAa.style.display =
+        now < this._aaFlashUntil && this.phase === 'racing' ? 'block' : 'none';
     }
 
     // Active mystery-effect banner (name + remaining seconds).
