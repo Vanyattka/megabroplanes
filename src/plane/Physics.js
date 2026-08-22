@@ -47,8 +47,11 @@ export function step(plane, dt, getHeight, isOnRunway, braking, crashesEnabled) 
   _right.set(1, 0, 0).applyQuaternion(plane.quaternion);
 
   // Forces — scaled per-aircraft so a Cessna crawls and a jet sprints off
-  // the same global MAX_THRUST constant.
-  _thrust.copy(_forward).multiplyScalar(MAX_THRUST * tc.thrustMult * plane.throttle);
+  // the same global MAX_THRUST constant. fxThrustMul is the battle-mode
+  // mystery-effect modifier (overdrive), 1 outside a battle.
+  _thrust.copy(_forward).multiplyScalar(
+    MAX_THRUST * tc.thrustMult * (plane.fxThrustMul || 1) * plane.throttle
+  );
 
   const forwardSpeed = plane.velocity.dot(_forward);
   const liftRef = LIFT_REFERENCE_SPEED * tc.liftRefMult;

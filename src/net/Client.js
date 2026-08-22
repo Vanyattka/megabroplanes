@@ -18,10 +18,13 @@ export class MultiplayerClient {
     this.remotes = new Map(); // id -> { hue, pos, quat, throttle, crashed }
     this._lastSend = 0;
     this._statusListener = null;
-    this._raceListener = null;
+    // Race + fire listeners are ARRAYS: both RaceManager and BattleManager
+    // subscribe (each ignores messages for the other mode).
+    this._raceListeners = [];
     this._lobbyListener = null;
-    this._fireListener = null;
+    this._fireListeners = [];
     this._chatListener = null;
+    this._fxListener = null;
     // Latest race / lobby state from the server (null until first message).
     this.race = null;
     this.lobby = null;
@@ -75,10 +78,12 @@ export class MultiplayerClient {
   }
 
   onStatusChange(fn) { this._statusListener = fn; }
-  onRace(fn) { this._raceListener = fn; }
+  onRace(fn) { this._raceListeners.push(fn); }
   onLobby(fn) { this._lobbyListener = fn; }
-  onFire(fn) { this._fireListener = fn; }
+  onFire(fn) { this._fireListeners.push(fn); }
   onChat(fn) { this._chatListener = fn; }
+  onFx(fn) { this._fxListener = fn; }
+  _emitRace(msg) { for (const fn of this._raceListeners) fn(msg); }
 
   // Toggle the multiplayer system. When off, close the socket, drop
   // remotes, and stop the reconnect loop. Used by the singleplayer mode:
@@ -106,7 +111,7 @@ export class MultiplayerClient {
       this.remotes.clear();
       this.race = null;
       this.lobby = null;
-      if (this._raceListener) this._raceListener(null);
+      this._emitRace(null);
       if (this._lobbyListener) this._lobbyListener(null);
       this._notify();
     }
@@ -119,7 +124,7 @@ export class MultiplayerClient {
   // Abandon a race/lobby we couldn't restore — falls the player cleanly back
   // to free flight (RaceManager tears down on a null race).
   _dropSession() {
-    if (this.race) { this.race = null; if (this._raceListener) this._raceListener(null); }
+    if (this.race) { this.race = null; this._emitRace(null); }
     if (this.lobby) { this.lobby = null; if (this._lobbyListener) this._lobbyListener(null); }
   }
 
@@ -225,14 +230,17 @@ export class MultiplayerClient {
       // Re-tell the server in case our leave_race was lost on the dropped socket.
       if (this._leftRace) { this._send({ type: 'leave_race' }); return; }
       this.race = msg;
-      if (this._raceListener) this._raceListener(msg);
+      this._emitRace(msg);
     } else if (msg.type === 'lobby') {
       this.lobby = msg;
       if (this._lobbyListener) this._lobbyListener(msg);
     } else if (msg.type === 'fire') {
-      if (this._fireListener) this._fireListener(msg); // {id, o, d}
+      for (const fn of this._fireListeners) fn(msg); // {id, o, d}
     } else if (msg.type === 'lobby_chat') {
       if (this._chatListener) this._chatListener(msg); // {id, name, text}
+    } else if (msg.type === 'fx') {
+      // Battle mode: the mystery pickup we just collected, revealed. {effect, until}
+      if (this._fxListener) this._fxListener(msg);
     }
   }
 
@@ -243,9 +251,9 @@ export class MultiplayerClient {
   }
 
   setName(name) { this._send({ type: 'set_name', name }); }
-  joinLobby(plane, time, color, gates) {
+  joinLobby(plane, time, color, gates, mode, duration) {
     this._leftRace = false; // re-entering the race pipeline — clear the leave intent
-    this._send({ type: 'join_lobby', plane, time, color, gates });
+    this._send({ type: 'join_lobby', plane, time, color, gates, mode, duration });
   }
   leaveLobby() { this._send({ type: 'leave_lobby' }); }
   // Bail out of an active race back to free flight (e.g. the player hit START
@@ -280,6 +288,9 @@ export class MultiplayerClient {
   // Combat: broadcast a tracer + claim a hit (server is HP authority).
   sendFire(o, d) { this._send({ type: 'fire', o, d }); }
   sendHit(target) { this._send({ type: 'hit', target }); }
+  // Battle mode: claim a mystery pickup we just flew through. The server
+  // validates (first claim wins) and answers with an `fx` reveal message.
+  sendPickup(id) { this._send({ type: 'pickup', id }); }
 
   // `cp` (optional) = the local race checkpoint progress (gates cleared). Sent
   // alongside state at 20 Hz so the server self-heals any checkpoint that the

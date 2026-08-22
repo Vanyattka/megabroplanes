@@ -117,6 +117,13 @@ export class RaceManager {
       this.phase = 'idle';
       return;
     }
+    // Battle matches are BattleManager's job — never enter a "race" with no
+    // course. (Defensively tear down if we were somehow mid-race.)
+    if (r.mode === 'battle') {
+      if (this.inRace) this._teardown();
+      this.phase = 'idle';
+      return;
+    }
     const wasIn = this.inRace;
     const amPart = this._amParticipant(r);
     this.phase = r.phase;

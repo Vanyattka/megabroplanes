@@ -61,4 +61,9 @@ export function applyControls(plane, input, dt, touch) {
       Math.min(1, plane.throttle + throttleInput * THROTTLE_RATE * dt)
     );
   }
+  // Battle-mode "sputtering engine" mystery effect caps the throttle; 1 (no
+  // cap) outside a battle. Applied after both input paths so touch can't
+  // slide past it.
+  const cap = plane.fxThrottleCap ?? 1;
+  if (plane.throttle > cap) plane.throttle = cap;
 }

@@ -1,4 +1,10 @@
-import { PLANE_TYPES, BODY_COLORS, TIME_PRESETS, RACE_GATE_OPTIONS } from '../config.js';
+import {
+  PLANE_TYPES,
+  BODY_COLORS,
+  TIME_PRESETS,
+  RACE_GATE_OPTIONS,
+  BATTLE_DURATION_OPTIONS,
+} from '../config.js';
 import { t, tf, onLangChange } from '../ui/I18n.js';
 
 // Time options offered in the lobby vote (skip 'auto' — a race wants a fixed,
@@ -6,6 +12,10 @@ import { t, tf, onLangChange } from '../ui/I18n.js';
 const TIME_VOTE_KEYS = ['day', 'morning', 'sunrise', 'sunset', 'night'].filter(
   (k) => TIME_PRESETS[k]
 );
+
+// Match modes offered in the lobby vote (v1.1). Must match the server's
+// MODE_OPTIONS list.
+const MODE_VOTE_KEYS = ['race', 'battle'];
 
 // The race lobby: a waiting room where players gather, vote on the shared
 // plane type + time of day, pick their own color, and launch. Launch happens
@@ -17,10 +27,15 @@ export class Lobby {
     this.client = client;
     this.root = document.getElementById('lobby');
     this.membersEl = document.getElementById('lobby-members');
+    this.modeEl = document.getElementById('lobby-mode');
     this.planeEl = document.getElementById('lobby-plane');
     this.timeEl = document.getElementById('lobby-time');
     this.gatesEl = document.getElementById('lobby-gates');
+    this.gatesWrapEl = document.getElementById('lobby-gates-wrap');
+    this.durationEl = document.getElementById('lobby-duration');
+    this.durationWrapEl = document.getElementById('lobby-duration-wrap');
     this.colorEl = document.getElementById('lobby-color');
+    this.hintEl = document.getElementById('lobby-hint');
     this.timerEl = document.getElementById('lobby-timer');
     this.startBtn = document.getElementById('lobby-start');
     this.leaveBtn = document.getElementById('lobby-leave');
@@ -33,7 +48,7 @@ export class Lobby {
     this.onLeave = null;
     // Wired by main.js to spin the lead-voted plane in the shared 3D hero.
     this.onHero = null;
-    this._mine = { plane: null, time: null, color: null, gates: null };
+    this._mine = { plane: null, time: null, color: null, gates: null, mode: null, duration: null };
 
     // Countdown ticker state — so the "Launching in Ns" text counts down every
     // second on its own, not only when a vote/lobby message happens to arrive.
@@ -60,6 +75,18 @@ export class Lobby {
   }
 
   _buildOptionButtons() {
+    if (this.modeEl) {
+      this.modeEl.innerHTML = '';
+      for (const key of MODE_VOTE_KEYS) {
+        const b = document.createElement('button');
+        b.className = 'lobby-opt';
+        b.dataset.kind = 'mode';
+        b.dataset.val = key;
+        b.textContent = t(`mode.${key}`).toUpperCase();
+        b.addEventListener('click', () => this.client.lobbySet({ mode: key }));
+        this.modeEl.appendChild(b);
+      }
+    }
     if (this.planeEl) {
       this.planeEl.innerHTML = '';
       for (const key of Object.keys(PLANE_TYPES)) {
@@ -96,6 +123,18 @@ export class Lobby {
         this.gatesEl.appendChild(b);
       }
     }
+    if (this.durationEl) {
+      this.durationEl.innerHTML = '';
+      for (const n of BATTLE_DURATION_OPTIONS) {
+        const b = document.createElement('button');
+        b.className = 'lobby-opt';
+        b.dataset.kind = 'duration';
+        b.dataset.val = String(n);
+        b.textContent = t('lobby.mins', { n });
+        b.addEventListener('click', () => this.client.lobbySet({ duration: n }));
+        this.durationEl.appendChild(b);
+      }
+    }
     if (this.colorEl) {
       this.colorEl.innerHTML = '';
       for (const c of BODY_COLORS) {
@@ -110,11 +149,16 @@ export class Lobby {
     }
   }
 
-  // Join with an initial loadout (from the menu selection).
+  // Join with an initial loadout (from the menu selection). Keep the mode and
+  // battle length the player last voted for in this session (so the post-match
+  // auto-rejoin doesn't silently flip a battle group back to racing / reset
+  // its length); first join = race, 5 min.
   join(loadout) {
-    this._mine = { plane: loadout.type, time: 'day', color: loadout.color, gates: RACE_GATE_OPTIONS[0] };
+    const mode = this._mine.mode || 'race';
+    const duration = this._mine.duration || BATTLE_DURATION_OPTIONS[1];
+    this._mine = { plane: loadout.type, time: 'day', color: loadout.color, gates: RACE_GATE_OPTIONS[0], mode, duration };
     this.clearChat(); // a fresh lobby session starts with an empty chat
-    this.client.joinLobby(loadout.type, 'day', loadout.color, RACE_GATE_OPTIONS[0]);
+    this.client.joinLobby(loadout.type, 'day', loadout.color, RACE_GATE_OPTIONS[0], mode, duration);
     if (this.root) this.root.classList.remove('hidden');
   }
 
@@ -223,7 +267,8 @@ export class Lobby {
           // m.time is a raw server key ('day'), so run it through the preset
           // label instead of printing the key.
           const timeLabel = tf(`time.${m.time}`, TIME_PRESETS[m.time]?.label || m.time);
-          return `<div class="lm-row${m.id === myId ? ' me' : ''}">${dot}<span>${m.name}${m.host ? ' 👑' : ''}${m.id === myId ? t('lobby.you') : ''}</span><span class="lm-vote">${PLANE_TYPES[m.plane]?.name || m.plane} · ${timeLabel}</span></div>`;
+          const modeLabel = m.mode ? `${t(`mode.${m.mode}`)} · ` : '';
+          return `<div class="lm-row${m.id === myId ? ' me' : ''}">${dot}<span>${m.name}${m.host ? ' 👑' : ''}${m.id === myId ? t('lobby.you') : ''}</span><span class="lm-vote">${modeLabel}${PLANE_TYPES[m.plane]?.name || m.plane} · ${timeLabel}</span></div>`;
         })
         .join('');
     }
@@ -233,20 +278,32 @@ export class Lobby {
     const selTime = me ? me.time : null;
     const selColor = me ? me.color : null;
     const selGates = me ? me.gates : null;
+    const selMode = me ? me.mode : null;
+    const selDuration = me ? me.duration : null;
     // Remember my picks so RaceManager can read my chosen color at launch.
-    if (me) this._mine = { plane: selPlane, time: selTime, color: selColor, gates: selGates };
+    if (me) this._mine = { plane: selPlane, time: selTime, color: selColor, gates: selGates, mode: selMode, duration: selDuration };
+    if (this.modeEl) for (const b of this.modeEl.children) b.classList.toggle('sel', b.dataset.val === selMode);
     if (this.planeEl) for (const b of this.planeEl.children) b.classList.toggle('sel', b.dataset.val === selPlane);
     if (this.timeEl) for (const b of this.timeEl.children) b.classList.toggle('sel', b.dataset.val === selTime);
     if (this.gatesEl) for (const b of this.gatesEl.children) b.classList.toggle('sel', Number(b.dataset.val) === selGates);
+    if (this.durationEl) for (const b of this.durationEl.children) b.classList.toggle('sel', Number(b.dataset.val) === selDuration);
     if (this.colorEl) for (const s of this.colorEl.children) s.classList.toggle('sel', Number(s.dataset.hex) === selColor);
+
+    // The leading mode decides which extras make sense: the flags vote is
+    // race-only, the match-length vote is battle-only, and the footer hint
+    // explains the winning mode's rules.
+    const leadMode = (r.vote && r.vote.mode) || 'race';
+    if (this.gatesWrapEl) this.gatesWrapEl.style.display = leadMode === 'battle' ? 'none' : '';
+    if (this.durationWrapEl) this.durationWrapEl.style.display = leadMode === 'battle' ? '' : 'none';
+    if (this.hintEl) this.hintEl.textContent = leadMode === 'battle' ? t('lobby.hintBattle') : t('lobby.hint');
 
     // Vote result.
     if (this.voteNoteEl && r.vote) {
-      this.voteNoteEl.textContent = t('lobby.voteNote', {
-        plane: PLANE_TYPES[r.vote.plane]?.name || r.vote.plane,
-        time: tf(`time.${r.vote.time}`, TIME_PRESETS[r.vote.time]?.label || r.vote.time),
-        gates: r.vote.gates,
-      });
+      const plane = PLANE_TYPES[r.vote.plane]?.name || r.vote.plane;
+      const time = tf(`time.${r.vote.time}`, TIME_PRESETS[r.vote.time]?.label || r.vote.time);
+      this.voteNoteEl.textContent = leadMode === 'battle'
+        ? t('lobby.voteNoteBattle', { plane, time, mins: r.vote.duration })
+        : t('lobby.voteNote', { plane, time, gates: r.vote.gates });
     }
 
     // Host start button.

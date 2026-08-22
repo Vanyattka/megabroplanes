@@ -10,8 +10,8 @@
 // CHANGELOG notes stay ENGLISH-ONLY on purpose — it's a technical log, not
 // interface copy (the UI itself is translated, see src/ui/strings.js).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '1.0.0';
-export const GAME_CODENAME = 'Hotel';
+export const GAME_VERSION = '1.1.0';
+export const GAME_CODENAME = 'India';
 export const GAME_CHANNEL = 'RELEASE';
 
 // New main-menu + race-lobby skin (v0.7.3). Flip to false to fall straight back
@@ -19,6 +19,18 @@ export const GAME_CHANNEL = 'RELEASE';
 // CSS and markup are untouched.
 export const USE_NEW_MENU = true;
 export const CHANGELOG = [
+  {
+    version: '1.1.0',
+    codename: 'India',
+    channel: 'RELEASE',
+    date: '2026-08-21',
+    notes: [
+      'New multiplayer mode: BATTLE — a free-for-all dogfight inside a shrinking arena. Most kills when the clock runs out wins; stray outside the wall and your hull starts burning.',
+      'Mystery pickups spawn across the arena. Fly through one and you get a random effect at equal odds — good or bad: full repair, double damage, overdrive thrust… or pea-shooter guns, a fragile hull, a sputtering engine. You never know until you grab it.',
+      'One of the mystery pickups is the STORM: whoever grabs it makes the arena shrink twice as fast for everyone — permanently, and it stacks. The whole room gets a warning when it happens.',
+      'The race lobby is now the game lobby: everyone votes Race or Battle right next to the aircraft and time-of-day votes (the flags vote only shows when Race is winning), and battles vote their own match length — 2, 5 or 7 minutes. The arena pacing scales with it.',
+    ],
+  },
   {
     version: '1.0.0',
     codename: 'Hotel',
@@ -1338,6 +1350,38 @@ export const BULLET_HIT_RADIUS = 8;       // m from a plane center = hit
 export const BULLET_COLOR = 0xfff070;     // tracer color (HDR, blooms)
 export const GUN_MUZZLE_OFFSET = [0.9, -0.1, -4.4]; // local nose offset (wing guns mirror on X)
 export const RACE_RESPAWN_MS = 3500;      // matches server; downed → respawn delay
+
+// ---------------------------------------------------------------------------
+// Multiplayer BATTLE mode (v1.1) — free-for-all dogfight in a shrinking arena.
+// The zone (center, radii, shrink time) and pickup positions are authored
+// server-side and streamed in the match message; these are the client-side
+// visuals, collect tolerance, and the physics side of the mystery effects.
+// The zone radius itself is derived deterministically on both ends from the
+// match startAt timestamp, so no per-tick radius sync is needed.
+// ---------------------------------------------------------------------------
+export const BATTLE_WALL_HEIGHT = 2600;       // arena wall cylinder height (m)
+export const BATTLE_WALL_SEGMENTS = 96;       // cylinder roundness
+export const BATTLE_WALL_OPACITY = 0.16;      // resting wall translucency
+export const BATTLE_ZONE_COLOR = 0x39c6ff;    // wall color inside the zone (cyan)
+export const BATTLE_ZONE_COLOR_OUT = 0xff5040;// wall color while you're outside (red)
+export const BATTLE_PICKUP_RADIUS = 36;       // fly-through collect distance (m)
+export const BATTLE_PICKUP_COLOR = 0xffd23a;  // outer shell (gold, blooms)
+export const BATTLE_PICKUP_CORE = 0xff9df5;   // inner core (magenta, blooms)
+export const BATTLE_PICKUP_SIZE = 9;          // outer shell radius (m)
+export const BATTLE_DURATION_OPTIONS = [2, 5, 7]; // votable match length (minutes) — must match the server
+// Mystery-pickup effects. Which effect a pickup holds is rolled SERVER-side at
+// equal odds and stays hidden until collected; the server then tells only the
+// collector its key + expiry. Client-side physics effects (thrust/throttle)
+// are applied here; damage multipliers live on the server.
+export const BATTLE_EFFECTS = {
+  heal:    { good: true },                    // hull restored to 100% (instant)
+  dmg2:    { good: true },                    // 2x bullet damage (server)
+  boost:   { good: true, thrustMul: 1.5 },    // overdrive thrust
+  dmg05:   { good: false },                   // half bullet damage (server)
+  fragile: { good: false },                   // +50% damage taken (server)
+  sputter: { good: false, throttleCap: 0.55 },// throttle capped
+  storm:   { good: false },                   // arena shrinks faster — hits everyone (server rebases the zone)
+};
 
 // ---------------------------------------------------------------------------
 // Audio — procedural engine + wind through the Web Audio API.

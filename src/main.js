@@ -47,6 +47,7 @@ import {
 import { MultiplayerClient } from './net/Client.js';
 import { RemotePlaneManager } from './net/RemotePlaneManager.js';
 import { RaceManager } from './race/RaceManager.js';
+import { BattleManager } from './battle/BattleManager.js';
 import { Lobby } from './race/Lobby.js';
 import { Bullets } from './combat/Bullets.js';
 import { TouchControls } from './ui/Touch.js';
@@ -351,7 +352,29 @@ function applyModeTime(timePreset) {
 // in-flight race + combat experience; Lobby owns the waiting-room UI.
 // ---------------------------------------------------------------------------
 const lobby = new Lobby(mp);
-const raceManager = new RaceManager({
+// Shared "the match is over, drop back into free flight" path for both the
+// race and the battle: restore loadout, respawn at home, and regroup the whole
+// party in a working lobby so the next match can launch immediately.
+function onMatchEnd() {
+  const sel = menu.getSelection();
+  plane.setLoadout(sel.type, sel.color);
+  plane.reset();
+  chaseCamera.snap(); // teleported home from the match — don't swoop
+  jetExhaust.clear();
+  contrails.clear();
+  explosion.clear();
+  refreshRaceButton();
+  // Drop everyone straight back into a WORKING lobby so the group can
+  // immediately vote and launch the next match (the server has already moved
+  // us to the free room, so join_lobby is accepted and fresh lobby state
+  // flows again). Skip if the player parked in the menu meanwhile.
+  if (currentMode === 'multiplayer' && mp.connected && gameState === 'playing') {
+    lobby.join(menu.getSelection());
+  }
+}
+// Dependencies shared by both match managers (they're mode-exclusive siblings
+// listening on the same server match message).
+const matchDeps = {
   scene: renderer.scene,
   client: mp,
   plane,
@@ -369,32 +392,19 @@ const raceManager = new RaceManager({
     else applyGlobalTime();
   },
   restoreFreeTime: () => applyGlobalTime(),
-  onRaceEnd: () => {
-    // Back to the free-flight world: restore the player's own loadout + spawn.
-    const sel = menu.getSelection();
-    plane.setLoadout(sel.type, sel.color);
-    plane.reset();
-    chaseCamera.snap(); // teleported home from the race course — don't swoop
-    jetExhaust.clear();
-    contrails.clear();
-    explosion.clear();
-    refreshRaceButton();
-    // Drop everyone straight back into a WORKING lobby so the group can
-    // immediately vote and launch the next race (the server has already moved
-    // us to the free room, so join_lobby is accepted and fresh lobby state
-    // flows again). Skip if the player parked in the menu meanwhile.
-    if (currentMode === 'multiplayer' && mp.connected && gameState === 'playing') {
-      lobby.join(menu.getSelection());
-    }
-  },
-});
+};
+const raceManager = new RaceManager({ ...matchDeps, onRaceEnd: onMatchEnd });
+const battleManager = new BattleManager({ ...matchDeps, onBattleEnd: onMatchEnd });
 // Let the minimap read the race's local checkpoint cursor so its "next gate"
 // highlight advances in lockstep with the in-world ring (not a round-trip late).
 minimap.raceManager = raceManager;
+// …and the battle's zone/pickups for the arena circle + orb dots.
+minimap.battleManager = battleManager;
 if (import.meta.env && import.meta.env.DEV) {
   // Dev-only verification hooks (stripped from prod by the build flag).
   window.__tp = (x, y, z) =>
     plane.spawnAirborne(new Vector3(x, y, z), plane.quaternion.clone(), new Vector3(0, 0, 0), 0.2);
+  window.__plane = plane;
   window.__gh = (x, z) => groundHeight(x, z);
   window.__cp = (i) => mp.sendCheckpoint(i);
   window.__rinfo = () => {
@@ -415,6 +425,11 @@ if (import.meta.env && import.meta.env.DEV) {
     pos: plane.position.toArray(),
     course: mp.race && mp.race.course,
     phase: mp.race && mp.race.phase,
+    mode: mp.race && mp.race.mode,
+    zone: mp.race && mp.race.zone,
+    pickups: mp.race && mp.race.pickups,
+    inBattle: battleManager.inBattle,
+    fx: { thrustMul: plane.fxThrustMul, throttleCap: plane.fxThrottleCap, throttle: plane.throttle },
     lobby: mp.lobby && mp.lobby.members && mp.lobby.members.length,
   });
 }
@@ -427,10 +442,12 @@ let lastMpPhase = 'free';
 const hintEl = document.getElementById('hint');
 // Looked up per language (they used to be a DOM snapshot + a JS constant, which
 // froze the English text in place after a language switch).
-const hintText = (phase) => (phase === 'race' ? t('hint.race') : t('hint.free'));
+const hintText = (phase) =>
+  phase === 'race' ? t('hint.race') : phase === 'battle' ? t('hint.battle') : t('hint.free');
 
 function currentMpPhase() {
   if (raceManager.inRace) return 'race';
+  if (battleManager.inBattle) return 'battle';
   if (mp.lobby && mp.lobby.members && mp.id != null &&
       mp.lobby.members.some((m) => m.id === mp.id)) return 'lobby';
   return 'free';
@@ -455,8 +472,9 @@ function updateMpPhase() {
     document.body.classList.remove('in-lobby');
   }
   if (hintEl) hintEl.textContent = hintText(phase);
-  // Race-only UI (e.g. the touch FIRE button) keys off this class.
-  document.body.classList.toggle('in-race', phase === 'race');
+  // Match-only UI (e.g. the touch FIRE button) keys off this class — both the
+  // race and the battle count as "in a match" here.
+  document.body.classList.toggle('in-race', phase === 'race' || phase === 'battle');
   refreshRaceButton();
 }
 
@@ -524,10 +542,11 @@ menu.onChange = ({ type, color }) => {
   if (gameState === 'playing') plane.mesh.visible = !plane.crashed;
 };
 menu.onStart = ({ type, color, timePreset, mode }) => {
-  // Starting a fresh game means leaving any race/lobby we were in — otherwise
-  // the race HUD lingers and the server keeps us in the race while we teleport
+  // Starting a fresh game means leaving any match/lobby we were in — otherwise
+  // the match HUD lingers and the server keeps us in it while we teleport
   // to the runway (the "race keeps running after START GAME" bug).
   if (raceManager.inRace) raceManager.leaveRace();
+  if (battleManager.inBattle) battleManager.leaveBattle();
   if (inLobby) lobby.onLeave();
   plane.setLoadout(type, color);
   applyMode(mode);
@@ -641,10 +660,10 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyG' && gameState === 'playing' && !photoMode) {
     plane.toggleGear();
   }
-  if (e.code === 'KeyP' && gameState === 'playing' && !raceManager.inRace) {
-    // Photo mode freezes local physics + skips raceManager.update while still
-    // broadcasting your pose — fine in free flight, but mid-race it would
-    // freeze you out of the race. Disallow it during an active race.
+  if (e.code === 'KeyP' && gameState === 'playing' && !raceManager.inRace && !battleManager.inBattle) {
+    // Photo mode freezes local physics + skips the match managers while still
+    // broadcasting your pose — fine in free flight, but mid-match it would
+    // freeze you out (and make you a sitting duck). Disallow it there.
     setPhotoMode(!photoMode);
   }
 });
@@ -657,9 +676,10 @@ window.addEventListener('keydown', (e) => {
 }
 
 const chaseCamera = new ChaseCamera(renderer.camera);
-// RaceManager teleports the plane on spawn/respawn; let it snap the camera too
-// so a respawn at the next gate doesn't swoop the camera across the course.
+// The match managers teleport the plane on spawn/respawn; let them snap the
+// camera too so a respawn doesn't swoop the camera across the map.
 raceManager.snapCamera = () => chaseCamera.snap();
+battleManager.snapCamera = () => chaseCamera.snap();
 const hud = new Hud();
 
 const getGroundHeight = groundHeight;
@@ -848,9 +868,9 @@ function physicsStep(dt) {
   if (photoMode) return;
   // In the race lobby the plane is parked while the player votes/waits.
   if (inLobby) return;
-  // During the pre-race countdown, hold the plane at the start line so it
-  // doesn't fly forward and overshoot the first gate before the clock starts.
-  if (raceManager.holdAtStart) return;
+  // During the pre-match countdown, hold the plane at the start pose so it
+  // doesn't fly forward before the clock starts.
+  if (raceManager.holdAtStart || battleManager.holdAtStart) return;
 
   // Touch GEAR button (toggle semantics, consumed once per tap).
   if (touch.consumeGear()) plane.toggleGear();
@@ -859,10 +879,12 @@ function physicsStep(dt) {
   const resetBtn = touch.consumeReset();
   if (resetKey || resetBtn) {
     if (!resetHeld || resetBtn) {
-      // In a race, R respawns at your next gate (airborne); only free flight
-      // resets to the home runway.
+      // In a race, R respawns at your next gate; in a battle, at a random spot
+      // inside the zone. Only free flight resets to the home runway.
       if (raceManager.inRace) {
         raceManager.respawnAtGate();
+      } else if (battleManager.inBattle) {
+        battleManager.respawnNow();
       } else {
         plane.reset();
         chaseCamera.snap();
@@ -875,16 +897,19 @@ function physicsStep(dt) {
     resetHeld = false;
   }
   const wasCrashed = plane.crashed;
-  // In a race, crashes are always on (no toggle) for the full action.
-  const crashesOn = crashesEnabled() || raceManager.isCombatActive();
+  // In a race or battle, crashes are always on (no toggle) for the full action.
+  const crashesOn =
+    crashesEnabled() || raceManager.isCombatActive() || battleManager.isCombatActive();
   plane.update(dt, input, getPhysicsFloor, isOnFlatGround, crashesOn, touch);
   if (!wasCrashed && plane.crashed && plane.crashImpact) {
     explosion.trigger(plane.crashImpact.position, plane.crashImpact.velocity);
     audio.boom();
     plane.mesh.visible = false;
-    // The race shows its own death/respawn flow; only the free-flight crash
-    // banner is shown outside a race.
-    if (crashBannerEl && !raceManager.inRace) crashBannerEl.style.display = 'block';
+    // Races/battles show their own death/respawn flow; only free flight gets
+    // the crash banner.
+    if (crashBannerEl && !raceManager.inRace && !battleManager.inBattle) {
+      crashBannerEl.style.display = 'block';
+    }
   }
   // NOTE: chunks/villages/ruins streaming is NOT called here — it belongs in
   // renderStep. Physics runs 1–3× per render frame via the accumulator, and
@@ -1042,7 +1067,10 @@ function renderStep(alpha) {
     jetExhaust.update(renderDt, _photoExhaustPlane);
   }
   remotes.update(renderDt);
-  if (!photoMode) raceManager.update(renderDt);
+  if (!photoMode) {
+    raceManager.update(renderDt);
+    battleManager.update(renderDt);
+  }
   // Piggyback race checkpoint progress so the server self-heals any missed cp.
   mp.sendState(plane, raceManager.inRace ? raceManager.localCp : undefined);
 

@@ -278,7 +278,11 @@
       body.menu-open #race-status,
       body.menu-open #race-countdown,
       body.menu-open #race-leaderboard,
-      body.menu-open #race-results { display: none !important; }
+      body.menu-open #race-results,
+      body.menu-open #battle-warning,
+      body.menu-open #battle-storm,
+      body.menu-open #battle-fx,
+      body.menu-open #battle-kill { display: none !important; }
       #menu-title {
         font-size: 72px;
         letter-spacing: 6px;
@@ -620,6 +624,93 @@
         pointer-events: none;
         text-shadow: 0 0 4px rgba(0,0,0,0.8);
       }
+      /* ---- Battle mode (v1.1) HUD extras ---- */
+      /* Outside-the-arena warning — urgent red pulse under the status pill. */
+      #battle-warning {
+        position: absolute;
+        top: 64px; left: 50%; transform: translateX(-50%);
+        color: #ff5040;
+        background: rgba(40, 8, 8, 0.55);
+        -webkit-backdrop-filter: var(--hud-blur);
+        backdrop-filter: var(--hud-blur);
+        border: 1px solid rgba(255, 80, 64, 0.6);
+        padding: 7px 16px;
+        border-radius: 999px;
+        font-family: monospace;
+        font-size: 13px;
+        font-weight: bold;
+        letter-spacing: 1px;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+        display: none;
+        pointer-events: none;
+        box-shadow: var(--hud-shadow);
+        animation: battle-warn-pulse 0.9s ease-in-out infinite;
+      }
+      @keyframes battle-warn-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+      /* Storm notice — the whole room sees it when someone grabs the storm
+         pickup and the arena wall speeds up. Sits under the zone warning slot. */
+      #battle-storm {
+        position: absolute;
+        top: 104px; left: 50%; transform: translateX(-50%);
+        color: #9fe0ff;
+        background: rgba(10, 26, 44, 0.6);
+        -webkit-backdrop-filter: var(--hud-blur);
+        backdrop-filter: var(--hud-blur);
+        border: 1px solid rgba(57, 198, 255, 0.65);
+        padding: 7px 16px;
+        border-radius: 999px;
+        font-family: monospace;
+        font-size: 13px;
+        font-weight: bold;
+        letter-spacing: 1px;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+        display: none;
+        pointer-events: none;
+        box-shadow: var(--hud-shadow);
+        animation: battle-warn-pulse 0.7s ease-in-out infinite;
+      }
+      /* Active mystery-effect banner — above the hull bar and the control hint
+         (the in-race hint sits at bottom:64px). Gold = buff, red = debuff. */
+      #battle-fx {
+        position: absolute;
+        bottom: 96px; left: 50%; transform: translateX(-50%);
+        color: var(--hud-text);
+        background: var(--hud-bg-strong);
+        -webkit-backdrop-filter: var(--hud-blur);
+        backdrop-filter: var(--hud-blur);
+        padding: 7px 16px;
+        border-radius: 999px;
+        font-family: monospace;
+        font-size: 13px;
+        letter-spacing: 0.5px;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+        display: none;
+        pointer-events: none;
+        box-shadow: var(--hud-shadow);
+      }
+      #battle-fx.fx-good { border: 1px solid rgba(255, 210, 74, 0.55); color: #ffd23a; }
+      #battle-fx.fx-bad { border: 1px solid rgba(255, 80, 64, 0.6); color: #ff7a68; }
+      /* "+1 kill" flash near the crosshair. */
+      #battle-kill {
+        position: absolute;
+        top: 42%; left: 50%; transform: translate(-50%, -50%);
+        color: #ffd23a;
+        font-family: monospace;
+        font-size: 30px;
+        font-weight: 900;
+        letter-spacing: 2px;
+        text-shadow: 0 2px 12px rgba(0,0,0,0.7), 0 0 24px rgba(255,210,58,0.6);
+        display: none;
+        pointer-events: none;
+        animation: battle-kill-pop 1.4s ease-out;
+      }
+      @keyframes battle-kill-pop {
+        0% { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+        15% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+        30% { transform: translate(-50%, -50%) scale(1); }
+        80% { opacity: 1; }
+        100% { opacity: 0; }
+      }
       /* Race lobby overlay */
       #lobby {
         position: absolute; inset: 0; z-index: 60;
@@ -676,7 +767,8 @@
       /* In the lobby, hide the free-flight HUD behind the overlay. */
       body.in-lobby #hud, body.in-lobby #hint, body.in-lobby #minimap,
       body.in-lobby #horizon, body.in-lobby #settings, body.in-lobby #touch-ui { display: none !important; }
-      body.photo #race-hp, body.photo #race-crosshair, body.photo #lobby { display: none !important; }
+      body.photo #race-hp, body.photo #race-crosshair, body.photo #lobby,
+      body.photo #battle-warning, body.photo #battle-storm, body.photo #battle-fx, body.photo #battle-kill { display: none !important; }
       body.menu-open #race-hp, body.menu-open #race-crosshair, body.menu-open #lobby { display: none !important; }
 
       /* ==================================================================
@@ -939,6 +1031,11 @@
     <div id="race-crosshair">+</div>
     <div id="race-leaderboard"></div>
     <div id="race-results"></div>
+    <!-- Battle-mode extras (v1.1) — all hidden by default, driven by BattleManager. -->
+    <div id="battle-warning" data-i18n="battle.zoneWarn">OUTSIDE THE ZONE — hull burning!</div>
+    <div id="battle-storm" data-i18n="battle.storm">⛈ THE ARENA IS SHRINKING FASTER!</div>
+    <div id="battle-fx"></div>
+    <div id="battle-kill"></div>
     <div id="lobby" class="hidden">
       <!-- The kicker used to be a CSS ::before string; CSS content can't be
            swapped by JS, so it's a real element now (translatable). -->
@@ -951,12 +1048,22 @@
           <div id="lobby-members"></div>
         </div>
         <div class="lobby-panel">
+          <h3 data-i18n="lobby.voteMode">Vote · Mode</h3>
+          <div id="lobby-mode" class="lobby-opts"></div>
           <h3 data-i18n="lobby.voteAircraft">Vote · Aircraft</h3>
           <div id="lobby-plane" class="lobby-opts"></div>
           <h3 data-i18n="lobby.voteTime">Vote · Time of day</h3>
           <div id="lobby-time" class="lobby-opts"></div>
-          <h3 data-i18n="lobby.voteFlags">Vote · Flags</h3>
-          <div id="lobby-gates" class="lobby-opts"></div>
+          <!-- The flags vote only applies to Race, the match-length vote only
+               to Battle — Lobby.js swaps the two wraps by the leading mode. -->
+          <div id="lobby-gates-wrap">
+            <h3 data-i18n="lobby.voteFlags">Vote · Flags</h3>
+            <div id="lobby-gates" class="lobby-opts"></div>
+          </div>
+          <div id="lobby-duration-wrap" style="display:none">
+            <h3 data-i18n="lobby.voteDuration">Vote · Match length</h3>
+            <div id="lobby-duration" class="lobby-opts"></div>
+          </div>
           <h3 data-i18n="lobby.yourLivery">Your livery</h3>
           <div id="lobby-color" class="lobby-swatches"></div>
           <div id="lobby-vote-note"></div>

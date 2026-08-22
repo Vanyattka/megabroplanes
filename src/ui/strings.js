@@ -25,11 +25,13 @@ export const STRINGS = {
     'hint.free': 'WASD fly · Q/E yaw · Shift/Ctrl throttle · G gear · R reset · drag to look',
     'hint.race':
       'S/W nose · A/D roll · Q/E yaw · Shift/Ctrl throttle · SPACE fire · G gear · R respawn at gate · L lights · drag to look',
+    'hint.battle':
+      'S/W nose · A/D roll · Q/E yaw · Shift/Ctrl throttle · SPACE fire · R respawn · stay inside the wall · grab the ? orbs',
     'menu.footerHint': 'WASD · QE · shift/ctrl · space · R · drag mouse to look',
 
     // ---- in-flight bar ----
     'bar.menu': '← MENU',
-    'bar.startRace': '🏁 START RACE',
+    'bar.startRace': '🏁 RACE / BATTLE',
     'bar.crashes': 'crashes',
     'audio.title': 'M to mute',
     'audio.off': '🔈 off',
@@ -114,12 +116,17 @@ export const STRINGS = {
     'color.black': 'black',
 
     // ---- lobby ----
-    'lobby.title': 'Race Lobby',
-    'lobby.kicker': 'Multiplayer · Combat Race',
+    'lobby.title': 'Game Lobby',
+    'lobby.kicker': 'Multiplayer · Race & Battle',
     'lobby.pilots': 'Pilots',
+    'lobby.voteMode': 'Vote · Mode',
+    'mode.race': 'Race',
+    'mode.battle': 'Battle',
     'lobby.voteAircraft': 'Vote · Aircraft',
     'lobby.voteTime': 'Vote · Time of day',
     'lobby.voteFlags': 'Vote · Flags',
+    'lobby.voteDuration': 'Vote · Match length',
+    'lobby.mins': '{n} MIN',
     'lobby.yourLivery': 'Your livery',
     'lobby.chat': 'Chat',
     'lobby.chatEmpty': 'Say hello 👋',
@@ -129,6 +136,8 @@ export const STRINGS = {
     'lobby.leave': 'Leave Lobby',
     'lobby.hint':
       "Everyone races the majority-voted aircraft + time on a separate course. Fly through the gold gates · SPACE shoots · don't get shot down.",
+    'lobby.hintBattle':
+      'Free-for-all dogfight: most kills when the clock runs out wins. The arena shrinks — outside the wall your hull burns. Mystery ? orbs give a random effect, good or bad, at equal odds.',
     'lobby.flags': '{n} FLAGS',
     'lobby.launching': 'Launching in {secs}s …  ({n}/{full})',
     'lobby.waitingShort': 'Waiting for players …',
@@ -136,6 +145,7 @@ export const STRINGS = {
     'lobby.count': '({n}/{full})',
     'lobby.you': ' (you)',
     'lobby.voteNote': 'Racing: {plane} · {time} · {gates} flags (majority vote)',
+    'lobby.voteNoteBattle': 'Battle: {plane} · {time} · {mins} min (majority vote)',
 
     // ---- race ----
     'race.go': 'GO!',
@@ -146,6 +156,21 @@ export const STRINGS = {
     'race.results': '🏁 RESULTS',
     'race.dnf': 'DNF',
     'race.returning': 'returning to the lobby…',
+
+    // ---- battle (v1.1) ----
+    'battle.title': 'BATTLE',
+    'battle.results': '☠ RESULTS',
+    'battle.zoneWarn': 'OUTSIDE THE ZONE — hull burning!',
+    'battle.storm': '⛈ THE ARENA IS SHRINKING FASTER!',
+    'battle.plusKill': '+1 ☠',
+    // Mystery-pickup effect names (revealed only on collect).
+    'fx.heal': '🔧 FULL REPAIR',
+    'fx.dmg2': '☠ DOUBLE DAMAGE',
+    'fx.boost': '⚡ OVERDRIVE +50% THRUST',
+    'fx.dmg05': '💧 PEA SHOOTER −50% DAMAGE',
+    'fx.fragile': '🥚 FRAGILE HULL +50% DMG TAKEN',
+    'fx.sputter': '💨 ENGINE SPUTTER — THROTTLE CAPPED',
+    'fx.storm': '⛈ STORM — you sped up the arena!',
 
     // ---- touch ----
     'touch.brake': 'BRK',
@@ -183,10 +208,10 @@ export const STRINGS = {
     'guide.s6.body':
       'Drag with the mouse to look around. P opens photo mode (orbit freely, scroll to zoom), L switches the landing light, M mutes the sound, and R puts you back on the runway if things go wrong.',
     'guide.s6.keys': 'drag — look · P — photo · L — lights · M — sound · R — reset',
-    'guide.s7.title': 'Racing with others',
+    'guide.s7.title': 'Playing with others',
     'guide.s7.body':
-      'Switch to Multiplayer in the menu, then hit START RACE to enter the lobby. Everyone votes on the aircraft, time of day and number of flags. In a race, fly through the gold gates in order — and Space shoots instead of braking.',
-    'guide.s7.keys': 'Space — fire · R — respawn at the next gate',
+      'Switch to Multiplayer in the menu, then hit RACE / BATTLE to enter the lobby. Everyone votes on the mode, aircraft and time of day. Race: fly through the gold gates in order. Battle: a free-for-all dogfight in a shrinking arena — most kills wins, and mystery ? orbs hand out random effects, good or bad. Space shoots in both.',
+    'guide.s7.keys': 'Space — fire · R — respawn',
     'guide.s8.title': 'On a phone or tablet',
     'guide.s8.body':
       'Touch controls appear automatically: the left stick steers, the right slider is the throttle, and the buttons handle gear, reset and brakes. A FIRE button shows up during races.',
@@ -208,11 +233,13 @@ export const STRINGS = {
     'hint.free': 'WASD — полёт · Q/E — рыскание · Shift/Ctrl — газ · G — шасси · R — сброс · зажми мышь для обзора',
     'hint.race':
       'S/W — нос · A/D — крен · Q/E — рыскание · Shift/Ctrl — газ · SPACE — огонь · G — шасси · R — респавн у ворот · L — фары · зажми мышь для обзора',
+    'hint.battle':
+      'S/W — нос · A/D — крен · Q/E — рыскание · Shift/Ctrl — газ · SPACE — огонь · R — респавн · держись внутри стены · собирай шары «?»',
     'menu.footerHint': 'WASD · QE · shift/ctrl · space · R · зажми мышь для обзора',
 
     // ---- in-flight bar ----
     'bar.menu': '← МЕНЮ',
-    'bar.startRace': '🏁 НАЧАТЬ ГОНКУ',
+    'bar.startRace': '🏁 ГОНКА / БОЙ',
     'bar.crashes': 'крушения',
     'audio.title': 'M — выключить звук',
     'audio.off': '🔈 выкл',
@@ -298,12 +325,17 @@ export const STRINGS = {
     'color.black': 'чёрный',
 
     // ---- lobby ----
-    'lobby.title': 'Лобби гонки',
-    'lobby.kicker': 'Сетевая игра · Гонка с боем',
+    'lobby.title': 'Лобби',
+    'lobby.kicker': 'Сетевая игра · Гонка и бой',
     'lobby.pilots': 'Пилоты',
+    'lobby.voteMode': 'Голосование · Режим',
+    'mode.race': 'Гонка',
+    'mode.battle': 'Бой',
     'lobby.voteAircraft': 'Голосование · Самолёт',
     'lobby.voteTime': 'Голосование · Время суток',
     'lobby.voteFlags': 'Голосование · Ворота',
+    'lobby.voteDuration': 'Голосование · Длительность',
+    'lobby.mins': '{n} МИН',
     'lobby.yourLivery': 'Твоя окраска',
     'lobby.chat': 'Чат',
     'lobby.chatEmpty': 'Поздоровайся 👋',
@@ -313,6 +345,8 @@ export const STRINGS = {
     'lobby.leave': 'Выйти из лобби',
     'lobby.hint':
       'Все летят на самолёте и во времени, выбранных большинством, по отдельной трассе. Пролетай через золотые ворота · SPACE — огонь · не дай себя сбить.',
+    'lobby.hintBattle':
+      'Все против всех: побеждает тот, у кого больше сбитых к концу матча. Арена сужается — за стеной корпус горит. Шары «?» дают случайный эффект, хороший или плохой, шансы равны.',
     'lobby.flags': '{n} ВОРОТ',
     'lobby.launching': 'Старт через {secs} с …  ({n}/{full})',
     'lobby.waitingShort': 'Ждём игроков …',
@@ -320,6 +354,7 @@ export const STRINGS = {
     'lobby.count': '({n}/{full})',
     'lobby.you': ' (ты)',
     'lobby.voteNote': 'Летим: {plane} · {time} · ворот: {gates} (по большинству)',
+    'lobby.voteNoteBattle': 'Бой: {plane} · {time} · {mins} мин (по большинству)',
 
     // ---- race ----
     'race.go': 'ВПЕРЁД!',
@@ -330,6 +365,21 @@ export const STRINGS = {
     'race.results': '🏁 ИТОГИ',
     'race.dnf': 'НЕ ФИНИШ',
     'race.returning': 'возвращаемся в лобби…',
+
+    // ---- battle (v1.1) ----
+    'battle.title': 'БОЙ',
+    'battle.results': '☠ ИТОГИ БОЯ',
+    'battle.zoneWarn': 'ВНЕ ЗОНЫ — корпус горит!',
+    'battle.storm': '⛈ АРЕНА СЖИМАЕТСЯ БЫСТРЕЕ!',
+    'battle.plusKill': '+1 ☠',
+    // Названия эффектов-«сюрпризов» (раскрываются только при подборе).
+    'fx.heal': '🔧 ПОЛНЫЙ РЕМОНТ',
+    'fx.dmg2': '☠ ДВОЙНОЙ УРОН',
+    'fx.boost': '⚡ ФОРСАЖ +50% ТЯГИ',
+    'fx.dmg05': '💧 ПУШКИ-ПУКАЛКИ −50% УРОНА',
+    'fx.fragile': '🥚 ХРУПКИЙ КОРПУС +50% К УРОНУ ПО ТЕБЕ',
+    'fx.sputter': '💨 ДВИГАТЕЛЬ ЧИХАЕТ — ГАЗ ОГРАНИЧЕН',
+    'fx.storm': '⛈ ШТОРМ — ты ускорил арену!',
 
     // ---- touch ----
     'touch.brake': 'ТОРМ',
@@ -367,10 +417,10 @@ export const STRINGS = {
     'guide.s6.body':
       'Зажми мышь, чтобы осмотреться. P включает фоторежим (свободный облёт, колесо — зум), L переключает фары, M выключает звук, а R возвращает тебя на полосу, если что-то пошло не так.',
     'guide.s6.keys': 'мышь — обзор · P — фото · L — фары · M — звук · R — сброс',
-    'guide.s7.title': 'Гонки с другими',
+    'guide.s7.title': 'Игра с другими',
     'guide.s7.body':
-      'Переключись в меню на игру по сети и нажми НАЧАТЬ ГОНКУ, чтобы попасть в лобби. Все голосуют за самолёт, время суток и количество ворот. В гонке пролетай золотые ворота по порядку — и Space стреляет вместо торможения.',
-    'guide.s7.keys': 'Space — огонь · R — респавн у следующих ворот',
+      'Переключись в меню на игру по сети и нажми ГОНКА / БОЙ, чтобы попасть в лобби. Все голосуют за режим, самолёт и время суток. Гонка: пролетай золотые ворота по порядку. Бой: все против всех в сужающейся арене — побеждает тот, кто больше собьёт, а шары «?» дают случайный эффект, хороший или плохой. Space стреляет в обоих режимах.',
+    'guide.s7.keys': 'Space — огонь · R — респавн',
     'guide.s8.title': 'На телефоне или планшете',
     'guide.s8.body':
       'Сенсорное управление появляется само: левый стик рулит, правый слайдер — газ, кнопки отвечают за шасси, сброс и тормоза. В гонке добавляется кнопка ОГОНЬ.',

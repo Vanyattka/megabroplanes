@@ -47,6 +47,10 @@ export class Plane {
     // Combat (race mode). Full health outside combat.
     this.maxHp = PLANE_MAX_HP;
     this.hp = PLANE_MAX_HP;
+    // Battle-mode mystery-effect physics modifiers (BattleManager drives
+    // them; 1 = no effect). Read by Physics (thrust) and Controls (throttle).
+    this.fxThrustMul = 1;
+    this.fxThrottleCap = 1;
     // Landing gear (v0.6). gearDown is the commanded state (G toggles it);
     // gearT is the animated extension 0..1 that physics reads for drag.
     this.gearDown = true;
@@ -173,6 +177,11 @@ export class Plane {
     this.crashed = false;
     this.crashImpact = null;
     this.hp = this.maxHp;
+    // A runway reset always means we're out of any battle — drop effect mods.
+    // (spawnAirborne deliberately does NOT touch these: BattleManager owns
+    // them across in-battle respawns.)
+    this.fxThrustMul = 1;
+    this.fxThrottleCap = 1;
     this.gearDown = true;
     this.gearT = 1;
     applyGearPose(this.mesh, 1);

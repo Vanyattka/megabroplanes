@@ -77,6 +77,7 @@ const RESULTS_MS = 15000;
 const RACE_TIMEOUT_MS = 360000;
 const DEFAULT_GATES = 8;
 const GATE_OPTIONS = [8, 16, 32]; // votable flag counts
+const MODE_OPTIONS = ['race', 'battle']; // votable match modes (v1.1)
 // Combat
 const MAX_HP = 100;
 const GUN_DMG = 13;
@@ -84,8 +85,49 @@ const HIT_MIN_INTERVAL_MS = 70;   // per shooter→target, anti-spam
 const HIT_GLOBAL_MIN_MS = 30;     // per shooter across ALL targets, anti-burst
 const RESPAWN_MS = 3500;
 
+// ---- Battle mode (v1.1) --------------------------------------------------
+// Free-for-all dogfight: a cylindrical arena over the spawn plains shrinks
+// from START_R to END_R over SHRINK_MS; outside it the hull burns at ZONE_DPS.
+// Most kills when DURATION_MS runs out wins. Mystery pickups spawn inside the
+// zone; each holds an effect rolled at EQUAL odds that stays hidden until
+// collected (the effect key is never broadcast — only the collector learns it).
+// Env overrides exist so an integration test can run a whole match in seconds.
+// Match length is VOTED in the lobby (minutes); the zone finishes shrinking at
+// SHRINK_FRAC of whatever length won, so a 2-minute brawl and a 7-minute one
+// pace the same.
+const BATTLE_DURATION_OPTIONS = [2, 5, 7]; // votable match length, minutes
+const DEFAULT_BATTLE_MINS = 5;
+const BATTLE_SHRINK_FRAC = 0.75;
+const BATTLE_DURATION_OVERRIDE_MS = Number(process.env.BATTLE_DURATION_MS) || null;
+const BATTLE_ZONE_SHRINK_OVERRIDE_MS = Number(process.env.BATTLE_ZONE_SHRINK_MS) || null;
+const BATTLE_ZONE_START_R = 2600;
+const BATTLE_ZONE_END_R = 380;
+// The storm pickup divides the REMAINING shrink time by this factor.
+const BATTLE_STORM_FACTOR = 2;
+const BATTLE_ZONE_DPS = 7;              // hp/s while outside the arena
+const BATTLE_PICKUP_INTERVAL_MS = Number(process.env.BATTLE_PICKUP_INTERVAL_MS) || 7000;
+const BATTLE_PICKUP_MAX = 6;            // concurrent pickups in the arena
+const BATTLE_PICKUP_CLAIM_DIST = 320;   // sanity cap on a claim vs 20 Hz state (m)
+// Effect table: ms = duration (0 = instant), dmgMul = outgoing damage factor,
+// takeMul = incoming damage factor. thrust/throttle effects are client-side
+// physics — the server only relays the key + expiry to the collector.
+const BATTLE_FX = {
+  heal:    { ms: 0 },                     // hull restored to 100%
+  dmg2:    { ms: 20000, dmgMul: 2 },      // double damage
+  boost:   { ms: 20000 },                 // overdrive thrust (client-side)
+  dmg05:   { ms: 20000, dmgMul: 0.5 },    // pea-shooter guns
+  fragile: { ms: 20000, takeMul: 1.5 },   // +50% damage taken
+  sputter: { ms: 15000 },                 // throttle capped (client-side)
+  storm:   { ms: 0 },                     // arena shrinks faster — hits EVERYONE, permanent
+};
+const BATTLE_FX_KEYS = Object.keys(BATTLE_FX);
+// Test seam: force every pickup to hold one specific effect (env-gated so the
+// 1-in-7 roll can be pinned in an integration test; unset in production).
+const BATTLE_FX_FORCE = BATTLE_FX[process.env.BATTLE_FX_FORCE] ? process.env.BATTLE_FX_FORCE : null;
+
 const DEFAULT_PLANE = 'piper';
 const DEFAULT_TIME = 'day';
+const DEFAULT_MODE = 'race';
 
 // ---- Chat moderation -----------------------------------------------------
 // Flood limits: a floor between consecutive lines, plus a burst cap over a
@@ -116,7 +158,30 @@ let nextId = 1;
 let lobby = { hostId: null, launchAt: null };
 let race = makeIdleRace();
 function makeIdleRace() {
-  return { phase: 'idle', seed: 0, course: [], startAt: 0, endAt: 0, timeKey: DEFAULT_TIME, plane: DEFAULT_PLANE };
+  return {
+    phase: 'idle', mode: DEFAULT_MODE, seed: 0, course: [], startAt: 0, endAt: 0,
+    timeKey: DEFAULT_TIME, plane: DEFAULT_PLANE,
+    durationMs: RACE_TIMEOUT_MS, zone: null, pickups: [],
+    _nextPickupId: 1, _lastPickupAt: 0,
+  };
+}
+
+// Current arena radius — a pure function of the zone's (baseR, baseAt,
+// shrinkMs) segment, so clients derive the exact same value locally with no
+// per-tick radius sync. The segment starts as (r0, startAt, full shrink time)
+// and is REBASED in place when a storm pickup accelerates the shrink: baseR
+// pins the radius at that instant and the remaining time is divided down.
+// Clients pick the rebased params up from the 20 Hz match broadcast.
+function zoneRadius(zone, now) {
+  const t = Math.min(1, Math.max(0, (now - zone.baseAt) / zone.shrinkMs));
+  return zone.baseR + (zone.r1 - zone.baseR) * t;
+}
+
+// A client's active mystery effect, expiring it lazily on read.
+function activeFx(c, now) {
+  if (!c.fx) return null;
+  if (c.fx.until !== 0 && now >= c.fx.until) { c.fx = null; return null; }
+  return c.fx;
 }
 
 // A full IP address is personal data, and these logs are kept indefinitely by
@@ -197,10 +262,14 @@ function tallyVotes() {
     return best || def;
   };
   const gatesVote = parseInt(count('gates', String(DEFAULT_GATES)), 10);
+  const modeVote = count('mode', DEFAULT_MODE);
+  const durVote = parseInt(count('duration', String(DEFAULT_BATTLE_MINS)), 10);
   return {
     plane: count('plane', DEFAULT_PLANE),
     time: count('time', DEFAULT_TIME),
     gates: GATE_OPTIONS.includes(gatesVote) ? gatesVote : DEFAULT_GATES,
+    mode: MODE_OPTIONS.includes(modeVote) ? modeVote : DEFAULT_MODE,
+    duration: BATTLE_DURATION_OPTIONS.includes(durVote) ? durVote : DEFAULT_BATTLE_MINS,
   };
 }
 
@@ -266,6 +335,7 @@ function lobbyMessage() {
   const members = lobbyVisible().map(([id, c]) => ({
     id, name: c.name || `P${id}`,
     plane: c.lobby.plane, time: c.lobby.time, color: c.lobby.color, gates: c.lobby.gates,
+    mode: c.lobby.mode, duration: c.lobby.duration,
     ready: !!c.lobby.ready, host: id === lobby.hostId,
   }));
   return {
@@ -307,28 +377,58 @@ function launchRace() {
   if (members.length === 0) return;
   const vote = tallyVotes();
   const seed = Math.floor(Math.random() * 0x7fffffff);
+  const mode = vote.mode;
+  const startAt = Date.now() + RACE_COUNTDOWN_MS;
+  // Battle length comes from the lobby vote (minutes); the zone finishes
+  // shrinking at a fixed fraction of it. Env overrides win for tests.
+  const battleMs = BATTLE_DURATION_OVERRIDE_MS || vote.duration * 60000;
+  // The battle arena sits over the gentle spawn plains, with a seeded offset so
+  // successive matches don't all pivot on the exact same spot.
+  let zone = null;
+  if (mode === 'battle') {
+    let s = seed >>> 0;
+    const rand = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+    zone = {
+      x: Math.round((rand() - 0.5) * 1200),
+      z: Math.round((rand() - 0.5) * 1200),
+      r0: BATTLE_ZONE_START_R,
+      r1: BATTLE_ZONE_END_R,
+      shrinkMs: BATTLE_ZONE_SHRINK_OVERRIDE_MS || Math.round(battleMs * BATTLE_SHRINK_FRAC),
+      // Live shrink segment — rebased in place by storm pickups.
+      baseR: BATTLE_ZONE_START_R,
+      baseAt: startAt,
+      storms: 0,
+    };
+  }
   race = {
     phase: 'countdown',
+    mode,
     seed,
-    course: generateCourse(seed, vote.gates),
-    startAt: Date.now() + RACE_COUNTDOWN_MS,
+    course: mode === 'race' ? generateCourse(seed, vote.gates) : [],
+    startAt,
     endAt: 0,
     timeKey: vote.time,
     plane: vote.plane,
+    durationMs: mode === 'battle' ? battleMs : RACE_TIMEOUT_MS,
+    zone,
+    pickups: [],
+    _nextPickupId: 1,
+    _lastPickupAt: 0,
   };
   for (const [, c] of members) {
     c.room = 'race';
-    c.race = { nextCp: 0, finishMs: null };
+    c.race = { nextCp: 0, finishMs: null, kills: 0, deaths: 0 };
     c.hp = MAX_HP;
     c.dead = false;
     c.respawnAt = 0;
+    c.fx = null;
     c.plane.pt = vote.plane; // everyone flies the voted type; color stays personal
     c.lastHit = {};
     c.lastHitAny = 0;
   }
   lobby.launchAt = null;
   lobby.hostId = null;
-  console.log(`[race] launch — ${members.length} racers, plane=${vote.plane}, time=${vote.time}, seed=${seed}`);
+  console.log(`[race] launch — mode=${mode}${mode === 'battle' ? `, ${Math.round(race.durationMs / 60000)}min` : ''}, ${members.length} players, plane=${vote.plane}, time=${vote.time}, seed=${seed}`);
   broadcastRace();
 }
 
@@ -350,6 +450,7 @@ function endRaceToFree() {
     if (c.ws.readyState === 1) c.ws.send(idleMsg);
     c.room = 'free';
     c.race = null;
+    c.fx = null;
   }
   // A lobby may have filled while this race ran; now that we're idle again,
   // (re)arm its launch countdown and refresh the waiting room.
@@ -360,7 +461,19 @@ function endRaceToFree() {
 function standings() {
   const rows = [];
   for (const [id, c] of membersIn('race')) {
-    rows.push({ id, name: c.name || `P${id}`, n: c.race ? c.race.nextCp : 0, f: c.race ? c.race.finishMs : null, hp: c.hp ?? MAX_HP });
+    rows.push({
+      id, name: c.name || `P${id}`,
+      n: c.race ? c.race.nextCp : 0,
+      f: c.race ? c.race.finishMs : null,
+      hp: c.hp ?? MAX_HP,
+      k: c.race ? c.race.kills || 0 : 0,
+      d: c.race ? c.race.deaths || 0 : 0,
+    });
+  }
+  if (race.mode === 'battle') {
+    // Battle: most kills first; fewer deaths breaks ties, then join order.
+    rows.sort((a, b) => (b.k - a.k) || (a.d - b.d) || (a.id - b.id));
+    return rows;
   }
   rows.sort((a, b) => {
     const af = a.f != null, bf = b.f != null;
@@ -376,11 +489,16 @@ function raceMessage() {
   return {
     type: 'race',
     phase: race.phase,
+    mode: race.mode,
     startAt: race.startAt,
     endAt: race.endAt,
+    durationMs: race.durationMs,
     course: race.course,
     timeKey: race.timeKey,
     plane: race.plane,
+    zone: race.zone,
+    // Positions only — the rolled effect stays hidden until collected.
+    pickups: race.pickups.map((p) => ({ id: p.id, x: p.x, y: p.y, z: p.z })),
     standings: standings(),
   };
 }
@@ -452,6 +570,8 @@ function attachClientHandlers(ws) {
         if (msg.time) c.lobby.time = msg.time;
         if (msg.color != null) c.lobby.color = msg.color;
         if (GATE_OPTIONS.includes(msg.gates)) c.lobby.gates = msg.gates;
+        if (MODE_OPTIONS.includes(msg.mode)) c.lobby.mode = msg.mode;
+        if (BATTLE_DURATION_OPTIONS.includes(msg.duration)) c.lobby.duration = msg.duration;
         recomputeHost();
         updateLaunchTimer();
         sendLobbyState();
@@ -475,6 +595,7 @@ function attachClientHandlers(ws) {
           c.race = null;
           c.dead = false;
           c.hp = MAX_HP;
+          c.fx = null;
         }
         break;
       case 'lobby_set':
@@ -483,6 +604,8 @@ function attachClientHandlers(ws) {
           if (msg.time) c.lobby.time = msg.time;
           if (msg.color != null) c.lobby.color = msg.color;
           if (GATE_OPTIONS.includes(msg.gates)) c.lobby.gates = msg.gates;
+          if (MODE_OPTIONS.includes(msg.mode)) c.lobby.mode = msg.mode;
+          if (BATTLE_DURATION_OPTIONS.includes(msg.duration)) c.lobby.duration = msg.duration;
           if (typeof msg.ready === 'boolean') c.lobby.ready = msg.ready;
           sendLobbyState();
         }
@@ -538,6 +661,7 @@ function attachClientHandlers(ws) {
           c.hp = 0;
           c.dead = true;
           c.respawnAt = Date.now() + RESPAWN_MS;
+          if (race.mode === 'battle') { c.race.deaths++; c.fx = null; }
         }
         break;
       case 'fire':
@@ -558,11 +682,64 @@ function attachClientHandlers(ws) {
         if (now - (c.lastHitAny || 0) < HIT_GLOBAL_MIN_MS) break;
         c.lastHit[msg.target] = now;
         c.lastHitAny = now;
-        tgt.hp = Math.max(0, (tgt.hp ?? MAX_HP) - GUN_DMG);
+        // Battle-mode mystery effects scale the damage: the shooter's dmgMul
+        // (double damage / pea-shooter) and the target's takeMul (fragile hull).
+        let dmg = GUN_DMG;
+        if (race.mode === 'battle') {
+          const fxS = activeFx(c, now);
+          const fxT = activeFx(tgt, now);
+          if (fxS && fxS.dmgMul) dmg *= fxS.dmgMul;
+          if (fxT && fxT.takeMul) dmg *= fxT.takeMul;
+        }
+        tgt.hp = Math.max(0, (tgt.hp ?? MAX_HP) - dmg);
         if (tgt.hp <= 0 && !tgt.dead) {
           tgt.dead = true;
           tgt.respawnAt = now + RESPAWN_MS;
+          if (race.mode === 'battle') {
+            if (c.race) c.race.kills++;
+            if (tgt.race) tgt.race.deaths++;
+            tgt.fx = null; // effects don't survive going down
+          }
         }
+        break;
+      }
+      case 'pickup': {
+        // Collector claims a mystery pickup by id. The server removes it, rolls
+        // nothing (the effect was rolled at spawn and kept hidden), applies the
+        // server-side part, and reveals the key ONLY to the collector.
+        if (race.phase !== 'racing' || race.mode !== 'battle' || c.room !== 'race' || !c.race || c.dead) break;
+        const i = race.pickups.findIndex((p) => p.id === msg.id);
+        if (i < 0) break; // already taken (or bogus id) — first claim wins
+        const p = race.pickups[i];
+        // Generous distance sanity check against the 20 Hz state stream, in the
+        // spirit of the existing trust model (cp is trusted; this just stops a
+        // client from hoovering the whole arena from one spot).
+        if (c.state && c.state.p) {
+          const dx = c.state.p[0] - p.x, dy = c.state.p[1] - p.y, dz = c.state.p[2] - p.z;
+          if (dx * dx + dy * dy + dz * dz > BATTLE_PICKUP_CLAIM_DIST * BATTLE_PICKUP_CLAIM_DIST) break;
+        }
+        race.pickups.splice(i, 1);
+        const now2 = Date.now();
+        const spec = BATTLE_FX[p.effect];
+        const until = spec.ms ? now2 + spec.ms : 0;
+        if (p.effect === 'heal') {
+          c.hp = MAX_HP;
+        } else if (p.effect === 'storm') {
+          // The storm hits EVERYONE: rebase the shrink segment at the current
+          // radius and divide the remaining time. Permanent, and stacks — a
+          // second storm halves what's left again. zone.storms lets clients
+          // flash a "the arena sped up" notice for the whole room.
+          const z = race.zone;
+          const rNow = zoneRadius(z, now2);
+          const remaining = Math.max(0, z.shrinkMs - (now2 - z.baseAt));
+          z.baseR = rNow;
+          z.baseAt = now2;
+          z.shrinkMs = Math.max(1, Math.round(remaining / BATTLE_STORM_FACTOR));
+          z.storms = (z.storms || 0) + 1;
+        } else {
+          c.fx = { key: p.effect, until, dmgMul: spec.dmgMul, takeMul: spec.takeMul };
+        }
+        if (c.ws.readyState === 1) c.ws.send(JSON.stringify({ type: 'fx', effect: p.effect, until }));
         break;
       }
     }
@@ -596,9 +773,9 @@ wss.on('connection', (ws, req) => {
     room: 'free',
     state: null,
     plane: { pt: DEFAULT_PLANE, pc: null },
-    hp: MAX_HP, dead: false, respawnAt: 0, lastHit: {}, lastHitAny: 0,
+    hp: MAX_HP, dead: false, respawnAt: 0, lastHit: {}, lastHitAny: 0, fx: null,
     race: null,
-    lobby: { plane: DEFAULT_PLANE, time: DEFAULT_TIME, color: null, gates: DEFAULT_GATES, ready: false },
+    lobby: { plane: DEFAULT_PLANE, time: DEFAULT_TIME, color: null, gates: DEFAULT_GATES, mode: DEFAULT_MODE, duration: DEFAULT_BATTLE_MINS, ready: false },
   });
   ws._cid = id;
   attachClientHandlers(ws);
@@ -640,8 +817,48 @@ setInterval(() => {
       for (const [, c] of conn) {
         if (c.dead && now >= c.respawnAt) { c.dead = false; c.hp = MAX_HP; }
       }
-      const allDone = conn.every(([, c]) => c.race.finishMs != null);
-      if (allDone || now - race.startAt > RACE_TIMEOUT_MS) { finishRace(); raceChanged = true; }
+      if (race.mode === 'battle') {
+        const zr = zoneRadius(race.zone, now);
+        // The wall burns anyone outside it. Damage is applied here (the server
+        // knows everyone's 20 Hz position), so it's as authoritative as gunfire.
+        for (const [, c] of conn) {
+          if (c.dead || !c.state || !c.state.p) continue;
+          const dx = c.state.p[0] - race.zone.x, dz = c.state.p[2] - race.zone.z;
+          if (dx * dx + dz * dz > zr * zr) {
+            c.hp = Math.max(0, (c.hp ?? MAX_HP) - BATTLE_ZONE_DPS / TICK_HZ);
+            if (c.hp <= 0 && !c.dead) {
+              c.dead = true;
+              c.respawnAt = now + RESPAWN_MS;
+              if (c.race) c.race.deaths++;
+              c.fx = null;
+            }
+          }
+        }
+        // Drop pickups the shrinking wall has passed; they'd be suicide bait.
+        if (race.pickups.length) {
+          race.pickups = race.pickups.filter((p) => {
+            const dx = p.x - race.zone.x, dz = p.z - race.zone.z;
+            return dx * dx + dz * dz <= zr * zr;
+          });
+        }
+        // Trickle in mystery pickups, always inside the CURRENT zone.
+        if (race.pickups.length < BATTLE_PICKUP_MAX && now - race._lastPickupAt > BATTLE_PICKUP_INTERVAL_MS) {
+          race._lastPickupAt = now;
+          const ang = Math.random() * Math.PI * 2;
+          const rad = Math.sqrt(Math.random()) * zr * 0.85;
+          race.pickups.push({
+            id: race._nextPickupId++,
+            x: Math.round(race.zone.x + Math.cos(ang) * rad),
+            y: Math.round(150 + Math.random() * 270),
+            z: Math.round(race.zone.z + Math.sin(ang) * rad),
+            effect: BATTLE_FX_FORCE || BATTLE_FX_KEYS[Math.floor(Math.random() * BATTLE_FX_KEYS.length)],
+          });
+        }
+        if (now - race.startAt > race.durationMs) { finishRace(); raceChanged = true; }
+      } else {
+        const allDone = conn.every(([, c]) => c.race.finishMs != null);
+        if (allDone || now - race.startAt > race.durationMs) { finishRace(); raceChanged = true; }
+      }
     }
   }
   if (race.phase === 'finished' && now >= race.endAt) { endRaceToFree(); raceChanged = true; }

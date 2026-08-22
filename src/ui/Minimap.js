@@ -96,6 +96,7 @@ export class Minimap {
     this._drawVillages(plane);
     this._drawRuins(plane);
     this._drawRace(plane);
+    this._drawBattle(plane);
     this._drawRemotes(plane);
 
     ctx.restore();
@@ -305,6 +306,38 @@ export class Minimap {
       ctx.fillStyle = done ? 'rgba(57,255,138,0.9)' : isNext ? '#ffd23a' : 'rgba(57,198,255,0.9)';
       ctx.fill();
       if (isNext) { ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke(); }
+    }
+  }
+
+  // Battle mode: the shrinking arena as a circle (red while you're outside it)
+  // plus the mystery pickups as gold diamonds. Zone radius comes live from
+  // BattleManager's wall mesh scale so the map and the world always agree.
+  _drawBattle(plane) {
+    const bm = this.battleManager;
+    const r = this.mp && this.mp.race;
+    if (!bm || !bm.inBattle || !r || r.mode !== 'battle' || !r.zone) return;
+    if (r.phase !== 'countdown' && r.phase !== 'racing') return;
+    const ctx = this.ctx;
+    const wpp = (WORLD_RADIUS * 2) / this.canvas.width;
+    const c = this._worldToCanvas(r.zone.x, r.zone.z, plane);
+    const zr = (bm._wall ? bm._wall.scale.x : r.zone.r0) / wpp;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, zr, 0, Math.PI * 2);
+    ctx.strokeStyle = bm._outside ? 'rgba(255,80,64,0.95)' : 'rgba(57,198,255,0.9)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    for (const p of r.pickups || []) {
+      const pos = this._worldToCanvas(p.x, p.z, plane);
+      if (!this._inside(pos)) continue;
+      ctx.save();
+      ctx.translate(pos.x, pos.y);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = '#ffd23a';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 1;
+      ctx.fillRect(-3, -3, 6, 6);
+      ctx.strokeRect(-3, -3, 6, 6);
+      ctx.restore();
     }
   }
 

@@ -78,10 +78,12 @@ megabroplanes/
     │   ├── Client.js            # WebSocket client (auto-reconnect, setEnabled, race msgs)
     │   └── RemotePlaneManager.js # remote-plane visuals + jet effects
     ├── race/
-    │   ├── Lobby.js             # race lobby waiting room (vote plane/time, color, host start)
+    │   ├── Lobby.js             # game lobby waiting room (vote mode/plane/time, color, host start)
     │   └── RaceManager.js       # isolated race: gates, checkpoint detection, combat, death/respawn, HUD
+    ├── battle/
+    │   └── BattleManager.js     # battle mode (v1.1): shrinking arena wall, mystery pickups, kills HUD
     ├── combat/
-    │   └── Bullets.js           # pooled tracer projectiles + swept hit-testing (race combat)
+    │   └── Bullets.js           # pooled tracer projectiles + swept hit-testing (shared by race + battle)
     ├── audio/
     │   └── Audio.js             # Web Audio engine + wind voice
     └── debug/
@@ -280,6 +282,9 @@ WebSocket client. Reconnects every `RECONNECT_MS` (3 s) when it disconnects. `se
 
 ### `net/RemotePlaneManager.js`
 Per-remote `{ mesh, lerp targets, throttle, crashed, type, color, jetExhaust, contrails }`. The mesh lerps toward the network target each frame. For jet remotes, lazily allocates `JetExhaust` + `Contrails` and feeds them a synthetic plane object (`position`, `quaternion`, `throttle`, plus a velocity estimate derived from successive position deltas). Cleaned up on disconnect or plane-type swap.
+
+### `race/` + `battle/` (the match pipeline, v1.1)
+One shared lobby (`race/Lobby.js`) votes on **mode** (race / battle) alongside plane, time and — race-only — flag count. The server's single global match object carries `mode`; `race/RaceManager.js` and `battle/BattleManager.js` both subscribe to the same `race` wire message and each ignores the other's mode. Battle = free-for-all dogfight: a cylindrical arena (server-authored `zone`; its current radius is a pure function of the match clock, so no per-tick sync) shrinks over the match, the server drains HP of anyone outside, kills win. Mystery pickups (`pickups` in the match message, positions only) hold an effect rolled server-side at equal odds — revealed only to the collector via the `fx` message (`pickup` claim → `fx` reveal). Client-side effect physics ride `plane.fxThrustMul` / `plane.fxThrottleCap` (read in `Physics.js` / `Controls.js`); damage multipliers stay server-side. `combat/Bullets.js` is shared by both modes.
 
 ### `audio/Audio.js`
 Web Audio API. Engine voice = sawtooth → lowpass → gain (frequency/cutoff/gain tracked to throttle). Wind voice = pink-ish noise buffer → bandpass → gain (tracked to airspeed). `setTargetAtTime` with `AUDIO_SMOOTHING_TIME` for zipper-free ramps. Started lazily on first user gesture.
