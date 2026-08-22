@@ -313,14 +313,9 @@ export class BattleManager {
   // Physics frozen at the spawn ring during the pre-match countdown.
   get holdAtStart() { return this.inBattle && this.phase === 'countdown'; }
 
-  // R during a battle = manual respawn inside the zone.
-  respawnNow() {
-    if (!this.inBattle) return;
-    const pose = this._respawnPose();
-    this.plane.spawnAirborne(pose.pos, pose.q, pose.vel, 1);
-    if (this.snapCamera) this.snapCamera();
-    this._localDowned = false;
-  }
+  // NOTE: there is deliberately NO manual respawn in battle (main.js keeps the
+  // R/reset input inert here) — teleporting away from a pursuer at will made
+  // chases pointless. Going down auto-respawns via the flow in update().
 
   // --- mystery effects -----------------------------------------------------
   _onFx(msg) {

@@ -473,8 +473,10 @@ function updateMpPhase() {
   }
   if (hintEl) hintEl.textContent = hintText(phase);
   // Match-only UI (e.g. the touch FIRE button) keys off this class — both the
-  // race and the battle count as "in a match" here.
+  // race and the battle count as "in a match" here. in-battle additionally
+  // hides battle-inert controls (the touch R button — no manual respawns).
   document.body.classList.toggle('in-race', phase === 'race' || phase === 'battle');
+  document.body.classList.toggle('in-battle', phase === 'battle');
   refreshRaceButton();
 }
 
@@ -879,18 +881,23 @@ function physicsStep(dt) {
   const resetBtn = touch.consumeReset();
   if (resetKey || resetBtn) {
     if (!resetHeld || resetBtn) {
-      // In a race, R respawns at your next gate; in a battle, at a random spot
-      // inside the zone. Only free flight resets to the home runway.
+      // In a race, R respawns at your next gate; only free flight resets to
+      // the home runway. In a BATTLE the reset is deliberately inert — a
+      // manual respawn is a free teleport away from whoever is on your tail
+      // (and going down already auto-respawns you), so it was pure escape
+      // abuse. The input is still consumed so nothing else reacts to it.
       if (raceManager.inRace) {
         raceManager.respawnAtGate();
       } else if (battleManager.inBattle) {
-        battleManager.respawnNow();
+        // no manual respawns in battle
       } else {
         plane.reset();
         chaseCamera.snap();
       }
-      explosion.clear();
-      if (crashBannerEl) crashBannerEl.style.display = 'none';
+      if (!battleManager.inBattle) {
+        explosion.clear();
+        if (crashBannerEl) crashBannerEl.style.display = 'none';
+      }
       resetHeld = true;
     }
   } else {

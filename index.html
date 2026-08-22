@@ -253,6 +253,9 @@
       }
       body.in-race #btn-fire { display: block; }
       #btn-fire:active, #btn-fire.down { background: rgba(255, 85, 50, 0.85); color: #fff; }
+      /* No manual respawns in battle — hide the touch R button so it doesn't
+         sit there dead (the key/input is also inert in main.js). */
+      body.in-battle #btn-reset { display: none !important; }
       /* Main menu */
       #menu {
         position: absolute;

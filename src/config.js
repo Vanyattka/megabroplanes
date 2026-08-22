@@ -10,7 +10,7 @@
 // CHANGELOG notes stay ENGLISH-ONLY on purpose — it's a technical log, not
 // interface copy (the UI itself is translated, see src/ui/strings.js).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '1.1.0';
+export const GAME_VERSION = '1.1.1';
 export const GAME_CODENAME = 'India';
 export const GAME_CHANNEL = 'RELEASE';
 
@@ -19,6 +19,15 @@ export const GAME_CHANNEL = 'RELEASE';
 // CSS and markup are untouched.
 export const USE_NEW_MENU = true;
 export const CHANGELOG = [
+  {
+    version: '1.1.1',
+    codename: 'India',
+    channel: 'RELEASE',
+    date: '2026-08-22',
+    notes: [
+      'Manual respawn (the R key and the touch R button) no longer works in Battle — teleporting away at will made dogfights impossible to finish. Going down still auto-respawns you after a few seconds. Races keep R as respawn-at-gate.',
+    ],
+  },
   {
     version: '1.1.0',
     codename: 'India',

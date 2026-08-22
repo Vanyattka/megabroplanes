@@ -26,7 +26,7 @@ export const STRINGS = {
     'hint.race':
       'S/W nose · A/D roll · Q/E yaw · Shift/Ctrl throttle · SPACE fire · G gear · R respawn at gate · L lights · drag to look',
     'hint.battle':
-      'S/W nose · A/D roll · Q/E yaw · Shift/Ctrl throttle · SPACE fire · R respawn · stay inside the wall · grab the ? orbs',
+      'S/W nose · A/D roll · Q/E yaw · Shift/Ctrl throttle · SPACE fire · stay inside the wall · grab the ? orbs',
     'menu.footerHint': 'WASD · QE · shift/ctrl · space · R · drag mouse to look',
 
     // ---- in-flight bar ----
@@ -211,7 +211,7 @@ export const STRINGS = {
     'guide.s7.title': 'Playing with others',
     'guide.s7.body':
       'Switch to Multiplayer in the menu, then hit RACE / BATTLE to enter the lobby. Everyone votes on the mode, aircraft and time of day. Race: fly through the gold gates in order. Battle: a free-for-all dogfight in a shrinking arena — most kills wins, and mystery ? orbs hand out random effects, good or bad. Space shoots in both.',
-    'guide.s7.keys': 'Space — fire · R — respawn',
+    'guide.s7.keys': 'Space — fire · R — respawn at the gate (race only)',
     'guide.s8.title': 'On a phone or tablet',
     'guide.s8.body':
       'Touch controls appear automatically: the left stick steers, the right slider is the throttle, and the buttons handle gear, reset and brakes. A FIRE button shows up during races.',
@@ -234,7 +234,7 @@ export const STRINGS = {
     'hint.race':
       'S/W — нос · A/D — крен · Q/E — рыскание · Shift/Ctrl — газ · SPACE — огонь · G — шасси · R — респавн у ворот · L — фары · зажми мышь для обзора',
     'hint.battle':
-      'S/W — нос · A/D — крен · Q/E — рыскание · Shift/Ctrl — газ · SPACE — огонь · R — респавн · держись внутри стены · собирай шары «?»',
+      'S/W — нос · A/D — крен · Q/E — рыскание · Shift/Ctrl — газ · SPACE — огонь · держись внутри стены · собирай шары «?»',
     'menu.footerHint': 'WASD · QE · shift/ctrl · space · R · зажми мышь для обзора',
 
     // ---- in-flight bar ----
@@ -420,7 +420,7 @@ export const STRINGS = {
     'guide.s7.title': 'Игра с другими',
     'guide.s7.body':
       'Переключись в меню на игру по сети и нажми ГОНКА / БОЙ, чтобы попасть в лобби. Все голосуют за режим, самолёт и время суток. Гонка: пролетай золотые ворота по порядку. Бой: все против всех в сужающейся арене — побеждает тот, кто больше собьёт, а шары «?» дают случайный эффект, хороший или плохой. Space стреляет в обоих режимах.',
-    'guide.s7.keys': 'Space — огонь · R — респавн',
+    'guide.s7.keys': 'Space — огонь · R — респавн у ворот (только в гонке)',
     'guide.s8.title': 'На телефоне или планшете',
     'guide.s8.body':
       'Сенсорное управление появляется само: левый стик рулит, правый слайдер — газ, кнопки отвечают за шасси, сброс и тормоза. В гонке добавляется кнопка ОГОНЬ.',
