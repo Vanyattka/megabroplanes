@@ -406,6 +406,7 @@ if (import.meta.env && import.meta.env.DEV) {
     plane.spawnAirborne(new Vector3(x, y, z), plane.quaternion.clone(), new Vector3(0, 0, 0), 0.2);
   window.__plane = plane;
   window.__mp = mp;
+  window.__battle = battleManager;
   window.__gh = (x, z) => groundHeight(x, z);
   window.__cp = (i) => mp.sendCheckpoint(i);
   window.__rinfo = () => {
@@ -431,6 +432,11 @@ if (import.meta.env && import.meta.env.DEV) {
     pickups: mp.race && mp.race.pickups,
     inBattle: battleManager.inBattle,
     fx: { thrustMul: plane.fxThrustMul, throttleCap: plane.fxThrottleCap, throttle: plane.throttle },
+    gates: {
+      gameState, photoMode, inLobby,
+      raceHold: raceManager.holdAtStart, battleHold: battleManager.holdAtStart,
+      raceInRace: raceManager.inRace, battlePhase: battleManager.phase,
+    },
     lobby: mp.lobby && mp.lobby.members && mp.lobby.members.length,
   });
 }
@@ -1082,9 +1088,10 @@ function renderStep(alpha) {
   // Piggyback race checkpoint progress so the server self-heals any missed cp.
   mp.sendState(plane, raceManager.inRace ? raceManager.localCp : undefined);
 
-  // Audio tracks plane state each frame.
+  // Audio tracks plane state each frame. Feed the damage-degraded throttle so
+  // a shot-up engine audibly weakens along with its thrust.
   audio.update(renderDt, {
-    throttle: plane.throttle,
+    throttle: plane.effectiveThrottle ?? plane.throttle,
     airspeed: plane.velocity.length(),
   });
 

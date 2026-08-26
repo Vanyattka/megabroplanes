@@ -1,6 +1,6 @@
 import { Object3D, PointLight, Quaternion, SpotLight, Vector3 } from 'three';
 import { buildPlaneMesh, disposePlaneMesh, applyGearPose } from './PlaneMesh.js';
-import { step as physicsStep } from './Physics.js';
+import { step as physicsStep, hullThrustMul } from './Physics.js';
 import { applyControls } from './Controls.js';
 import { getSpawnPose } from '../world/Runway.js';
 import {
@@ -41,6 +41,10 @@ export class Plane {
     this.renderPosition = new Vector3();
     this.renderQuaternion = new Quaternion();
     this.throttle = 0;
+    // Throttle × damage: what the engine actually delivers. Physics applies
+    // hullThrustMul itself; this mirror is for the audio/visual consumers
+    // (engine sound, afterburner, jet plume) so a shot-up engine reads dying.
+    this.effectiveThrottle = 0;
     this.onGround = true;
     this.crashed = false;
     this.crashImpact = null;
@@ -172,6 +176,7 @@ export class Plane {
     this.renderPosition.copy(spawn.position);
     this.renderQuaternion.copy(spawn.quaternion);
     this.throttle = 0;
+    this.effectiveThrottle = 0;
     this.onGround = true;
     this._roughLogged = false;
     this.crashed = false;
@@ -202,6 +207,7 @@ export class Plane {
     this.renderPosition.copy(position);
     this.renderQuaternion.copy(quaternion);
     this.throttle = throttle;
+    this.effectiveThrottle = throttle; // spawns come out fully healed
     this.onGround = false;
     this._roughLogged = false;
     this.crashed = false;
@@ -248,8 +254,11 @@ export class Plane {
     // the interpolated render state. If we snapped the mesh to the raw
     // post-physics position, we'd get the 60 Hz step visible on screen.
 
+    // Damage-degraded output for everything audible/visible below.
+    this.effectiveThrottle = this.throttle * hullThrustMul(this);
+
     const prop = this.mesh.getObjectByName('propeller');
-    if (prop) prop.rotation.z += this.throttle * 30 * dt;
+    if (prop) prop.rotation.z += this.effectiveThrottle * 30 * dt;
 
     // Landing gear transit — gearT chases the commanded state; physics reads
     // gearT for the extra drag, the mesh legs fold via applyGearPose.
@@ -288,7 +297,7 @@ export class Plane {
     // Afterburner — the jet's signature. Lights up past ~65% throttle with a
     // subtle flicker; both cones stretch with thrust.
     if (this.type === 'jet') {
-      const ab = Math.max(0, (this.throttle - 0.65) / 0.35);
+      const ab = Math.max(0, (this.effectiveThrottle - 0.65) / 0.35);
       const core = this.mesh.getObjectByName('ab-core');
       const outer = this.mesh.getObjectByName('ab-outer');
       const flick = 1 + Math.sin(this._blinkT * 47) * 0.08;
@@ -309,7 +318,7 @@ export class Plane {
     if (this._jetLight) {
       const jetActive = this.type === 'jet' && !this.crashed;
       this._jetLight.intensity = jetActive
-        ? JET_LIGHT_INTENSITY * (0.25 + 0.75 * this.throttle)
+        ? JET_LIGHT_INTENSITY * (0.25 + 0.75 * this.effectiveThrottle)
         : 0;
     }
   }

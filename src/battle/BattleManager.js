@@ -32,6 +32,8 @@ import {
   BATTLE_BALLOON_ALT_SPAN,
   BATTLE_PICKUP_COLOR,
   BATTLE_BALLOON_COLORS,
+  BATTLE_SPAWN_PROBE_DIST,
+  BATTLE_SPAWN_PROBE_STEP,
   BATTLE_EFFECTS,
   ROCKET_SPEED,
   ROCKET_TURN_RATE,
@@ -484,9 +486,23 @@ export class BattleManager {
   }
 
   // --- spawn/respawn poses -------------------------------------------------
+  // Highest surface along the first stretch of a spawn heading. A fresh spawn
+  // flies straight ahead at speed before the player reacts — over arbitrary
+  // terrain a fixed above-the-spawn-point altitude flew players directly into
+  // rising mountainsides (an instant, uncontrollable second death). Spawning
+  // above the whole probed corridor guarantees the first seconds are clear.
+  _clearedAlt(px, pz, dx, dz) {
+    let maxY = this._surfaceY(px, pz);
+    for (let d = BATTLE_SPAWN_PROBE_STEP; d <= BATTLE_SPAWN_PROBE_DIST; d += BATTLE_SPAWN_PROBE_STEP) {
+      const y = this._surfaceY(px + dx * d, pz + dz * d);
+      if (y > maxY) maxY = y;
+    }
+    return maxY;
+  }
+
   // Match start: evenly spaced on a ring at half the initial radius, everyone
   // facing the arena centre. The arena lands on arbitrary terrain now, so the
-  // altitude rides the local surface instead of assuming flat plains.
+  // altitude clears the probed corridor ahead, not just the spawn point.
   _spawnPose(slot, total) {
     const z = this._zone || { x: 0, z: 0, r0: 2000 };
     const ang = (slot / Math.max(1, total)) * Math.PI * 2;
@@ -495,14 +511,14 @@ export class BattleManager {
     const pz = z.z + Math.sin(ang) * rad;
     let dx = z.x - px, dz = z.z - pz;
     const len = Math.hypot(dx, dz) || 1; dx /= len; dz /= len;
-    const pos = new Vector3(px, this._surfaceY(px, pz) + 280, pz);
+    const pos = new Vector3(px, this._clearedAlt(px, pz, dx, dz) + 280, pz);
     const q = new Quaternion().setFromUnitVectors(new Vector3(0, 0, -1), new Vector3(dx, 0, dz));
     const vel = new Vector3(dx, 0, dz).multiplyScalar(75);
     return { pos, q, vel };
   }
 
   // Respawn: a random spot well inside the CURRENT zone, facing the centre,
-  // at a safe height above whatever terrain is underneath.
+  // above everything along the initial flight corridor.
   _respawnPose() {
     const z = this._zone || { x: 0, z: 0, r1: 400, baseR: 2000, baseAt: 0, shrinkMs: 1 };
     const zr = z.baseAt ? zoneRadius(z, Date.now()) : z.r1;
@@ -512,7 +528,7 @@ export class BattleManager {
     const pz = z.z + Math.sin(ang) * rad;
     let dx = z.x - px, dz = z.z - pz;
     const len = Math.hypot(dx, dz) || 1; dx /= len; dz /= len;
-    const pos = new Vector3(px, this._surfaceY(px, pz) + 220 + Math.random() * 120, pz);
+    const pos = new Vector3(px, this._clearedAlt(px, pz, dx, dz) + 220 + Math.random() * 120, pz);
     const q = new Quaternion().setFromUnitVectors(new Vector3(0, 0, -1), new Vector3(dx, 0, dz));
     const vel = new Vector3(dx, 0, dz).multiplyScalar(75);
     return { pos, q, vel };
@@ -722,9 +738,16 @@ export class BattleManager {
     if (nTurrets > this._lastTurrets) this._aaFlashUntil = now + 4000;
     this._lastTurrets = nTurrets;
 
-    // Local HP / death / respawn — mirrors the race flow.
+    // Local HP / death / respawn — mirrors the race flow. A lethal (<=0)
+    // report is only mirrored once gunfire-death is armed: right after OUR
+    // respawn the server can still briefly echo the previous death (clock/
+    // network skew), and since thrust scales with hull a mirrored stale 0
+    // would also kill the fresh engine for a few frames.
     const row = this._localRow();
-    if (row) this.plane.hp = row.hp != null ? row.hp : this.plane.maxHp;
+    if (row) {
+      const hp = row.hp != null ? row.hp : this.plane.maxHp;
+      if (hp > 0 || this._hpArmed) this.plane.hp = hp;
+    }
     if (row && row.hp != null && row.hp > 0) this._hpArmed = true;
     if (racing && !this._localDowned) {
       if (this._hpArmed && row && row.hp <= 0 && !this.plane.crashed) {
@@ -908,13 +931,15 @@ export class BattleManager {
       if (now < this._killFlashUntil) this.elKill.textContent = t('battle.plusKill');
     }
 
-    // HP bar (same element + look as the race).
+    // HP bar (same element + look as the race). Below full hull the label
+    // also shows the engine output — thrust degrades with damage.
     if (this.elHp) {
       if (this.phase === 'racing') {
         const hp = Math.max(0, Math.min(100, this.plane.hp));
         const col = hp > 55 ? '#39ff8a' : hp > 25 ? '#ffd23a' : '#ff5040';
+        const engine = hp < 99.5 ? ` · ⚙ ${Math.round(hp)}%` : '';
         this.elHp.style.display = 'block';
-        this.elHp.innerHTML = `<div class="hp-label">${t('race.hull')}</div><div class="hp-track"><div class="hp-fill" style="width:${hp}%;background:${col}"></div></div>`;
+        this.elHp.innerHTML = `<div class="hp-label">${t('race.hull')}${engine}</div><div class="hp-track"><div class="hp-fill" style="width:${hp}%;background:${col}"></div></div>`;
       } else this.elHp.style.display = 'none';
     }
 

@@ -147,8 +147,10 @@ export class JetExhaust {
     _linVel.copy(plane.velocity);
     _back.set(0, 0, 1).applyQuaternion(quat); // world backward
 
-    // Emission rate scales with throttle.
-    const rate = JET_EXHAUST_RATE * plane.throttle;
+    // Emission rate scales with the throttle the engine actually delivers
+    // (damage-degraded when the plane carries an effectiveThrottle; remote
+    // planes' synthetic objects fall back to the raw snapshot throttle).
+    const rate = JET_EXHAUST_RATE * (plane.effectiveThrottle ?? plane.throttle);
     this._accum += rate * dt;
     const toSpawn = Math.floor(this._accum);
     this._accum -= toSpawn;

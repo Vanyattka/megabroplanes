@@ -21,7 +21,17 @@ import {
   BRAKE_STRENGTH,
   CRASH_MIN_SPEED,
   DEFAULT_TYPE_CONFIG,
+  HULL_THRUST_MIN,
 } from '../config.js';
+
+// Battle/race damage model: the engine puts out thrust in proportion to the
+// remaining hull (half hull = half thrust, ~zero hull = a glider). Outside
+// combat hp always equals maxHp, so free flight is unaffected. Shared with the
+// audio/visual layers so a dying engine also sounds and looks dying.
+export function hullThrustMul(plane) {
+  if (plane.hp == null || !plane.maxHp) return 1;
+  return Math.max(HULL_THRUST_MIN, Math.min(1, plane.hp / plane.maxHp));
+}
 
 const _forward = new Vector3();
 const _up = new Vector3();
@@ -48,9 +58,10 @@ export function step(plane, dt, getHeight, isOnRunway, braking, crashesEnabled) 
 
   // Forces — scaled per-aircraft so a Cessna crawls and a jet sprints off
   // the same global MAX_THRUST constant. fxThrustMul is the battle-mode
-  // mystery-effect modifier (overdrive), 1 outside a battle.
+  // mystery-effect modifier (overdrive, 1 outside a battle); hullThrustMul is
+  // the damage model (thrust fades with the hull, 1 at full health).
   _thrust.copy(_forward).multiplyScalar(
-    MAX_THRUST * tc.thrustMult * (plane.fxThrustMul || 1) * plane.throttle
+    MAX_THRUST * tc.thrustMult * (plane.fxThrustMul || 1) * hullThrustMul(plane) * plane.throttle
   );
 
   const forwardSpeed = plane.velocity.dot(_forward);

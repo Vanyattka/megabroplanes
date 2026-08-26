@@ -10,7 +10,7 @@
 // CHANGELOG notes stay ENGLISH-ONLY on purpose — it's a technical log, not
 // interface copy (the UI itself is translated, see src/ui/strings.js).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '1.2.0';
+export const GAME_VERSION = '1.2.1';
 export const GAME_CODENAME = 'India';
 export const GAME_CHANNEL = 'RELEASE';
 
@@ -19,6 +19,16 @@ export const GAME_CHANNEL = 'RELEASE';
 // CSS and markup are untouched.
 export const USE_NEW_MENU = true;
 export const CHANGELOG = [
+  {
+    version: '1.2.1',
+    codename: 'India',
+    channel: 'RELEASE',
+    date: '2026-08-22',
+    notes: [
+      'Damage now cripples the engine — in races and battles your thrust scales with your remaining hull. Lose half your hull and you fly on half power; at nearly zero the engine barely responds and you\'re a glider; zero is still a fireball. The hull bar shows your current engine output, and the engine audibly weakens too.',
+      'Fixed instant re-deaths in Battle: spawning or respawning while facing rising terrain could fly you straight into a mountainside before you even had control (counting a second death). Spawns now probe the terrain along the first stretch of flight and come out above it.',
+    ],
+  },
   {
     version: '1.2.0',
     codename: 'India',
@@ -1363,6 +1373,12 @@ export const RACE_COLOR_DONE = 0x39ff8a;    // gates already cleared (green)
 // Combat (race mode) — guns + HP. Damage/HP are server-authoritative; these
 // are the client-side feel (fire rate, tracer visuals, local hit tolerance).
 export const PLANE_MAX_HP = 100;
+// Damage model (races AND battles): engine thrust scales linearly with the
+// remaining hull — half hull = half thrust, near-zero hull = a glider, zero =
+// the usual fireball. The floor keeps a sliver of response if you ever want
+// one (0 = fully dead engine at 0 hull). Outside combat hull is always full,
+// so free flight is untouched.
+export const HULL_THRUST_MIN = 0;
 export const GUN_FIRE_INTERVAL = 0.1;     // seconds between shots
 export const BULLET_SPEED = 460;          // m/s (added to plane velocity)
 export const BULLET_LIFE = 1.5;           // seconds before a tracer expires
@@ -1399,6 +1415,12 @@ export const BATTLE_BALLOON_ALT_SPAN = 150;   // + deterministic per-id variatio
 export const BATTLE_PICKUP_COLOR = 0xffd23a;  // basket color (gold, blooms — the beacon)
 export const BATTLE_BALLOON_COLORS = [0xff5a4e, 0x3f8cff, 0xffb347, 0x9c6bff, 0x39d98a]; // envelope palette by id
 export const BATTLE_DURATION_OPTIONS = [2, 5, 7]; // votable match length (minutes) — must match the server
+// Spawn/respawn terrain clearance: probe the surface this far along the
+// initial heading (every STEP metres) and spawn above the HIGHEST point
+// found. Arenas sit on arbitrary terrain, so a spawn facing a mountainside
+// used to fly straight into it — an instant second death.
+export const BATTLE_SPAWN_PROBE_DIST = 1200;
+export const BATTLE_SPAWN_PROBE_STEP = 100;
 // Homing rockets (the `rockets` mystery effect). Ammo is server-authoritative
 // (spent on launch, lost on death); these drive the client-side missile sim.
 export const ROCKET_SPEED = 190;              // m/s (faster than any plane)

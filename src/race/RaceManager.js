@@ -310,9 +310,15 @@ export class RaceManager {
       if (isNext) ring.mesh.rotateZ(dt * 0.9);
     }
 
-    // Local HP / death / respawn.
+    // Local HP / death / respawn. A lethal (<=0) report is only mirrored once
+    // gunfire-death is armed — right after OUR respawn the server can still
+    // briefly echo the previous death (clock/network skew), and since thrust
+    // scales with hull a mirrored stale 0 would also kill the fresh engine.
     const row = this._localRow();
-    if (row) this.plane.hp = row.hp != null ? row.hp : this.plane.maxHp;
+    if (row) {
+      const hp = row.hp != null ? row.hp : this.plane.maxHp;
+      if (hp > 0 || this._hpArmed) this.plane.hp = hp;
+    }
     // Arm gunfire-death only once the server reports us alive again, so a
     // stale hp<=0 snapshot still in flight at respawn can't re-kill us.
     if (row && row.hp != null && row.hp > 0) this._hpArmed = true;
@@ -470,13 +476,15 @@ export class RaceManager {
       } else this.elStatus.style.display = 'none';
     }
 
-    // HP bar.
+    // HP bar. Below full hull the label also shows the engine output, since
+    // thrust degrades with damage (see hullThrustMul in Physics).
     if (this.elHp) {
       if (this.phase === 'racing') {
         const hp = Math.max(0, Math.min(100, this.plane.hp));
         const col = hp > 55 ? '#39ff8a' : hp > 25 ? '#ffd23a' : '#ff5040';
+        const engine = hp < 99.5 ? ` · ⚙ ${Math.round(hp)}%` : '';
         this.elHp.style.display = 'block';
-        this.elHp.innerHTML = `<div class="hp-label">${t('race.hull')}</div><div class="hp-track"><div class="hp-fill" style="width:${hp}%;background:${col}"></div></div>`;
+        this.elHp.innerHTML = `<div class="hp-label">${t('race.hull')}${engine}</div><div class="hp-track"><div class="hp-fill" style="width:${hp}%;background:${col}"></div></div>`;
       } else this.elHp.style.display = 'none';
     }
 
