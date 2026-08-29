@@ -1120,10 +1120,12 @@
       body.menu-new #lobby-leave:hover { border-color: rgba(255,255,255,.45); color: #fff; background: rgba(255,255,255,.06); }
       body.menu-new #lobby-hint { font-family: 'Sora', sans-serif; color: rgba(255,255,255,.42); letter-spacing: .04em; text-align: left; max-width: 600px; }
 
-      /* responsive — stack on narrow / touch. Also fires on SHORT viewports:
-         a landscape phone is 640–930px wide but only ~360–450px tall, and the
-         desktop lobby/menu columns clip past the top there (centered flex +
-         overflow = unreachable content). */
+      /* responsive — phones. Shared rules fire on narrow OR short viewports
+         (a landscape phone is 640–930px wide but only ~360–450px tall, and the
+         desktop lobby/menu columns clip past the top there — centered flex +
+         overflow = unreachable content). The menu layout itself then splits:
+         portrait stacks hero-over-list, landscape keeps a full-height list
+         column on the left with the spinning hero on the right. */
       @media (max-width: 760px), (max-height: 560px) {
         /* Top-align (not center): the stacked columns are taller than a phone
            screen, and centering an overflowing flex column clips the top out of
@@ -1134,21 +1136,41 @@
         body.menu-new.in-lobby .lobby-cols { width: auto; max-width: none; }
         body.menu-new.in-lobby .lobby-panel { flex: 0 0 auto; }
         #lobby-chat-log { flex: 0 0 auto; max-height: 30vh; }
-        body.menu-new #nm-hero { top: 0; right: 0; left: 0; width: 100%; height: 42%; bottom: auto; }
-        body.menu-new #nm-hero-canvas { width: 64%; }
         body.menu-new #nm-hero-cap { display: none; }
         body.menu-new #nm-wordmark { top: 18px; left: 20px; font-size: 19px; }
+        /* The menu panels are scrollable flex COLUMNS here: without this,
+           content taller than the panel makes flexbox SHRINK the children
+           instead of scrolling — the mode toggle collapsed to a 2px line. */
+        body.menu-new #menu-main > *, body.menu-new #menu-planes > *,
+        body.menu-new #menu-settings > *, body.menu-new #menu-notes > *,
+        body.menu-new #menu-legal > * { flex-shrink: 0; }
+        body.menu-new.nm-screen-notes #nm-hero, body.menu-new.nm-screen-legal #nm-hero { opacity: 0; }
+      }
+      /* PORTRAIT phones — hero on top, menu list below it. */
+      @media (max-width: 760px) {
+        body.menu-new #nm-hero { top: 0; right: 0; left: 0; width: 100%; height: 42%; bottom: auto; }
+        body.menu-new #nm-hero-canvas { width: 64%; }
         body.menu-new #menu-main, body.menu-new #menu-planes, body.menu-new #menu-settings, body.menu-new #menu-notes, body.menu-new #menu-legal {
           left: 0; right: 0; top: 43%; bottom: 0; width: auto; transform: none;
           padding: 14px 20px env(safe-area-inset-bottom,18px); overflow-y: auto; justify-content: flex-start;
         }
-        /* These are scrollable flex COLUMNS now: without this, content taller
-           than the panel makes flexbox SHRINK the children instead of
-           scrolling — the mode toggle collapsed to a 2px line on phones. */
-        body.menu-new #menu-main > *, body.menu-new #menu-planes > *,
-        body.menu-new #menu-settings > *, body.menu-new #menu-notes > *,
-        body.menu-new #menu-legal > * { flex-shrink: 0; }
-        body.menu-new.nm-screen-settings #nm-hero, body.menu-new.nm-screen-notes #nm-hero, body.menu-new.nm-screen-legal #nm-hero { opacity: 0; }
+        body.menu-new.nm-screen-settings #nm-hero { opacity: 0; }
+      }
+      /* LANDSCAPE phones (wide but short) — full-height menu column on the
+         left, the spinning hero keeps the right half like on desktop. */
+      @media (min-width: 761px) and (max-height: 560px) {
+        body.menu-new #menu-main, body.menu-new #menu-planes, body.menu-new #menu-settings, body.menu-new #menu-notes, body.menu-new #menu-legal {
+          left: 0; right: auto; top: 56px; bottom: 0; transform: none;
+          width: min(56%, 520px);
+          padding: 8px 18px calc(12px + var(--safe-b)) calc(20px + var(--safe-l));
+          overflow-y: auto; justify-content: flex-start;
+        }
+        body.menu-new #menu-main { gap: 14px; }
+        body.menu-new #nm-hero { top: 0; bottom: 0; left: auto; right: 0; width: 52%; height: auto; }
+        body.menu-new #nm-hero-canvas { width: min(84%, 440px); }
+        /* Settings keeps the dimmed hero like desktop — the panel is a column,
+           not full-width, so the right half stays composed. */
+        body.menu-new.nm-screen-settings #nm-hero { opacity: .28; }
       }
     </style>
   </head>
