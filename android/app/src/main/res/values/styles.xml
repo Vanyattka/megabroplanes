@@ -13,6 +13,10 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!-- Shows through wherever the WebView is inset — e.g. Capacitor's
+             cutout fallback padding on WebView <140. Navy reads as a bezel;
+             the default white read as a broken strip. -->
+        <item name="android:windowBackground">@color/ic_launcher_background</item>
     </style>
 
 

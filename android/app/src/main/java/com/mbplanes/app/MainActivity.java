@@ -20,7 +20,13 @@ public class MainActivity extends BridgeActivity {
 
     // Draw edge-to-edge, including under a camera cutout in landscape — the
     // web layout pads itself with env(safe-area-inset-*) so nothing hides.
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+    // ALWAYS (not SHORT_EDGES): with the system bars hidden (immersive),
+    // SHORT_EDGES still letterboxes the cutout side — verified in the
+    // emulator, a grey dead strip next to the punch-hole.
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      getWindow().getAttributes().layoutInDisplayCutoutMode =
+          WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
       getWindow().getAttributes().layoutInDisplayCutoutMode =
           WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
     }
