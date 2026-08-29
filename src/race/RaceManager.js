@@ -319,9 +319,15 @@ export class RaceManager {
       const hp = row.hp != null ? row.hp : this.plane.maxHp;
       if (hp > 0 || this._hpArmed) this.plane.hp = hp;
     }
-    // Arm gunfire-death only once the server reports us alive again, so a
-    // stale hp<=0 snapshot still in flight at respawn can't re-kill us.
-    if (row && row.hp != null && row.hp > 0) this._hpArmed = true;
+    // Arm gunfire-death ONLY while locally alive (and only once the server
+    // reports us alive). A terrain crash goes down client-first: for one ping
+    // the server still echoes the PRE-crash hp>0, and arming on those echoes
+    // while downed meant our (earlier) respawn met the server's still-dead
+    // hp=0 with the trigger armed → an instant false re-death at the spawn
+    // (the "explosion right after respawn" bug).
+    if (row && row.hp != null && row.hp > 0 && !this._localDowned && !this.plane.crashed) {
+      this._hpArmed = true;
+    }
     // Downed either by gunfire (the server drove HP to 0) OR by flying into the
     // terrain (physics set plane.crashed and main.js already played the
     // explosion). Both funnel into the same downed→respawn flow, so a terrain

@@ -10,7 +10,7 @@
 // CHANGELOG notes stay ENGLISH-ONLY on purpose — it's a technical log, not
 // interface copy (the UI itself is translated, see src/ui/strings.js).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '1.2.2';
+export const GAME_VERSION = '1.2.3';
 export const GAME_CODENAME = 'India';
 export const GAME_CHANNEL = 'RELEASE';
 
@@ -19,6 +19,15 @@ export const GAME_CHANNEL = 'RELEASE';
 // CSS and markup are untouched.
 export const USE_NEW_MENU = true;
 export const CHANGELOG = [
+  {
+    version: '1.2.3',
+    codename: 'India',
+    channel: 'RELEASE',
+    date: '2026-08-29',
+    notes: [
+      'Fixed exploding right after a respawn (races and battles): after crashing into the ground, a network-timing race could make the client treat the server\'s not-yet-respawned state as a fresh kill — an instant explosion at the spawn, sometimes several in a row, each counted as a death. Respawns are clean now.',
+    ],
+  },
   {
     version: '1.2.2',
     codename: 'India',

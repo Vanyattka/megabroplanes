@@ -748,7 +748,16 @@ export class BattleManager {
       const hp = row.hp != null ? row.hp : this.plane.maxHp;
       if (hp > 0 || this._hpArmed) this.plane.hp = hp;
     }
-    if (row && row.hp != null && row.hp > 0) this._hpArmed = true;
+    // Arm gunfire-death ONLY while locally alive. A terrain crash goes down
+    // client-first: for one ping the server still echoes the PRE-crash hp>0 —
+    // arming on those echoes while downed meant our (earlier) respawn met the
+    // server's still-dead hp=0 with the trigger armed → an instant false
+    // re-death at the spawn, sometimes looping (the "explosions right after
+    // respawn" bug). Armed-while-alive, the first hp>0 AFTER the server's own
+    // respawn is what re-arms us, which is the original intent.
+    if (row && row.hp != null && row.hp > 0 && !this._localDowned && !this.plane.crashed) {
+      this._hpArmed = true;
+    }
     if (racing && !this._localDowned) {
       if (this._hpArmed && row && row.hp <= 0 && !this.plane.crashed) {
         this._die(now);
