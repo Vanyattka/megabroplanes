@@ -1,0 +1,11 @@
+{
+  "appId": "com.mbplanes.app",
+  "appName": "MB Planes",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

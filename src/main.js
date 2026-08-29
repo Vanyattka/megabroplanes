@@ -43,6 +43,7 @@ import {
   SHADOW_UPDATE_DIST,
   SHADOW_SUN_EPS,
   USE_NEW_MENU,
+  NATIVE_MP_URL,
 } from './config.js';
 import { MultiplayerClient } from './net/Client.js';
 import { RemotePlaneManager } from './net/RemotePlaneManager.js';
@@ -238,6 +239,12 @@ updateAudioIndicator();
 const mpStatusEl = document.getElementById('mp-status');
 const params = new URLSearchParams(window.location.search);
 function defaultServerUrl() {
+  // Native app (Capacitor WebView): the page origin is capacitor://localhost /
+  // https://localhost, so nothing useful derives from location — talk straight
+  // to the production relay. ?server= still overrides for testing.
+  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+    return NATIVE_MP_URL;
+  }
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.host || 'localhost';
   if (window.location.port === '5173') {
@@ -286,7 +293,9 @@ if (nameInputEl) {
   });
 }
 const remotes = new RemotePlaneManager(renderer.scene, mp);
-const touch = new TouchControls();
+// Touch controls get the Input instance so the look-drag layer can feed the
+// same mouse-delta path the desktop camera uses.
+const touch = new TouchControls(input);
 const minimap = new Minimap(mp);
 
 // Game state
@@ -514,6 +523,9 @@ function refreshRaceButton() {
   const showLobbyBtn =
     currentMode === 'multiplayer' && gameState === 'playing' && currentMpPhase() === 'free';
   raceBtn.style.display = showLobbyBtn ? 'block' : 'none';
+  // The touch top-bar 🏁 mirrors the (touch-hidden) settings button.
+  const tbRace = document.getElementById('tb-race');
+  if (tbRace) tbRace.style.display = showLobbyBtn ? 'block' : 'none';
 }
 
 // Wire mp.setEnabled and remote clearing to the current mode. Called
@@ -675,7 +687,45 @@ window.addEventListener('keydown', (e) => {
     // freeze you out (and make you a sitting duck). Disallow it there.
     setPhotoMode(!photoMode);
   }
+  syncTouchToggles();
 });
+
+// Touch top-bar actions — same guards as the key handlers above (MENU and
+// RACE proxy the settings buttons inside Touch.js and never reach here).
+touch.onButton = (name) => {
+  if (name === 'photo') {
+    if (gameState === 'playing' && !raceManager.inRace && !battleManager.inBattle) {
+      setPhotoMode(!photoMode);
+    }
+  } else if (name === 'light') {
+    if (gameState === 'playing') plane.toggleLandingLight();
+  } else if (name === 'mute') {
+    if (audio.isStarted()) {
+      audio.toggleMute();
+      updateAudioIndicator();
+    }
+  } else if (name === 'crash') {
+    if (crashToggleEl) {
+      crashToggleEl.checked = !crashToggleEl.checked;
+      crashToggleEl.dispatchEvent(new Event('change'));
+    }
+  }
+  syncTouchToggles();
+};
+
+// Reflect the toggled states on the touch top-bar buttons (.on = active).
+function syncTouchToggles() {
+  if (!touch.enabled) return;
+  const set = (id, on) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('on', !!on);
+  };
+  set('tb-photo', photoMode);
+  set('tb-light', plane.landingLightOn);
+  set('tb-mute', audio.isStarted() && !audio.isMuted());
+  set('tb-crash', crashesEnabled());
+}
+syncTouchToggles();
 
 {
   const sel = menu.getSelection();

@@ -10,7 +10,7 @@
 // CHANGELOG notes stay ENGLISH-ONLY on purpose — it's a technical log, not
 // interface copy (the UI itself is translated, see src/ui/strings.js).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '1.2.1';
+export const GAME_VERSION = '1.2.2';
 export const GAME_CODENAME = 'India';
 export const GAME_CHANNEL = 'RELEASE';
 
@@ -19,6 +19,20 @@ export const GAME_CHANNEL = 'RELEASE';
 // CSS and markup are untouched.
 export const USE_NEW_MENU = true;
 export const CHANGELOG = [
+  {
+    version: '1.2.2',
+    codename: 'India',
+    channel: 'RELEASE',
+    date: '2026-08-29',
+    notes: [
+      'Mobile controls, rebuilt. Nothing overlaps any more: round instruments sit in the top corners, a slim readout strip runs across the top, the stick and throttle own the bottom corners, and every edge respects notches and display cutouts.',
+      'Drag anywhere on the open screen to look around — same as dragging the mouse on desktop, the view recenters when you let go.',
+      'New touch top bar with everything that used to be keyboard-only: menu, races, photo mode, landing lights, sound and the crash toggle.',
+      'On the ground the stick now steers the nosewheel, so you can taxi without hunting for the small yaw buttons.',
+      'The lobby, menus and flight guide now scroll properly on short landscape screens instead of clipping.',
+      'First release of the Android app — the same game in a fullscreen native wrapper, built for phones.',
+    ],
+  },
   {
     version: '1.2.1',
     codename: 'India',
@@ -1132,6 +1146,19 @@ export const CAMERA_COLLISION_RATE = 7.0;
 export const MOUSE_LOOK_SENSITIVITY = 0.003; // radians per pixel of drag
 export const MOUSE_LOOK_RECENTER = 3.0; // 1/s decay toward zero when not dragging
 export const MOUSE_LOOK_PITCH_LIMIT = Math.PI / 2 - 0.1;
+// Touch look-drag (the free-area swipe on phones) feeds the same camera path
+// as the mouse; this multiplies the raw finger delta before it hits
+// MOUSE_LOOK_SENSITIVITY — fingers travel less than a mouse for the same
+// intent, so >1 keeps the two feeling alike.
+export const TOUCH_LOOK_MULT = 1.7;
+
+// ---------------------------------------------------------------------------
+// Native app (Capacitor)
+// ---------------------------------------------------------------------------
+// Inside the Android/iOS WebView the page origin is capacitor://localhost —
+// nothing useful can be derived from window.location, so the native build
+// talks straight to the production relay. The ?server= override still wins.
+export const NATIVE_MP_URL = 'wss://mbplanes.com/ws';
 
 // ---------------------------------------------------------------------------
 // Day / night cycle

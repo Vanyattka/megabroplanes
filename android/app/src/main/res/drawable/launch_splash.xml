@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launch splash: the gold plane centered on the same navy as the icon
+     background (replaces Capacitor's default logo splash.png). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+  <item android:drawable="@color/ic_launcher_background" />
+  <item
+      android:drawable="@drawable/ic_launcher_plane"
+      android:gravity="center"
+      android:width="220dp"
+      android:height="220dp" />
+</layer-list>

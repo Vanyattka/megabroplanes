@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MB Planes launcher foreground: the little gold jet from the menu's
+     drifting-plane motif, on the adaptive-icon 108dp canvas (content kept
+     inside the 66dp safe circle). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+  <!-- fuselage -->
+  <path
+      android:fillColor="#FFD24A"
+      android:pathData="M54,28.9 L57.3,42 L57.8,79.1 L50.2,79.1 L50.7,42 Z" />
+  <!-- left wing -->
+  <path
+      android:fillColor="#FFC532"
+      android:pathData="M54,53.8 L31.9,75.9 L46,75.9 L54,67.4 Z" />
+  <!-- right wing -->
+  <path
+      android:fillColor="#FFC532"
+      android:pathData="M54,53.8 L76.1,75.9 L62,75.9 L54,67.4 Z" />
+</vector>

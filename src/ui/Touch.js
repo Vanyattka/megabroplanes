@@ -3,6 +3,8 @@
 // button-down flags. Only activates on touch-capable devices (or when forced
 // with ?touch=1 in the URL).
 
+import { TOUCH_LOOK_MULT } from '../config.js';
+
 const JOY_RADIUS = 55;      // visual half-extent inside the base
 const KNOB_OFFSET_PX = 29;  // matches the CSS half-size of the knob
 
@@ -18,8 +20,9 @@ function isTouchDevice() {
 }
 
 export class TouchControls {
-  constructor() {
+  constructor(input = null) {
     this.enabled = isTouchDevice();
+    this._input = input;          // Input instance — look-drag feeds its mouse delta
     this.joyX = 0;                // -1..1  (right = +1)
     this.joyY = 0;                // -1..1  (down-on-stick = +1, i.e. push-forward)
     this.throttle = 0;            // 0..1, null if slider hasn't been touched
@@ -30,16 +33,21 @@ export class TouchControls {
     this.fire = false;            // race-combat trigger (dedicated FIRE button)
     this.resetRequested = false;  // consumed by main.js
     this.gearRequested = false;   // gear toggle taps, consumed by main.js
+    this.onButton = null;         // (name) => {} — top-bar taps, wired by main.js
 
     if (!this.enabled) return;
 
     document.body.classList.add('touch');
     const ui = document.getElementById('touch-ui');
     if (ui) ui.classList.remove('hidden');
+    const bar = document.getElementById('touch-topbar');
+    if (bar) bar.classList.remove('hidden');
 
+    this._initLook();
     this._initJoystick();
     this._initThrottle();
     this._initButtons();
+    this._initTopbar();
   }
 
   consumeReset() {
@@ -52,6 +60,68 @@ export class TouchControls {
     const g = this.gearRequested;
     this.gearRequested = false;
     return g;
+  }
+
+  // Camera look — any drag that starts on the free screen area (the layer
+  // sits UNDER every other touch control) accumulates into the shared Input
+  // mouse delta, so ChaseCamera needs no changes: while a finger is down the
+  // view follows it, on release it recenters exactly like releasing the mouse.
+  _initLook() {
+    const layer = document.getElementById('look-layer');
+    if (!layer || !this._input) return;
+    let activePointer = null;
+    let lastX = 0;
+    let lastY = 0;
+
+    const onDown = (e) => {
+      if (activePointer !== null) return; // one look finger at a time
+      e.preventDefault();
+      activePointer = e.pointerId;
+      layer.setPointerCapture(e.pointerId);
+      lastX = e.clientX;
+      lastY = e.clientY;
+      this._input.mouseDown = true;
+    };
+    const onMove = (e) => {
+      if (activePointer !== e.pointerId) return;
+      e.preventDefault();
+      this._input.mouseDeltaX += (e.clientX - lastX) * TOUCH_LOOK_MULT;
+      this._input.mouseDeltaY += (e.clientY - lastY) * TOUCH_LOOK_MULT;
+      lastX = e.clientX;
+      lastY = e.clientY;
+    };
+    const onUp = (e) => {
+      if (activePointer !== e.pointerId) return;
+      activePointer = null;
+      try { layer.releasePointerCapture(e.pointerId); } catch {}
+      this._input.mouseDown = false;
+    };
+
+    layer.addEventListener('pointerdown', onDown);
+    layer.addEventListener('pointermove', onMove);
+    layer.addEventListener('pointerup', onUp);
+    layer.addEventListener('pointercancel', onUp);
+  }
+
+  // System buttons along the top edge. MENU and RACE proxy the (touch-hidden)
+  // #settings buttons so all their main.js wiring stays in one place; the
+  // rest report through onButton and main.js decides what they do.
+  _initTopbar() {
+    const tap = (id, fn) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        fn();
+      });
+    };
+    tap('tb-menu', () => document.getElementById('btn-menu')?.click());
+    tap('tb-race', () => document.getElementById('btn-race')?.click());
+    tap('tb-photo', () => this.onButton && this.onButton('photo'));
+    tap('tb-light', () => this.onButton && this.onButton('light'));
+    tap('tb-mute', () => this.onButton && this.onButton('mute'));
+    tap('tb-crash', () => this.onButton && this.onButton('crash'));
   }
 
   _initJoystick() {

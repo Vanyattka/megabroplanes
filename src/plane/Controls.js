@@ -17,17 +17,19 @@ export function applyControls(plane, input, dt, touch) {
   const keyRollRaw = input.getAxis('KeyA', 'KeyD');
   const keyYaw = input.getAxis('KeyQ', 'KeyE');
 
-  // Joystick (touch)
+  // Wheels are on the ground — you can't tilt a plane that's sitting on them.
+  // Only yaw works (for taxi steering).
+  const onGround = !!plane.onGround;
+
+  // Joystick (touch). On the ground the stick's X axis steers the nosewheel
+  // (roll is physically ignored there anyway), so taxiing doesn't force the
+  // player onto the small yaw buttons. Push right = turn right = negative yaw.
   const joyPitchRaw = touch && touch.enabled ? touch.joyY : 0;
   const joyRollRaw = touch && touch.enabled ? -touch.joyX : 0;
   const joyYaw =
     touch && touch.enabled
-      ? (touch.yawLeft ? 1 : 0) - (touch.yawRight ? 1 : 0)
+      ? (touch.yawLeft ? 1 : 0) - (touch.yawRight ? 1 : 0) + (onGround ? -touch.joyX : 0)
       : 0;
-
-  // Wheels are on the ground — you can't tilt a plane that's sitting on them.
-  // Only yaw works (for taxi steering).
-  const onGround = !!plane.onGround;
   const pitchInput = onGround ? 0 : clamp(keyPitchRaw + joyPitchRaw);
   const rollInput = onGround ? 0 : clamp(keyRollRaw + joyRollRaw);
   const yawInput = clamp(keyYaw + joyYaw);

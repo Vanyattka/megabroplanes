@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>mbplanes</title>
     <!-- New menu/lobby design fonts (used only by the body.menu-new skin).
          SELF-HOSTED on purpose: loading these from fonts.googleapis.com handed
@@ -144,14 +144,68 @@
       #settings button:hover { background: var(--hud-accent-soft); border-color: var(--hud-accent); color: #fff; }
       #settings button:active { transform: translateY(1px); }
       #mp-status, #audio-indicator { font-size: 10.5px; color: var(--hud-dim); letter-spacing: 0.4px; }
-      /* Mobile touch UI */
+      /* ==================================================================
+         Mobile touch UI (v1.3 layout).
+         Landscape-phone plan with no overlapping zones:
+           top-left minimap · top-centre readout strip + system bar ·
+           top-right horizon · left edge race leaderboard (compact) ·
+           bottom-left stick + yaw pair · bottom-right throttle + actions
+           + FIRE · centre = free camera look-drag area.
+         Every edge anchor is padded by the display-cutout safe areas so
+         nothing hides under a notch in landscape (matters in the APK too).
+         ================================================================== */
+      :root {
+        --safe-t: env(safe-area-inset-top, 0px);
+        --safe-b: env(safe-area-inset-bottom, 0px);
+        --safe-l: env(safe-area-inset-left, 0px);
+        --safe-r: env(safe-area-inset-right, 0px);
+      }
       #touch-ui { position: absolute; inset: 0; pointer-events: none; }
       #touch-ui > * { pointer-events: auto; }
       #touch-ui.hidden { display: none; }
+      /* Camera look-drag — fills everything, every other control paints and
+         receives pointers above it (it is the first child). */
+      #look-layer { position: absolute; inset: 0; touch-action: none; }
+      /* Touch system bar — MENU/RACE/PHOTO/LIGHT/SOUND/CRASHES. Replaces the
+         desktop #settings panel (hidden on touch below). */
+      #touch-topbar {
+        position: absolute;
+        top: calc(46px + var(--safe-t));
+        left: 50%; transform: translateX(-50%);
+        display: flex; gap: 9px;
+        z-index: 6;
+      }
+      #touch-topbar.hidden { display: none; }
+      .tb {
+        width: 44px; height: 38px;
+        border-radius: 12px;
+        background: var(--hud-bg);
+        -webkit-backdrop-filter: var(--hud-blur);
+        backdrop-filter: var(--hud-blur);
+        border: 1px solid var(--hud-border-strong);
+        box-shadow: var(--hud-shadow);
+        font-size: 17px;
+        line-height: 1;
+        padding: 0;
+        cursor: pointer;
+        touch-action: none;
+        outline: none;
+        filter: saturate(0.4) brightness(0.95);
+      }
+      .tb.on { border-color: var(--hud-accent); background: var(--hud-accent-soft); filter: none; }
+      .tb:active { background: var(--hud-accent-soft); }
+      /* RACE mirrors #btn-race visibility from main.js; photo hidden where the
+         P key is ignored anyway; photo mode strips the bar down to 📷 only. */
+      #tb-race { display: none; }
+      body.in-race #tb-photo, body.in-battle #tb-photo { display: none; }
+      body.photo #tb-menu, body.photo #tb-race, body.photo #tb-light,
+      body.photo #tb-mute, body.photo #tb-crash { display: none; }
+      body.photo #tb-photo { display: block; }
       .joy {
         position: absolute;
-        bottom: 18px; left: 18px;
-        width: 150px; height: 150px;
+        bottom: calc(12px + var(--safe-b));
+        left: calc(12px + var(--safe-l));
+        width: 148px; height: 148px;
         touch-action: none;
       }
       .joy-base {
@@ -172,8 +226,9 @@
       }
       .throttle {
         position: absolute;
-        bottom: 18px; right: 18px;
-        width: 58px; height: 220px;
+        bottom: calc(12px + var(--safe-b));
+        right: calc(10px + var(--safe-r));
+        width: 56px; height: min(230px, 44vh);
         touch-action: none;
       }
       .throttle-track {
@@ -225,25 +280,63 @@
         padding: 0;
       }
       .tbtn:active, .tbtn.down { background: rgba(255,200,80,0.55); color: #000; }
+      /* Yaw pair — rudder "pedals" to the right of the stick, thumb-reachable. */
       #yaw-buttons {
         position: absolute;
-        bottom: 185px; left: 30px;
-        display: flex; gap: 8px;
+        bottom: calc(16px + var(--safe-b));
+        left: calc(174px + var(--safe-l));
+        display: flex; gap: 10px;
       }
+      #yaw-buttons .tbtn { width: 56px; height: 46px; border-radius: 14px; }
+      /* Action column — G/R/BRK stacked just left of the throttle. */
       #action-buttons {
         position: absolute;
-        bottom: 250px; right: 18px;
-        display: flex; flex-direction: column; gap: 8px;
+        bottom: calc(12px + var(--safe-b));
+        right: calc(78px + var(--safe-r));
+        display: flex; flex-direction: column; gap: 10px;
       }
-      body.touch #hint { display: none; }
-      body.touch #horizon { width: 140px; height: 140px; }
-      body.touch #minimap { top: 100px; width: 130px !important; height: 130px !important; }
+      body.touch #hint { display: none !important; }
+      /* Desktop settings panel is replaced by the top bar on touch. */
+      body.touch #settings { display: none !important; }
+      /* Round instruments — small, pinned to the top corners (the canvases
+         carry inline sizes, so the overrides need !important). */
+      body.touch #horizon {
+        top: calc(8px + var(--safe-t)) !important;
+        right: calc(8px + var(--safe-r)) !important;
+        width: 100px !important; height: 100px !important;
+      }
+      body.touch #minimap {
+        top: calc(8px + var(--safe-t)) !important;
+        left: calc(8px + var(--safe-l)) !important;
+        width: 100px !important; height: 100px !important;
+      }
+      /* Flight readout — the bottom-left panel becomes a slim strip across the
+         top centre (the bottom-left corner belongs to the stick now). */
+      body.touch #hud {
+        top: calc(8px + var(--safe-t)); bottom: auto;
+        left: 50%; transform: translateX(-50%);
+        flex-direction: row; align-items: baseline; gap: 13px;
+        padding: 7px 14px;
+        border-radius: 999px;
+      }
+      body.touch #hud .row { min-width: 0; gap: 6px; }
+      body.touch #hud .row > span:last-child { font-size: 13px; }
+      body.touch #hud .label { font-size: 9px; letter-spacing: 1px; }
+      /* Centre-top pills shift down under the strip + system bar on touch. */
+      body.touch #race-status { top: calc(92px + var(--safe-t)); }
+      body.touch #battle-warning { top: calc(136px + var(--safe-t)); }
+      body.touch #battle-storm { top: calc(172px + var(--safe-t)); }
+      body.touch #battle-aa { top: calc(208px + var(--safe-t)); }
+      /* Hull bar rides above the bottom control band. */
+      body.touch #race-hp { bottom: calc(108px + var(--safe-b)); }
+      body.touch #battle-fx { bottom: calc(148px + var(--safe-b)); }
       /* Race-combat trigger — a big thumb button beside the throttle, only
          shown while actually in a race (body.in-race set by main.js). */
       #btn-fire {
         position: absolute;
-        bottom: 46px; right: 106px;
-        width: 80px; height: 80px;
+        bottom: calc(16px + var(--safe-b));
+        right: calc(142px + var(--safe-r));
+        width: 84px; height: 84px;
         display: none;
         border-radius: 50%;
         background: rgba(205, 45, 40, 0.5);
@@ -256,6 +349,12 @@
       /* No manual respawns in battle — hide the touch R button so it doesn't
          sit there dead (the key/input is also inert in main.js). */
       body.in-battle #btn-reset { display: none !important; }
+      /* Narrow-landscape trim (old/small phones). */
+      @media (max-width: 700px) {
+        .tb { width: 38px; height: 34px; font-size: 15px; }
+        body.touch #hud { gap: 9px; padding: 6px 11px; }
+        body.touch #hud .row > span:last-child { font-size: 11.5px; }
+      }
       /* Main menu */
       #menu {
         position: absolute;
@@ -278,6 +377,7 @@
       body.menu-open #horizon,
       body.menu-open #minimap,
       body.menu-open #touch-ui,
+      body.menu-open #touch-topbar,
       body.menu-open #race-status,
       body.menu-open #race-countdown,
       body.menu-open #race-leaderboard,
@@ -604,7 +704,16 @@
       #race-results .res-title { font-size: 22px; font-weight: bold; letter-spacing: 2px; margin-bottom: 10px; }
       #race-results .res-row.me { color: #ffd23a; font-weight: bold; }
       #race-results .res-foot { margin-top: 10px; font-size: 11px; opacity: 0.6; }
-      body.touch #race-leaderboard { top: 184px; }
+      body.touch #race-leaderboard {
+        top: calc(116px + var(--safe-t));
+        left: calc(8px + var(--safe-l));
+        width: 132px;
+        padding: 7px 9px;
+        font-size: 10.5px;
+        line-height: 1.4;
+        max-height: calc(100vh - 300px);
+        overflow: hidden;
+      }
       /* HP bar (bottom-center during a race) */
       #race-hp {
         position: absolute;
@@ -792,7 +901,8 @@
       #lobby-hint { font-size: 11px; opacity: 0.6; max-width: 600px; text-align: center; letter-spacing: 1px; }
       /* In the lobby, hide the free-flight HUD behind the overlay. */
       body.in-lobby #hud, body.in-lobby #hint, body.in-lobby #minimap,
-      body.in-lobby #horizon, body.in-lobby #settings, body.in-lobby #touch-ui { display: none !important; }
+      body.in-lobby #horizon, body.in-lobby #settings, body.in-lobby #touch-ui,
+      body.in-lobby #touch-topbar { display: none !important; }
       body.photo #race-hp, body.photo #race-crosshair, body.photo #lobby,
       body.photo #battle-warning, body.photo #battle-storm, body.photo #battle-aa,
       body.photo #battle-fx, body.photo #battle-kill { display: none !important; }
@@ -1010,8 +1120,11 @@
       body.menu-new #lobby-leave:hover { border-color: rgba(255,255,255,.45); color: #fff; background: rgba(255,255,255,.06); }
       body.menu-new #lobby-hint { font-family: 'Sora', sans-serif; color: rgba(255,255,255,.42); letter-spacing: .04em; text-align: left; max-width: 600px; }
 
-      /* responsive — stack on narrow / touch */
-      @media (max-width: 760px) {
+      /* responsive — stack on narrow / touch. Also fires on SHORT viewports:
+         a landscape phone is 640–930px wide but only ~360–450px tall, and the
+         desktop lobby/menu columns clip past the top there (centered flex +
+         overflow = unreachable content). */
+      @media (max-width: 760px), (max-height: 560px) {
         /* Top-align (not center): the stacked columns are taller than a phone
            screen, and centering an overflowing flex column clips the top out of
            the scrollable area. flex-start keeps the title reachable + scrollable. */
@@ -1285,8 +1398,8 @@
       #guide-actions { display: flex; align-items: center; gap: 10px; }
       .guide-spacer { flex: 1; }
       #guide-actions .menu-btn { min-width: 0; padding: 11px 20px; margin: 0; font-size: 12px; }
-      @media (max-width: 760px) {
-        #guide-card { padding: 20px 18px 18px; border-radius: 16px; }
+      @media (max-width: 760px), (max-height: 560px) {
+        #guide-card { padding: 20px 18px 18px; border-radius: 16px; max-height: calc(100vh - 40px); overflow-y: auto; }
         #guide-actions { flex-wrap: wrap; }
         .guide-spacer { flex: 0 0 100%; height: 0; }
       }
@@ -1297,6 +1410,9 @@
       border-radius:50%; pointer-events:none;
       box-shadow: 0 6px 22px rgba(0,0,0,0.30), 0 0 0 1px rgba(255,255,255,0.16);"></canvas>
     <div id="touch-ui" class="hidden">
+      <!-- Free-area camera look. MUST stay the first child: it covers the whole
+           screen and every other control paints (and receives pointers) above it. -->
+      <div id="look-layer"></div>
       <div class="joy" id="joy">
         <div class="joy-base"></div>
         <div class="joy-knob" id="joy-knob"></div>
@@ -1319,6 +1435,17 @@
       <!-- Race-combat trigger — absolutely positioned beside the throttle,
            visible only while body.in-race (set by main.js during a race). -->
       <button class="tbtn" id="btn-fire" data-i18n="touch.fire">FIRE</button>
+    </div>
+    <!-- Touch system bar — a SIBLING of #touch-ui on purpose: photo mode hides
+         the flight controls but this bar must survive so 📷 can exit again.
+         MENU/RACE proxy the #settings buttons (hidden on touch). -->
+    <div id="touch-topbar" class="hidden">
+      <button class="tb" id="tb-menu">&#9776;</button>
+      <button class="tb" id="tb-race">&#127937;</button>
+      <button class="tb" id="tb-photo">&#128247;</button>
+      <button class="tb" id="tb-light">&#128161;</button>
+      <button class="tb" id="tb-mute">&#128266;</button>
+      <button class="tb" id="tb-crash">&#128165;</button>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>
