@@ -1139,9 +1139,15 @@
         body.menu-new #nm-hero-cap { display: none; }
         body.menu-new #nm-wordmark { top: 18px; left: 20px; font-size: 19px; }
         body.menu-new #menu-main, body.menu-new #menu-planes, body.menu-new #menu-settings, body.menu-new #menu-notes, body.menu-new #menu-legal {
-          left: 0; right: 0; top: 43%; bottom: 0; width: 100%; transform: none;
+          left: 0; right: 0; top: 43%; bottom: 0; width: auto; transform: none;
           padding: 14px 20px env(safe-area-inset-bottom,18px); overflow-y: auto; justify-content: flex-start;
         }
+        /* These are scrollable flex COLUMNS now: without this, content taller
+           than the panel makes flexbox SHRINK the children instead of
+           scrolling — the mode toggle collapsed to a 2px line on phones. */
+        body.menu-new #menu-main > *, body.menu-new #menu-planes > *,
+        body.menu-new #menu-settings > *, body.menu-new #menu-notes > *,
+        body.menu-new #menu-legal > * { flex-shrink: 0; }
         body.menu-new.nm-screen-settings #nm-hero, body.menu-new.nm-screen-notes #nm-hero, body.menu-new.nm-screen-legal #nm-hero { opacity: 0; }
       }
     </style>
