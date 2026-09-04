@@ -23,6 +23,16 @@ const RESUME_GRACE_MS = 90000;
 // or message) this recently — so a silent/frozen tab can't be auto-launched
 // into a race it isn't present for (which then instantly empties).
 const LOBBY_ACTIVE_MS = 20000;
+// The lobby is the one room that gets no per-tick snapshot, so a quiet waiting
+// room used to send NOTHING between vote changes. Clients treat silence longer
+// than their stall watchdog (7 s) as a half-open socket and force-cycle the
+// connection — measured on prod as a disconnect/resume every 8 s per player,
+// 93% of all disconnects. That churn is what made players briefly "held for
+// resume" mid-match: hidden from snapshots (unkillable) and skipped by the
+// battle zone damage. Re-broadcasting lobby state on a slow beat keeps those
+// sockets provably alive, and it fixes ALREADY-INSTALLED clients (incl. the
+// Android app) because nothing on the client has to change.
+const LOBBY_HEARTBEAT_MS = 2500;
 // When set, the same server also serves the built game (static dist) over HTTP,
 // so one container/process can host both the page and the WebSocket relay
 // behind a single reverse-proxy host. Unset = WebSocket-only (legacy nginx box).
@@ -191,6 +201,7 @@ const clients = new Map(); // id -> client
 let nextId = 1;
 
 let lobby = { hostId: null, launchAt: null };
+let lastLobbyBeatAt = 0;
 let race = makeIdleRace();
 function makeIdleRace() {
   return {
@@ -896,6 +907,13 @@ setInterval(() => {
   // otherwise be clobbered mid-flight). updateLaunchTimer keeps launchAt null
   // during a race, but guard here too in case of clock/edge races.
   if (race.phase === 'idle' && lobby.launchAt != null && now >= lobby.launchAt) launchRace();
+
+  // Lobby keepalive — see LOBBY_HEARTBEAT_MS. Also keeps the launch countdown
+  // in sync for anyone whose lobby message was lost.
+  if (now - lastLobbyBeatAt >= LOBBY_HEARTBEAT_MS) {
+    lastLobbyBeatAt = now;
+    if (membersIn('lobby').length) sendLobbyState();
+  }
 
   // Race clock.
   let raceChanged = false;

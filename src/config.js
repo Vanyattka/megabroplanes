@@ -10,7 +10,7 @@
 // CHANGELOG notes stay ENGLISH-ONLY on purpose — it's a technical log, not
 // interface copy (the UI itself is translated, see src/ui/strings.js).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '1.2.3';
+export const GAME_VERSION = '1.2.4';
 export const GAME_CODENAME = 'India';
 export const GAME_CHANNEL = 'RELEASE';
 
@@ -19,6 +19,15 @@ export const GAME_CHANNEL = 'RELEASE';
 // CSS and markup are untouched.
 export const USE_NEW_MENU = true;
 export const CHANGELOG = [
+  {
+    version: '1.2.4',
+    codename: 'India',
+    channel: 'RELEASE',
+    date: '2026-09-05',
+    notes: [
+      'Fixed the constant reconnects that made multiplayer feel broken: a quiet lobby sent nothing at all, so after 7 seconds every client decided its connection had died and rebuilt it — on repeat, every 8 seconds. Players caught mid-reconnect went invisible to everyone else for a moment, which is why you sometimes could not shoot someone down, why the arena wall stopped burning their hull, and why races felt laggy. The lobby now keeps the connection alive.',
+    ],
+  },
   {
     version: '1.2.3',
     codename: 'India',
