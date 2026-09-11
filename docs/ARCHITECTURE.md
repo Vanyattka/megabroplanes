@@ -52,7 +52,8 @@ megabroplanes/
     │   ├── RuinMeshes.js        # shared stone materials
     │   ├── RuinsManager.js      # build/dispose ruin meshes per chunk
     │   ├── Roads.js             # ribbon meshes between nearby villages
-    │   ├── Scatter.js           # trees + rocks per chunk via biome filter
+    │   ├── Scatter.js           # trees + rocks per chunk via biome filter (+ far-LOD twins)
+    │   ├── DistanceLod.js       # shadow-caster LOD for villages / ruins / farms
     │   ├── Sky.js               # gradient sky dome + sun + ambient + moon
     │   ├── AtmosphericSky.js    # Preetham sky (High preset only)
     │   ├── DayNight.js          # keyframe interpolator → worldTime + lights
@@ -174,6 +175,8 @@ Cheap Mesh assembly around the worker output. One shared `MeshStandardMaterial` 
 ### `world/ChunkManager.js`
 Time-budgeted, closest-first streaming. Owns a worker pool (`ChunkWorkerPool`), a result queue with backpressure, and per-chunk roads (`buildForChunk` / `disposeForChunk`). Adaptive build budget: the per-frame ms ceiling scales with backlog so initial load fills fast without stalling once cruise begins. `primeAll(planePos, radius)` does a synchronous fill for the inner ring before the first frame.
 
+`updateLod(camPos, treeLodDist, shadowRadius)` (v1.3) is the per-frame distance LOD for scatter: chunks farther than `treeLodDist` from the camera swap their tree/rock `InstancedMesh` geometry to the species' low-poly twin, and chunks beyond `shadowRadius` stop casting into the sun shadow map. Both are flag/reference swaps with hysteresis (`LOD_HYSTERESIS`), so it is free and never flickers. Radii come from the graphics preset (`treeLodDist`, `shadowTreesRadius`, `shadowContentRadius`); `main.js applyDistanceLod()` drives it and forces full detail in photo mode.
+
 ### `world/ChunkWorker.js` + `world/ChunkWorkerPool.js`
 Worker thread runs `TerrainCompute` and ships `ArrayBuffer`s back as transferables. Pool keeps `MAX_IN_FLIGHT` requests outstanding and a result queue capped at `MAX_BUFFERED_RESULTS`. `ChunkManager` finalizes meshes from results in `MAX_TERRAIN_INSTALLS_PER_FRAME` increments.
 
@@ -199,7 +202,10 @@ Stone wall / tower / arch silhouettes spawned on mountain peaks (height > `RUIN_
 Ribbon meshes between nearby village airports, sampled along a deterministic curved centerline. Per-chunk ownership keyed on the from-village cell so each road is built exactly once. Reject candidates whose path crosses sea or exceeds `ROAD_MAX_SLOPE`.
 
 ### `world/Scatter.js`
-Trees + rocks per chunk. Candidate count = `TREES_PER_CHUNK × biome.trees × …` then biome / slope / water rejection trims the list. Trees use a small set of variants; both materials are flat-shaded `MeshStandardMaterial`s shared across instances.
+Trees + rocks per chunk. Candidate count = `TREES_PER_CHUNK × biome.trees × …` then biome / slope / water rejection trims the list. Trees use a small set of variants; both materials are flat-shaded `MeshStandardMaterial`s shared across instances. Every species carries a `geomLod` twin (3-sided open trunk + 4-sided open cone or octahedron canopy, same vertex colours, ~14 tris vs ~45); `setScatterLod(group, low, cast)` flips a chunk's meshes between the two and toggles `castShadow` — see `ChunkManager.updateLod`.
+
+### `world/DistanceLod.js`
+`updateContentShadowLod(managers, camPos, radius)` — the shadow-caster LOD for streamed content. Each manager tags a built group with `userData.lod = { x, z, r }` (feature centre + `LOD_PAD_*` radius); the first pass collects the group's casters once, later passes flip `castShadow` when the feature crosses `shadowContentRadius` (with hysteresis). Buildings still receive shadows; terrain is never touched, so the long mountain shadows at low sun survive. Motivation: the shadow map re-renders every gameplay frame and at low sun its ortho footprint is `2·half / sin(elevation)` long — 5–8× the noon area — so everything up-sun for kilometres was being drawn into the shadow pass.
 
 ### `world/Sky.js`
 Two domes, both centred on the camera every frame:

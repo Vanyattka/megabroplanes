@@ -5,13 +5,14 @@ import {
   CHUNK_BUILD_BUDGET_MS,
   CHUNK_BUILD_BUDGET_MAX_MS,
   CHUNK_BUILD_BUDGET_PER_PENDING_MS,
+  LOD_HYSTERESIS,
 } from '../config.js';
 import {
   buildChunk,
   finalizeTerrainMesh,
   villagesForChunk,
 } from './Terrain.js';
-import { buildScatter, disposeScatter } from './Scatter.js';
+import { buildScatter, disposeScatter, setScatterLod } from './Scatter.js';
 import { gfx } from '../ui/GraphicsSettings.js';
 import { profiler } from '../debug/Profiler.js';
 
@@ -119,6 +120,47 @@ export class ChunkManager {
     this._drainScatter(planePos);
     if (visibilityRadius) this._updateVisibility(planePos, visibilityRadius);
     profiler.timeEnd('chunkMgr', _tMgr);
+  }
+
+  // Distance LOD for scatter (trees + rocks), driven by the CAMERA position.
+  // `treeLodDist`: chunks whose centre is farther swap to the low-poly twin
+  // geometries; `shadowRadius`: beyond it scatter stops casting into the sun
+  // shadow map (0 = never casts). A chunk that went low-detail only returns to
+  // full detail at dist / LOD_HYSTERESIS so a chunk sitting on the boundary
+  // never flickers. ~400 entries × a few float ops — free. Returns true when
+  // any castShadow flag flipped (menu path refreshes its throttled shadow map).
+  updateLod(camPos, treeLodDist, shadowRadius) {
+    if (!Number.isFinite(camPos.x) || !Number.isFinite(camPos.z)) return false;
+    const px = camPos.x;
+    const pz = camPos.z;
+    const lodFar2 = treeLodDist * treeLodDist;
+    const lodNear2 = lodFar2 / (LOD_HYSTERESIS * LOD_HYSTERESIS);
+    const castFar2 = shadowRadius * shadowRadius;
+    const castNear2 = castFar2 / (LOD_HYSTERESIS * LOD_HYSTERESIS);
+    let shadowChanged = false;
+    for (const entry of this.chunks.values()) {
+      if (!entry.scatter) continue;
+      const cx = entry.cx * CHUNK_SIZE + CHUNK_SIZE / 2;
+      const cz = entry.cz * CHUNK_SIZE + CHUNK_SIZE / 2;
+      const dx = cx - px;
+      const dz = cz - pz;
+      const d2 = dx * dx + dz * dz;
+      // Hysteresis: flip state only past the outer/inner threshold.
+      let low = entry.lodLow;
+      if (low && d2 < lodNear2) low = false;
+      else if (!low && d2 > lodFar2) low = true;
+      let cast = entry.lodCast;
+      if (shadowRadius <= 0) cast = false;
+      else if (cast && d2 > castFar2) cast = false;
+      else if (!cast && d2 < castNear2) cast = true;
+      if (low !== entry.lodLow || cast !== entry.lodCast || entry.lodFresh) {
+        entry.lodLow = low;
+        entry.lodCast = cast;
+        entry.lodFresh = false;
+        if (setScatterLod(entry.scatter, low, cast)) shadowChanged = true;
+      }
+    }
+    return shadowChanged;
   }
 
   _updateVisibility(planePos, radius) {
@@ -348,6 +390,11 @@ export class ChunkManager {
       cx,
       cz,
       scatterPending: true,
+      // Distance-LOD state (updateLod). `lodFresh` forces the first pass to
+      // apply whatever state the camera distance dictates once scatter lands.
+      lodLow: false,
+      lodCast: true,
+      lodFresh: true,
     };
     this.chunks.set(key, entry);
     this._scatterQueue.push(entry);

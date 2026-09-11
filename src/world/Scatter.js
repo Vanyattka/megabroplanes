@@ -9,6 +9,7 @@ import {
   InstancedMesh,
   Matrix4,
   MeshStandardMaterial,
+  OctahedronGeometry,
   Quaternion,
   Vector3,
 } from 'three';
@@ -49,6 +50,9 @@ import { profiler } from '../debug/Profiler.js';
 // Shared geometries and materials — one set for the whole world. Do not
 // dispose per-chunk; only dispose the per-chunk InstancedMesh instance buffer.
 const rockGeom = new IcosahedronGeometry(1, 0);
+// Far-LOD rock: 8 tris instead of 20. Same material, so only the silhouette
+// changes — and a distant rock is a couple of pixels anyway.
+const rockGeomLod = new OctahedronGeometry(1, 0);
 const rockMat = new MeshStandardMaterial({ color: 0x7a7572, flatShading: true, roughness: 1 });
 
 // Tree species — each is a trunk + canopy geometry/material pair, built from
@@ -65,7 +69,7 @@ function paintGeom(geom, hex) {
   geom.setAttribute('color', new BufferAttribute(arr, 3));
 }
 
-function makeSpecies(trunk, canopy) {
+function mergeTree(trunk, canopy) {
   trunk.geom.translate(0, trunk.y, 0);
   canopy.geom.translate(0, canopy.y, 0);
   // Merge trunk + canopy into ONE geometry carrying their colors as vertex
@@ -78,12 +82,29 @@ function makeSpecies(trunk, canopy) {
   const cg = canopy.geom.index ? canopy.geom.toNonIndexed() : canopy.geom;
   paintGeom(tg, trunk.color);
   paintGeom(cg, canopy.color);
-  const geom = mergeGeometries([tg, cg], false);
+  return mergeGeometries([tg, cg], false);
+}
+
+// A species = full-detail geometry + a far-LOD twin (same colours, same
+// material, ~3× fewer triangles: 3-sided open trunk + 4-sided open cone or an
+// octahedron canopy). Chunks beyond the preset's `treeLodDist` render the
+// twin (see setScatterLod) — at that range a tree is a handful of pixels, so
+// the silhouette change is invisible but the vertex load of the main AND
+// shadow passes drops by ~70 %.
+function makeSpecies(trunk, canopy, trunkLod, canopyLod) {
   return {
-    geom,
+    geom: mergeTree(trunk, canopy),
+    geomLod: mergeTree(trunkLod, canopyLod),
     mat: new MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1 }),
   };
 }
+// LOD primitive helpers — open-ended so the caps (never visible from the air)
+// are not paid for. Octahedron canopies are slightly enlarged: with only six
+// vertices the mean silhouette radius of an octahedron is smaller than an
+// icosahedron's, so a small scale-up keeps the far canopy the same size.
+const lodTrunk = (rt, rb, h, y, color) => ({ geom: new CylinderGeometry(rt, rb, h, 3, 1, true), y, color });
+const lodCone = (r, h, y, color) => ({ geom: new ConeGeometry(r, h, 4, 1, true), y, color });
+const lodBall = (r, y, color) => ({ geom: new OctahedronGeometry(r * 1.15, 0), y, color });
 // Exported so village yard/street trees (VillageProps) can reuse the shared
 // merged tree geometry + vertexColors material — they're always InstancedMesh,
 // so the shared geoms are never disposed. Each species is { geom, mat }.
@@ -91,27 +112,37 @@ export const SPECIES = {
   // Classic pine — the original tree.
   conifer: makeSpecies(
     { geom: new CylinderGeometry(0.25, 0.35, 2, 6), y: 1, color: 0x5a3a20 },
-    { geom: new ConeGeometry(1.4, 3.8, 7), y: 3.9, color: 0x2d6b22 }
+    { geom: new ConeGeometry(1.4, 3.8, 7), y: 3.9, color: 0x2d6b22 },
+    lodTrunk(0.25, 0.35, 2, 1, 0x5a3a20),
+    lodCone(1.4, 3.8, 3.9, 0x2d6b22)
   ),
   // Rounded deciduous tree.
   broadleaf: makeSpecies(
     { geom: new CylinderGeometry(0.3, 0.42, 2.4, 6), y: 1.2, color: 0x6b4a2a },
-    { geom: new IcosahedronGeometry(2.0, 0), y: 3.6, color: 0x3f8f3a }
+    { geom: new IcosahedronGeometry(2.0, 0), y: 3.6, color: 0x3f8f3a },
+    lodTrunk(0.3, 0.42, 2.4, 1.2, 0x6b4a2a),
+    lodBall(2.0, 3.6, 0x3f8f3a)
   ),
   // Slim, pale-trunked birch with a light canopy.
   birch: makeSpecies(
     { geom: new CylinderGeometry(0.16, 0.2, 3, 5), y: 1.5, color: 0xd8d8d0 },
-    { geom: new IcosahedronGeometry(1.3, 0), y: 3.8, color: 0x9fc77a }
+    { geom: new IcosahedronGeometry(1.3, 0), y: 3.8, color: 0x9fc77a },
+    lodTrunk(0.16, 0.2, 3, 1.5, 0xd8d8d0),
+    lodBall(1.3, 3.8, 0x9fc77a)
   ),
   // Flat-topped savanna acacia.
   acacia: makeSpecies(
     { geom: new CylinderGeometry(0.3, 0.45, 2.8, 6), y: 1.4, color: 0x6b5230 },
-    { geom: new ConeGeometry(2.6, 1.3, 9), y: 3.4, color: 0x8a9a3a }
+    { geom: new ConeGeometry(2.6, 1.3, 9), y: 3.4, color: 0x8a9a3a },
+    lodTrunk(0.3, 0.45, 2.8, 1.4, 0x6b5230),
+    lodCone(2.6, 1.3, 3.4, 0x8a9a3a)
   ),
   // Low, dusty arid/tundra shrub.
   shrub: makeSpecies(
     { geom: new CylinderGeometry(0.16, 0.2, 0.5, 5), y: 0.25, color: 0x5a4a2a },
-    { geom: new IcosahedronGeometry(0.9, 0), y: 0.85, color: 0x7a8a4a }
+    { geom: new IcosahedronGeometry(0.9, 0), y: 0.85, color: 0x7a8a4a },
+    lodTrunk(0.16, 0.2, 0.5, 0.25, 0x5a4a2a),
+    lodBall(0.9, 0.85, 0x7a8a4a)
   ),
 };
 
@@ -256,6 +287,8 @@ export function buildScatter(cx, cz) {
     const trees = new InstancedMesh(sp.geom, sp.mat, mats.length);
     trees.castShadow = castTreeShadows;
     trees.receiveShadow = true;
+    trees.userData.lodFull = sp.geom;
+    trees.userData.lodLow = sp.geomLod;
     for (let i = 0; i < mats.length; i++) trees.setMatrixAt(i, mats[i]);
     trees.instanceMatrix.needsUpdate = true;
     group.add(trees);
@@ -289,6 +322,8 @@ export function buildScatter(cx, cz) {
     const rocks = new InstancedMesh(rockGeom, rockMat, rockMatrices.length);
     rocks.castShadow = !!gfx.settings.shadowTrees;
     rocks.receiveShadow = true;
+    rocks.userData.lodFull = rockGeom;
+    rocks.userData.lodLow = rockGeomLod;
     for (let i = 0; i < rockMatrices.length; i++) {
       rocks.setMatrixAt(i, rockMatrices[i]);
     }
@@ -298,6 +333,24 @@ export function buildScatter(cx, cz) {
 
   profiler.timeEnd('scatter', _t0);
   return group;
+}
+
+// Distance LOD for one chunk's scatter group (ChunkManager.updateLod).
+// `low` → render the low-poly twin geometries; `cast` → cast into the sun
+// shadow map (already false when the preset has shadowTrees off). Both are
+// plain flag/reference swaps: the InstancedMesh keeps its instance buffer and
+// the geometries are shared, so this costs nothing and allocates nothing.
+// Returns true when a castShadow flag actually changed (the menu path uses
+// that to refresh its throttled shadow map).
+export function setScatterLod(group, low, cast) {
+  let shadowChanged = false;
+  for (const child of group.children) {
+    if (!child.isInstancedMesh) continue;
+    const want = low ? child.userData.lodLow : child.userData.lodFull;
+    if (want && child.geometry !== want) child.geometry = want;
+    if (child.castShadow !== cast) { child.castShadow = cast; shadowChanged = true; }
+  }
+  return shadowChanged;
 }
 
 // Release per-chunk instance buffers. Shared geometry/material stay alive.

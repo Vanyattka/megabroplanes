@@ -9,6 +9,7 @@ import { VillageManager } from './world/VillageManager.js';
 import { isOnFlatGround } from './world/Villages.js';
 import { RuinsManager } from './world/RuinsManager.js';
 import { FarmManager } from './world/FarmManager.js';
+import { updateContentShadowLod } from './world/DistanceLod.js';
 import { Water } from './world/Water.js';
 import { WaterReflection } from './world/WaterReflection.js';
 import { groundHeight, physicsFloor } from './world/Ground.js';
@@ -425,6 +426,10 @@ if (import.meta.env && import.meta.env.DEV) {
   window.__tp = (x, y, z) =>
     plane.spawnAirborne(new Vector3(x, y, z), plane.quaternion.clone(), new Vector3(0, 0, 0), 0.2);
   window.__plane = plane;
+  window.__renderer = renderer;
+  window.__chunks = chunks;
+  window.__dayNight = dayNight;
+  window.__content = { villages, ruins, farms };
   window.__mp = mp;
   window.__battle = battleManager;
   window.__gh = (x, z) => groundHeight(x, z);
@@ -929,6 +934,33 @@ function streamUpdate() {
   if (contentGate.used || chunks.installedThisFrame) _shadowDirty = true;
 }
 
+// Distance LOD (v1.3.0, config LOD_*): far scatter swaps to low-poly twins and
+// far scatter/content stops casting into the sun shadow map. Driven by the
+// camera (chase or photo orbit), radii from the graphics preset. Returns true
+// when a caster flag flipped — the menu's throttled shadow map must refresh.
+function applyDistanceLod(camPos) {
+  const s = gfx.settings;
+  let treeLod = s.treeLodDist;
+  let treeShadowR = s.shadows > 0 && s.shadowTrees ? s.shadowTreesRadius : 0;
+  let contentR = s.shadows > 0 ? s.shadowContentRadius : 0;
+  // Photo mode shows the world at full detail: every tree in full geometry and
+  // every caster in the shadow map, exactly as before 1.3 — a screenshot must
+  // not carry LOD seams. The frame budget doesn't matter with physics frozen.
+  // Leaving photo mode drops straight back to the distance LOD (hysteresis
+  // resolves each chunk on the next pass). The DEV A/B hook window.__lodOff
+  // does the same for a like-for-like FPS read.
+  const fullDetail =
+    photoMode || (import.meta.env && import.meta.env.DEV && window.__lodOff);
+  if (fullDetail) {
+    treeLod = Infinity;
+    treeShadowR = s.shadows > 0 && s.shadowTrees ? Infinity : 0;
+    contentR = s.shadows > 0 ? Infinity : 0;
+  }
+  let changed = chunks.updateLod(camPos, treeLod, treeShadowR);
+  if (updateContentShadowLod([villages, ruins, farms], camPos, contentR)) changed = true;
+  return changed;
+}
+
 function physicsStep(dt) {
   if (gameState === 'menu') {
     return;
@@ -1013,6 +1045,7 @@ function renderStep(alpha) {
   // so streaming ran multiple times and could eat 30 ms/frame on long
   // frames. Plane physics still gets its proper N physics sub-steps.
   streamUpdate();
+  if (applyDistanceLod(renderer.camera.position)) _shadowDirty = true;
 
   // Track free ↔ lobby ↔ race transitions (lobby overlay, plane freeze).
   updateMpPhase();

@@ -10,7 +10,7 @@
 // CHANGELOG notes stay ENGLISH-ONLY on purpose — it's a technical log, not
 // interface copy (the UI itself is translated, see src/ui/strings.js).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '1.2.5';
+export const GAME_VERSION = '1.3.0';
 export const GAME_CODENAME = 'India';
 export const GAME_CHANNEL = 'RELEASE';
 
@@ -19,6 +19,17 @@ export const GAME_CHANNEL = 'RELEASE';
 // CSS and markup are untouched.
 export const USE_NEW_MENU = true;
 export const CHANGELOG = [
+  {
+    version: '1.3.0',
+    codename: 'India',
+    channel: 'RELEASE',
+    date: '2026-09-11',
+    notes: [
+      'Performance: distance level-of-detail for the world. Trees and rocks in far-off chunks now render as a low-poly version of themselves (about a third of the triangles — at that range a tree is a few pixels, so you will not see the swap), and far scatter and buildings stop casting into the sun shadow map. Terrain still casts, so long mountain shadows at dawn and dusk are unchanged. This is aimed squarely at the low-sun lag: the shadow map re-renders every frame, and with the sun near the horizon its footprint stretched kilometres up-sun, dragging every tree and village in that strip into the shadow pass. On High preset over a forest town at a 9° sun that is roughly 1.7× the frame rate (draw calls 1215 → ~600, triangles per frame 1.6 M → ~0.7 M); noon also benefits from the geometry LOD.',
+      'Photo mode still shows everything at full detail with every shadow — the LOD is suspended while you frame a shot and resumes the moment you leave.',
+      'The distance thresholds are per graphics preset (Low / Medium / High) and live in the config.',
+    ],
+  },
   {
     version: '1.2.5',
     codename: 'India',
@@ -1217,6 +1228,11 @@ export const GRAPHICS_PRESETS = {
     shadowTrees: false,
     shadowTerrain: false,
     shadowFrustumHalf: 360,
+    // Distance LOD (see LOD_* below). Low has no shadow map, so only the
+    // geometry LOD matters — and it kicks in early, this preset is for weak GPUs.
+    treeLodDist: 240,
+    shadowTreesRadius: 0,
+    shadowContentRadius: 0,
     bloom: false,
     bloomStrength: 0,
     vignette: false,
@@ -1235,6 +1251,9 @@ export const GRAPHICS_PRESETS = {
     shadowTrees: false,
     shadowTerrain: true,   // mountains/hills throw shadows on valleys
     shadowFrustumHalf: 420,
+    treeLodDist: 380,
+    shadowTreesRadius: 0,       // trees never cast on Medium (shadowTrees:false)
+    shadowContentRadius: 620,   // villages/ruins/farms cast only this close
     bloom: true,
     bloomStrength: 0.35,
     vignette: true,
@@ -1253,6 +1272,9 @@ export const GRAPHICS_PRESETS = {
     shadowTrees: true,
     shadowTerrain: true,
     shadowFrustumHalf: 720,
+    treeLodDist: 520,
+    shadowTreesRadius: 360,     // beyond this trees/rocks stop casting
+    shadowContentRadius: 900,
     bloom: true,
     bloomStrength: 0.5,
     vignette: true,
@@ -1278,6 +1300,28 @@ export const SHADOW_BIAS = -0.0005;
 // disagree sharply about their normals, which makes self-shadowing acne
 // very visible without a healthy offset along the geometric normal.
 export const SHADOW_NORMAL_BIAS = 0.08;
+
+// --- Distance LOD (v1.3.0) ----------------------------------------------
+// The sun shadow map re-renders every gameplay frame, and at dawn/dusk its
+// orthographic box lies almost flat on the ground: the footprint stretches to
+// 2·half / sin(elevation) along the sun azimuth — 5–8× more terrain, trees and
+// buildings in the shadow pass than at noon. That is where the low-sun lag
+// came from. Two levers, both driven by distance from the CAMERA:
+//   1. Trees + rocks in chunks farther than `treeLodDist` (per preset) swap to
+//      a low-poly LOD geometry (~10 tris instead of ~40). Same material and
+//      vertex colours, so lighting/fog match and the swap is a few pixels.
+//   2. Scatter beyond `shadowTreesRadius` and villages/ruins/farms beyond
+//      `shadowContentRadius` stop casting into the shadow map (they still
+//      receive). Terrain always casts so long mountain shadows survive.
+// Hysteresis keeps a chunk sitting on the boundary from flickering: it goes
+// low-detail at D and only returns to full detail at D / LOD_HYSTERESIS.
+export const LOD_HYSTERESIS = 1.12;
+// Feature "radius" added around a content group's centre before comparing
+// against shadowContentRadius, so a big town's far edge doesn't lose its
+// shadows while its near edge is right under the plane.
+export const LOD_PAD_VILLAGE = 380;   // airport + town span
+export const LOD_PAD_RUIN = 140;      // grand fortress footprint
+export const LOD_PAD_FARM = 160;      // field + yard
 // Bloom operates purely in HDR — threshold 2.0 is above the max luminance a
 // plain lit MeshStandardMaterial can reach, so accidental self-blooming of
 // the plane/terrain can't happen. Everything we DO want to bloom (sun disc,

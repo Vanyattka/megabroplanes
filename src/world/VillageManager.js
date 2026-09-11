@@ -2,10 +2,25 @@ import {
   CHUNK_SIZE,
   VILLAGE_CELL_SIZE,
   VILLAGE_VIEW_CELLS,
+  LOD_PAD_VILLAGE,
 } from '../config.js';
 import { getVillage } from './Villages.js';
 import { buildVillageGroup, disposeVillageGroup } from './VillageMeshes.js';
 import { profiler } from '../debug/Profiler.js';
+
+// Distance-LOD tag (DistanceLod.js): centre between the airport and the town,
+// padded so the far edge of a big village keeps casting while any of it is
+// within the preset's shadow radius.
+function tagLod(group, v) {
+  const r = v.villageRect;
+  const tx = r ? r.cx : v.airportX;
+  const tz = r ? r.cz : v.airportZ;
+  group.userData.lod = {
+    x: (v.airportX + tx) / 2,
+    z: (v.airportZ + tz) / 2,
+    r: LOD_PAD_VILLAGE,
+  };
+}
 
 // Two-stage streaming: when the plane crosses a village cell, we enqueue
 // any new villages in range, but we don't build them until the chunk
@@ -55,6 +70,7 @@ export class VillageManager {
         const _t0 = profiler.timeBegin();
         const group = buildVillageGroup(p.village);
         profiler.timeEnd('village', _t0);
+        tagLod(group, p.village);
         this.scene.add(group);
         this.active.set(p.key, group);
         this.pending.splice(i, 1);
@@ -77,6 +93,7 @@ export class VillageManager {
         if (!isChunkReady(vcx, vcz)) { remaining.push(p); continue; }
       }
       const group = buildVillageGroup(p.village);
+      tagLod(group, p.village);
       this.scene.add(group);
       this.active.set(p.key, group);
     }

@@ -1,4 +1,4 @@
-import { CHUNK_SIZE, FARM_CELL_SIZE } from '../config.js';
+import { CHUNK_SIZE, FARM_CELL_SIZE, LOD_PAD_FARM } from '../config.js';
 import { getFarm } from './Farms.js';
 import { buildFarmGroup, disposeFarmGroup } from './FarmMeshes.js';
 import { profiler } from '../debug/Profiler.js';
@@ -43,6 +43,7 @@ export class FarmManager {
         const _t0 = profiler.timeBegin();
         const g = buildFarmGroup(p.farm);
         profiler.timeEnd('farm', _t0);
+        g.userData.lod = { x: p.farm.x, z: p.farm.z, r: LOD_PAD_FARM };
         this.scene.add(g);
         this.active.set(p.key, g);
         this.pending.splice(i, 1);
@@ -63,6 +64,7 @@ export class FarmManager {
         if (!isChunkReady(fcx, fcz)) { remaining.push(p); continue; }
       }
       const g = buildFarmGroup(p.farm);
+      g.userData.lod = { x: p.farm.x, z: p.farm.z, r: LOD_PAD_FARM };
       this.scene.add(g);
       this.active.set(p.key, g);
     }

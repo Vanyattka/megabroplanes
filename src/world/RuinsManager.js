@@ -1,4 +1,4 @@
-import { CHUNK_SIZE, RUIN_CELL_SIZE } from '../config.js';
+import { CHUNK_SIZE, RUIN_CELL_SIZE, LOD_PAD_RUIN } from '../config.js';
 import { getRuin } from './Ruins.js';
 import { buildRuinGroup, disposeRuinGroup } from './RuinMeshes.js';
 import { profiler } from '../debug/Profiler.js';
@@ -40,6 +40,7 @@ export class RuinsManager {
         const _t0 = profiler.timeBegin();
         const g = buildRuinGroup(p.ruin);
         profiler.timeEnd('ruin', _t0);
+        g.userData.lod = { x: p.ruin.x, z: p.ruin.z, r: LOD_PAD_RUIN };
         this.scene.add(g);
         this.active.set(p.key, g);
         this.pending.splice(i, 1);
@@ -60,6 +61,7 @@ export class RuinsManager {
         if (!isChunkReady(rcx, rcz)) { remaining.push(p); continue; }
       }
       const g = buildRuinGroup(p.ruin);
+      g.userData.lod = { x: p.ruin.x, z: p.ruin.z, r: LOD_PAD_RUIN };
       this.scene.add(g);
       this.active.set(p.key, g);
     }
