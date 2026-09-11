@@ -392,6 +392,7 @@
       body.menu-open #race-leaderboard,
       body.menu-open #race-results,
       body.menu-open #battle-warning,
+      body.menu-open #net-lost,
       body.menu-open #battle-storm,
       body.menu-open #battle-aa,
       body.menu-open #battle-fx,
@@ -771,6 +772,36 @@
       @keyframes battle-warn-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
       /* Storm notice — the whole room sees it when someone grabs the storm
          pickup and the arena wall speeds up. Sits under the zone warning slot. */
+      /* Link-lost overlay — big, centred, unmissable; sits above every other
+         HUD element and pulses. Hidden in the menu / photo mode like the rest. */
+      #net-lost {
+        position: absolute;
+        top: 30%; left: 50%; transform: translate(-50%, -50%);
+        z-index: 55;
+        display: none;
+        align-items: center;
+        gap: 12px;
+        color: #ffb3a8;
+        background: rgba(48, 10, 8, 0.72);
+        -webkit-backdrop-filter: var(--hud-blur);
+        backdrop-filter: var(--hud-blur);
+        border: 1px solid rgba(255, 90, 70, 0.75);
+        padding: 14px 26px;
+        border-radius: 14px;
+        font-family: monospace;
+        font-size: 17px;
+        font-weight: bold;
+        letter-spacing: 1.5px;
+        text-align: center;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+        box-shadow: 0 8px 40px rgba(0,0,0,0.6), var(--hud-shadow);
+        pointer-events: none;
+        white-space: nowrap;
+        animation: battle-warn-pulse 1.1s ease-in-out infinite;
+      }
+      #net-lost.on { display: flex; }
+      #net-lost .nl-icon { font-size: 22px; color: #ff5040; }
+      body.touch #net-lost { font-size: 14px; padding: 11px 18px; top: calc(38% + var(--safe-t) / 2); }
       #battle-storm {
         position: absolute;
         top: 104px; left: 50%; transform: translateX(-50%);
@@ -913,6 +944,7 @@
       body.in-lobby #horizon, body.in-lobby #settings, body.in-lobby #touch-ui,
       body.in-lobby #touch-topbar { display: none !important; }
       body.photo #race-hp, body.photo #race-crosshair, body.photo #lobby,
+      body.photo #net-lost,
       body.photo #battle-warning, body.photo #battle-storm, body.photo #battle-aa,
       body.photo #battle-fx, body.photo #battle-kill { display: none !important; }
       body.menu-open #race-hp, body.menu-open #race-crosshair, body.menu-open #lobby { display: none !important; }
@@ -1209,6 +1241,11 @@
     <div id="race-leaderboard"></div>
     <div id="race-results"></div>
     <!-- Battle-mode extras (v1.1) — all hidden by default, driven by BattleManager. -->
+    <!-- Link-lost overlay (v1.2.5): shown over the HUD whenever the socket is
+         down during a race or battle. Without it the client keeps simulating
+         the match on a frozen snapshot and an outage reads as "broken
+         mechanics" (balloons that won't pop, a wall that doesn't burn). -->
+    <div id="net-lost"><span class="nl-icon">⚠</span><span data-i18n="net.lost">CONNECTION LOST — reconnecting…</span></div>
     <div id="battle-warning" data-i18n="battle.zoneWarn">OUTSIDE THE ZONE — hull burning!</div>
     <div id="battle-storm" data-i18n="battle.storm">⛈ THE ARENA IS SHRINKING FASTER!</div>
     <div id="battle-aa" data-i18n="battle.aaDeployed">🎯 AA SITE DEPLOYED — WATCH THE GROUND!</div>

@@ -34,6 +34,7 @@ import {
   BATTLE_BALLOON_COLORS,
   BATTLE_SPAWN_PROBE_DIST,
   BATTLE_SPAWN_PROBE_STEP,
+  BATTLE_POP_CONFIRM_GRACE_MS,
   BATTLE_EFFECTS,
   ROCKET_SPEED,
   ROCKET_TURN_RATE,
@@ -166,6 +167,15 @@ export class BattleManager {
     this._zone = null;
     this._wall = null;
     this._pickupMeshes = new Map(); // id -> { group, envelope, baseY } (balloons)
+    // Balloons WE popped, keyed by id -> pop time. A pop is client-first (the
+    // claim rides the socket after the local explosion), and the pickup list
+    // we sync from can be a snapshot the server sent BEFORE it saw the claim
+    // — or, on a stalled link, a snapshot frozen minutes ago. Either would
+    // resurrect the balloon on the very next frame. A popped id is skipped
+    // until a match message arrives that is demonstrably newer than the pop
+    // (plus a round-trip's grace), which then becomes authoritative again.
+    this._poppedAt = new Map();
+    this._lastRaceMsgAt = 0;
     this._turretMeshes = new Map(); // id -> { group, barrel } (AA sites)
     // Live homing rockets — a fixed pool of reusable meshes, own + remote + AA.
     this._rockets = [];
@@ -255,6 +265,7 @@ export class BattleManager {
   }
 
   _onRace(r) {
+    if (r) this._lastRaceMsgAt = Date.now();
     if (!r || r.phase === 'idle' || r.mode !== 'battle') {
       if (this.inBattle) this._teardown();
       this.phase = 'idle';
@@ -285,6 +296,7 @@ export class BattleManager {
       this._aaFlashUntil = 0;
       this._clearRockets();
       this._rocketCd = 0;
+      this._poppedAt.clear();
       this.bullets.clear();
       const slot = Math.max(0, r.standings.findIndex((s) => s.id === this.client.id));
       const pose = this._spawnPose(slot, r.standings.length);
@@ -316,6 +328,7 @@ export class BattleManager {
     this._disposeAllPickups();
     this._disposeAllTurrets();
     this._clearRockets();
+    this._poppedAt.clear();
     this.bullets.clear();
     this._localDowned = false;
     this._deadRemotes.clear();
@@ -422,6 +435,7 @@ export class BattleManager {
     this.audio.boom();
     this.client.sendPickup(id);
     this._removePickupMesh(id);
+    this._poppedAt.set(id, Date.now());
   }
 
   // Sync local balloons to the server's pickup list (spawn new, drop taken/culled).
@@ -429,10 +443,23 @@ export class BattleManager {
     const seen = new Set();
     for (const p of pickups) {
       seen.add(p.id);
+      const poppedAt = this._poppedAt.get(p.id);
+      if (poppedAt != null) {
+        // Only a message newer than our pop (+ grace for the claim's round
+        // trip) may bring the balloon back — it means the server really did
+        // NOT accept our claim (e.g. someone else popped it first, or the
+        // claim was lost while the link was down).
+        if (this._lastRaceMsgAt < poppedAt + BATTLE_POP_CONFIRM_GRACE_MS) continue;
+        this._poppedAt.delete(p.id);
+      }
       if (!this._pickupMeshes.has(p.id)) this._addPickupMesh(p);
     }
     for (const id of [...this._pickupMeshes.keys()]) {
       if (!seen.has(id)) this._removePickupMesh(id);
+    }
+    // Server no longer lists a popped id -> claim confirmed, forget it.
+    for (const id of [...this._poppedAt.keys()]) {
+      if (!seen.has(id)) this._poppedAt.delete(id);
     }
   }
 

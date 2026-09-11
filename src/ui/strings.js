@@ -162,6 +162,7 @@ export const STRINGS = {
     'battle.results': '☠ RESULTS',
     'battle.zoneWarn': 'OUTSIDE THE ZONE — hull burning!',
     'battle.storm': '⛈ THE ARENA IS SHRINKING FASTER!',
+    'net.lost': 'CONNECTION LOST — reconnecting…',
     'battle.aaDeployed': '🎯 AA SITE DEPLOYED — WATCH THE GROUND!',
     'battle.plusKill': '+1 ☠',
     // Mystery-pickup effect names (revealed only on collect).
@@ -374,6 +375,7 @@ export const STRINGS = {
     'battle.results': '☠ ИТОГИ БОЯ',
     'battle.zoneWarn': 'ВНЕ ЗОНЫ — корпус горит!',
     'battle.storm': '⛈ АРЕНА СЖИМАЕТСЯ БЫСТРЕЕ!',
+    'net.lost': 'СВЯЗЬ ПОТЕРЯНА — переподключение…',
     'battle.aaDeployed': '🎯 РАЗВЁРНУТА УСТАНОВКА ПВО — СЛЕДИ ЗА ЗЕМЛЁЙ!',
     'battle.plusKill': '+1 ☠',
     // Названия эффектов-«сюрпризов» (раскрываются только при подборе).

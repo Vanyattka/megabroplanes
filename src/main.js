@@ -282,7 +282,18 @@ mp.onStatusChange(({ connected, count, id }) => {
   if (!connected) _namedId = null;
   _mpStatus = { connected, count, id };
   renderMpStatus();
+  refreshNetLostOverlay();
 });
+// The link-lost overlay: visible only while the socket is down AND we are in
+// a match (race or battle) — the two places where a silent stall used to look
+// like broken game mechanics. Re-evaluated on every status change and on
+// every free ↔ lobby ↔ match transition.
+const netLostEl = document.getElementById('net-lost');
+function refreshNetLostOverlay() {
+  if (!netLostEl) return;
+  const inMatch = currentMpPhase() === 'race' || currentMpPhase() === 'battle';
+  netLostEl.classList.toggle('on', inMatch && !_mpStatus.connected);
+}
 const nameInputEl = document.getElementById('name-input');
 if (nameInputEl) {
   nameInputEl.value = playerName;
@@ -494,6 +505,7 @@ function updateMpPhase() {
   document.body.classList.toggle('in-race', phase === 'race' || phase === 'battle');
   document.body.classList.toggle('in-battle', phase === 'battle');
   refreshRaceButton();
+  refreshNetLostOverlay();
 }
 
 // The "RACE LOBBY" button (bottom-right) — joins the lobby from free MP flight.

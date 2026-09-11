@@ -10,7 +10,7 @@
 // CHANGELOG notes stay ENGLISH-ONLY on purpose — it's a technical log, not
 // interface copy (the UI itself is translated, see src/ui/strings.js).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '1.2.4';
+export const GAME_VERSION = '1.2.5';
 export const GAME_CODENAME = 'India';
 export const GAME_CHANNEL = 'RELEASE';
 
@@ -19,6 +19,16 @@ export const GAME_CHANNEL = 'RELEASE';
 // CSS and markup are untouched.
 export const USE_NEW_MENU = true;
 export const CHANGELOG = [
+  {
+    version: '1.2.5',
+    codename: 'India',
+    channel: 'RELEASE',
+    date: '2026-09-11',
+    notes: [
+      'When your connection drops mid-race or mid-battle you now get a big CONNECTION LOST banner instead of a match that silently stops working. Under the hood the client no longer keeps drawing the fight from a frozen snapshot: balloons you shoot stay popped until the server actually confirms otherwise.',
+      'Reconnecting is much faster on a flaky link: a socket that hasn\'t opened within 5 seconds is dropped and redialled, instead of waiting out the browser\'s minute-long TCP retry ladder. Outages that used to cost 60–80 seconds now cost about 10.',
+    ],
+  },
   {
     version: '1.2.4',
     codename: 'India',
@@ -1466,6 +1476,11 @@ export const BATTLE_DURATION_OPTIONS = [2, 5, 7]; // votable match length (minut
 // used to fly straight into it — an instant second death.
 export const BATTLE_SPAWN_PROBE_DIST = 1200;
 export const BATTLE_SPAWN_PROBE_STEP = 100;
+// A balloon we popped stays gone until a match message newer than the pop by
+// this much arrives — enough for the claim's round trip plus a server tick, so
+// neither a pre-claim snapshot nor a frozen snapshot on a dead link can
+// resurrect it (that was the "balloons won't blow up" symptom during outages).
+export const BATTLE_POP_CONFIRM_GRACE_MS = 600;
 // Homing rockets (the `rockets` mystery effect). Ammo is server-authoritative
 // (spent on launch, lost on death); these drive the client-side missile sim.
 export const ROCKET_SPEED = 190;              // m/s (faster than any plane)

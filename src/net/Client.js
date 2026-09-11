@@ -8,6 +8,12 @@ const RESUME_GIVEUP_MS = 95000;
 // instead of waiting for the OS/TCP timeout. This is what un-freezes a racer
 // whose connection hung mid-race.
 const STALL_MS = 7000;
+// How long a NEW socket may sit in CONNECTING before we abandon it and dial
+// again. Without this, a reconnect over a lossy path waits out the browser's
+// TCP SYN retry ladder (1-2-4-8-16-32 s ≈ 63 s) before it even fails — which
+// is exactly the "gone for 76 s" outage measured on prod. A fresh dial every
+// few seconds gets through as soon as the path clears.
+const CONNECT_TIMEOUT_MS = 5000;
 
 export class MultiplayerClient {
   constructor(url) {
@@ -35,6 +41,7 @@ export class MultiplayerClient {
     this._leftRace = false;
     this._enabled = true;
     this._reconnectTimer = null;
+    this._connectTimer = null; // open-timeout for a socket stuck in CONNECTING
     // Session resume: the server issues a token per session; we present it on
     // reconnect (?rt=) to reclaim the same id + room + race progress. prevId
     // lets a welcome tell a resume (same id) from a fresh session (new id).
@@ -99,6 +106,7 @@ export class MultiplayerClient {
         clearTimeout(this._reconnectTimer);
         this._reconnectTimer = null;
       }
+      this._clearConnectTimer();
       this._clearGiveUp();
       if (this.ws) {
         try { this.ws.onclose = null; this.ws.close(); } catch {}
@@ -115,6 +123,10 @@ export class MultiplayerClient {
       if (this._lobbyListener) this._lobbyListener(null);
       this._notify();
     }
+  }
+
+  _clearConnectTimer() {
+    if (this._connectTimer) { clearTimeout(this._connectTimer); this._connectTimer = null; }
   }
 
   _clearGiveUp() {
@@ -140,6 +152,7 @@ export class MultiplayerClient {
 
   _connect() {
     if (!this._enabled) return;
+    this._clearConnectTimer();
     let ws;
     // Carry the resume token so a reconnect reclaims the same session.
     const url = this.token
@@ -154,7 +167,20 @@ export class MultiplayerClient {
     }
     this.ws = ws;
 
+    // Open-timeout: a socket still CONNECTING after CONNECT_TIMEOUT_MS is
+    // abandoned (handlers detached first so its late close can't double-fire
+    // a reconnect) and we dial again immediately.
+    this._connectTimer = setTimeout(() => {
+      this._connectTimer = null;
+      if (this.ws !== ws || ws.readyState === 1) return;
+      console.warn('[net] open timed out after', CONNECT_TIMEOUT_MS, 'ms — redialing');
+      try { ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null; ws.close(); } catch {}
+      this.ws = null;
+      this._connect();
+    }, CONNECT_TIMEOUT_MS);
+
     ws.onopen = () => {
+      this._clearConnectTimer();
       this.connected = true;
       this._lastRecvAt = this._now();
       console.log('[net] connected to', this.url);
@@ -162,6 +188,7 @@ export class MultiplayerClient {
     };
     ws.onmessage = (ev) => { this._lastRecvAt = this._now(); this._onMessage(ev.data); };
     ws.onclose = () => {
+      this._clearConnectTimer();
       this.connected = false;
       this.remotes.clear();
       this._notify();

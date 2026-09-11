@@ -865,8 +865,19 @@ wss.on('connection', (ws, req) => {
     ws._cid = old.id;
     attachClientHandlers(ws);
     ws.send(JSON.stringify({ type: 'welcome', id: old.id, hue: old.hue, token: old.token }));
-    if (old.room === 'race') ws.send(JSON.stringify(raceMessage())); // re-sync the running race
-    else if (old.room === 'lobby') { recomputeHost(); updateLaunchTimer(); sendLobbyState(); } // back into the lobby
+    if (old.room === 'race') {
+      ws.send(JSON.stringify(raceMessage())); // re-sync the running race
+    } else {
+      // The player is NOT in a match any more — typically the match ended
+      // while their slot was held (last connected player dropped → the race
+      // ended and everyone was moved to free). The client still holds the
+      // last match snapshot it saw and would keep simulating a "ghost" match
+      // (timer running, balloons that never pop, a wall that never burns) with
+      // no overlay, since the socket is back. Tell it explicitly that its
+      // match is over so it tears the HUD down and lands in free flight.
+      ws.send(JSON.stringify({ type: 'race', phase: 'idle', mode: race.mode, course: [], standings: [], pickups: [], turrets: [] }));
+      if (old.room === 'lobby') { recomputeHost(); updateLaunchTimer(); sendLobbyState(); } // back into the lobby
+    }
     console.log(`[~] player ${old.id} resumed (room=${old.room}, total: ${clients.size})`);
     return;
   }
