@@ -429,6 +429,12 @@ if (import.meta.env && import.meta.env.DEV) {
   window.__renderer = renderer;
   window.__chunks = chunks;
   window.__dayNight = dayNight;
+  window.__postfx = postfx;
+  window.__sky = sky;
+  window.__water = water;
+  window.__waterReflection = waterReflection;
+  window.__clouds = clouds;
+  window.__gfx = gfx;
   window.__content = { villages, ruins, farms };
   window.__mp = mp;
   window.__battle = battleManager;
