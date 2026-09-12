@@ -435,6 +435,7 @@ if (import.meta.env && import.meta.env.DEV) {
   window.__waterReflection = waterReflection;
   window.__clouds = clouds;
   window.__gfx = gfx;
+  window.__minimap = minimap;
   window.__content = { villages, ruins, farms };
   window.__mp = mp;
   window.__battle = battleManager;

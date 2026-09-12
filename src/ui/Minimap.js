@@ -15,6 +15,22 @@ import {
 const WORLD_RADIUS = 900;
 const GRID = 80;
 const UPDATE_INTERVAL = 120; // ms between full refreshes
+// World metres per terrain-layer pixel (22.5 m).
+const WPP = (WORLD_RADIUS * 2) / GRID;
+// Terrain-layer cache (v1.3.x). The old code resampled all GRID² = 6400 map
+// pixels through the full terrain height + river + biome functions on EVERY
+// refresh (~25 noise evals each) — measured 14 ms on the main thread, 8×/s:
+// the single biggest source of frame hitches in the game. The world is
+// static, so a map pixel never changes once computed. The layer is now a
+// ring buffer of world-anchored pixels: slot = world-pixel index mod CACHE,
+// tagged with the index it holds. Each frame only the slots that entered the
+// window (a column or row at the edge as the plane moves — ~12 samples/frame
+// even for a jet) are recomputed, under a per-frame budget. Sampling is the
+// same terrainHeightAt / riverWaterLevelAt / biomeAt as before, at the pixel
+// centre, so the picture is identical.
+const CACHE = GRID + 2;   // 1-px margin each side: sub-pixel centring + bilinear draw
+const FILL_MIN = 24;      // samples/frame at cruise (jet at 200 m/s exposes ~12)
+const FILL_MAX = 400;     // after a respawn/teleport the window refills in ~17 frames (~0.9 ms each)
 
 // Biome → base color on the map. Sea mask overrides everything for the
 // distinct deeper-blue so big seas read clearly.
@@ -47,14 +63,40 @@ export class Minimap {
     // north-up world-aligned frame. We rotate it at composite time so the
     // player's triangle is always at the centre pointing straight up.
     this.terrainCanvas = document.createElement('canvas');
-    this.terrainCanvas.width = GRID;
-    this.terrainCanvas.height = GRID;
+    this.terrainCanvas.width = CACHE;
+    this.terrainCanvas.height = CACHE;
     this.terrainCtx = this.terrainCanvas.getContext('2d');
-    this.terrainImage = this.terrainCtx.createImageData(GRID, GRID);
+    this.terrainImage = this.terrainCtx.createImageData(CACHE, CACHE);
+    // Ring buffer of world-anchored pixels + the world-pixel index each slot
+    // holds (a mismatch means the slot is stale and must be resampled).
+    this.ringRGB = new Uint8ClampedArray(CACHE * CACHE * 3);
+    this.ringIx = new Int32Array(CACHE * CACHE).fill(0x7fffffff);
+    this.ringIz = new Int32Array(CACHE * CACHE).fill(0x7fffffff);
+    this._staleLeft = CACHE * CACHE;
+    // Window offsets sorted centre-first so a refill after a teleport grows
+    // outward from the player instead of top-down.
+    const order = [];
+    for (let oz = 0; oz < CACHE; oz++) {
+      for (let ox = 0; ox < CACHE; ox++) {
+        const dx = ox - CACHE / 2 + 0.5;
+        const dz = oz - CACHE / 2 + 0.5;
+        order.push({ ox, oz, d: dx * dx + dz * dz });
+      }
+    }
+    order.sort((a, b) => a.d - b.d);
+    this.orderX = Int16Array.from(order, (o) => o.ox);
+    this.orderZ = Int16Array.from(order, (o) => o.oz);
+    // Where the window image lands on the map canvas (set by _redrawTerrain).
+    this._imgX = 0;
+    this._imgY = 0;
+    this._imgSize = 0;
   }
 
   update(plane) {
     if (!this.canvas) return;
+    // Cheap, budgeted, every frame: keep the world-anchored cache filled for
+    // the window around the plane.
+    this._fillCache(plane);
     const now = performance.now();
     if (now - this.lastRedraw < UPDATE_INTERVAL) return;
     this.lastRedraw = now;
@@ -90,7 +132,7 @@ export class Minimap {
     ctx.translate(-w / 2, -h / 2);
 
     ctx.imageSmoothingEnabled = true; // soft biome blend instead of blocky pixels
-    ctx.drawImage(this.terrainCanvas, 0, 0, w, h);
+    ctx.drawImage(this.terrainCanvas, this._imgX, this._imgY, this._imgSize, this._imgSize);
 
     this._drawRoads(plane);
     this._drawVillages(plane);
@@ -129,38 +171,93 @@ export class Minimap {
     ctx.stroke();
   }
 
+  // Colour of one map pixel, sampled at the pixel centre. Decide water/land
+  // EXACTLY as the world does, from the real terrain height — NOT a raw
+  // sea-mask threshold (that painted ocean over high coastal land where the
+  // sea carve didn't reach the waterline). The global water plane covers
+  // terrain below WATER_LEVEL; river pools cover it below their (higher)
+  // local level.
+  _sampleColor(ix, iz) {
+    const wx = (ix + 0.5) * WPP;
+    const wz = (iz + 0.5) * WPP;
+    const g = terrainHeightAt(wx, wz);
+    if (g < WATER_LEVEL) {
+      return WATER_LEVEL - g > 8 ? SEA_COLOR : SEA_SHALLOW_COLOR;
+    }
+    const rw = riverWaterLevelAt(wx, wz);
+    if (rw != null && g < rw) return RIVER_COLOR;
+    return TERRAIN_COLORS[biomeAt(wx, wz).type] || [85, 85, 85];
+  }
+
+  // Resample the stale slots of the window around the plane, centre-first,
+  // under a per-frame budget. At cruise a slot goes stale only when the
+  // window slides one world pixel (22.5 m) — a single column or row.
+  _fillCache(plane) {
+    const px = plane.position.x;
+    const pz = plane.position.z;
+    if (!Number.isFinite(px) || !Number.isFinite(pz)) return;
+    const x0 = Math.floor(px / WPP) - CACHE / 2;
+    const z0 = Math.floor(pz / WPP) - CACHE / 2;
+    const budget = this._staleLeft > CACHE ? FILL_MAX : FILL_MIN;
+    const { ringRGB, ringIx, ringIz, orderX, orderZ } = this;
+    let stale = 0;
+    let done = 0;
+    for (let k = 0; k < orderX.length; k++) {
+      const ix = x0 + orderX[k];
+      const iz = z0 + orderZ[k];
+      const sx = ((ix % CACHE) + CACHE) % CACHE;
+      const sz = ((iz % CACHE) + CACHE) % CACHE;
+      const slot = sz * CACHE + sx;
+      if (ringIx[slot] === ix && ringIz[slot] === iz) continue;
+      stale++;
+      if (done >= budget) continue;
+      const c = this._sampleColor(ix, iz);
+      ringRGB[slot * 3] = c[0];
+      ringRGB[slot * 3 + 1] = c[1];
+      ringRGB[slot * 3 + 2] = c[2];
+      ringIx[slot] = ix;
+      ringIz[slot] = iz;
+      done++;
+    }
+    this._staleLeft = stale - done;
+  }
+
+  // Assemble the window image from the ring (slots still stale after a
+  // teleport are left transparent so the backing tint shows, not old world)
+  // and work out where it lands on the canvas so the plane sits exactly at
+  // the centre despite the window being snapped to world-pixel boundaries.
   _redrawTerrain(plane) {
     const data = this.terrainImage.data;
-    const wpp = (WORLD_RADIUS * 2) / GRID;
-    for (let py = 0; py < GRID; py++) {
-      const wz = plane.position.z + (py - GRID / 2) * wpp;
-      for (let px = 0; px < GRID; px++) {
-        const wx = plane.position.x + (px - GRID / 2) * wpp;
-        // Decide water/land EXACTLY as the world does, from the real terrain
-        // height — NOT a raw sea-mask threshold (that painted ocean over high
-        // coastal land where the sea carve didn't reach the waterline). The
-        // global water plane covers terrain below WATER_LEVEL; river pools
-        // cover it below their (higher) local level.
-        const g = terrainHeightAt(wx, wz);
-        let c;
-        if (g < WATER_LEVEL) {
-          c = WATER_LEVEL - g > 8 ? SEA_COLOR : SEA_SHALLOW_COLOR;
+    const { ringRGB, ringIx, ringIz } = this;
+    const px = plane.position.x;
+    const pz = plane.position.z;
+    const x0 = Math.floor(px / WPP) - CACHE / 2;
+    const z0 = Math.floor(pz / WPP) - CACHE / 2;
+    for (let oz = 0; oz < CACHE; oz++) {
+      const iz = z0 + oz;
+      const sz = ((iz % CACHE) + CACHE) % CACHE;
+      for (let ox = 0; ox < CACHE; ox++) {
+        const ix = x0 + ox;
+        const sx = ((ix % CACHE) + CACHE) % CACHE;
+        const slot = sz * CACHE + sx;
+        const i = (oz * CACHE + ox) * 4;
+        if (ringIx[slot] === ix && ringIz[slot] === iz) {
+          data[i] = ringRGB[slot * 3];
+          data[i + 1] = ringRGB[slot * 3 + 1];
+          data[i + 2] = ringRGB[slot * 3 + 2];
+          data[i + 3] = 255;
         } else {
-          const rw = riverWaterLevelAt(wx, wz);
-          if (rw != null && g < rw) {
-            c = RIVER_COLOR;
-          } else {
-            c = TERRAIN_COLORS[biomeAt(wx, wz).type] || [85, 85, 85];
-          }
+          data[i + 3] = 0;
         }
-        const i = (py * GRID + px) * 4;
-        data[i] = c[0];
-        data[i + 1] = c[1];
-        data[i + 2] = c[2];
-        data[i + 3] = 255;
       }
     }
     this.terrainCtx.putImageData(this.terrainImage, 0, 0);
+    // Canvas pixels per world pixel; the plane's offset from the window's
+    // top-left corner in world pixels is in [CACHE/2, CACHE/2 + 1).
+    const s = this.canvas.width / GRID;
+    this._imgSize = CACHE * s;
+    this._imgX = this.canvas.width / 2 - (px / WPP - x0) * s;
+    this._imgY = this.canvas.height / 2 - (pz / WPP - z0) * s;
   }
 
   _worldToCanvas(wx, wz, plane) {
