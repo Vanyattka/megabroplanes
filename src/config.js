@@ -10,7 +10,7 @@
 // CHANGELOG notes stay ENGLISH-ONLY on purpose — it's a technical log, not
 // interface copy (the UI itself is translated, see src/ui/strings.js).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '1.3.0';
+export const GAME_VERSION = '1.3.1';
 export const GAME_CODENAME = 'India';
 export const GAME_CHANNEL = 'RELEASE';
 
@@ -19,6 +19,15 @@ export const GAME_CHANNEL = 'RELEASE';
 // CSS and markup are untouched.
 export const USE_NEW_MENU = true;
 export const CHANGELOG = [
+  {
+    version: '1.3.1',
+    codename: 'India',
+    channel: 'RELEASE',
+    date: '2026-09-12',
+    notes: [
+      'Performance: the periodic micro-stutter is gone. The minimap was resampling all 6,400 of its terrain pixels through the full terrain, river and biome functions eight times a second — 5–7 ms of main-thread work each time, enough to blow the frame budget on every refresh, on every preset. The map now keeps a cache of world-anchored pixels and only computes the strip that comes into view as you fly (a couple of dozen points per frame), refilling in a fraction of a second after a respawn. Same picture, verified pixel-for-pixel; frame-time spikes from the map went from ~10 ms to under 1 ms and dropped frames during cruise went to zero in testing. Most noticeable over forests and long-shadow terrain.',
+    ],
+  },
   {
     version: '1.3.0',
     codename: 'India',
