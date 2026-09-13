@@ -158,8 +158,10 @@
          Landscape-phone plan with no overlapping zones:
            top-left minimap · top-centre readout strip + system bar ·
            top-right horizon · left edge race leaderboard (compact) ·
-           bottom-left stick + yaw pair · bottom-right throttle + actions
-           + FIRE · centre = free camera look-drag area.
+           bottom-left stick (pitch/roll, LEFT thumb) · bottom-right yaw pair
+           (RIGHT thumb) with the throttle + actions + FIRE stacked above it
+           (v1.3.3 — was: yaw beside the stick, throttle in the corner) ·
+           centre = free camera look-drag area.
          Every edge anchor is padded by the display-cutout safe areas so
          nothing hides under a notch in landscape (matters in the APK too).
          ================================================================== */
@@ -233,11 +235,14 @@
         border: 2px solid rgba(255,255,255,0.75);
         pointer-events: none;
       }
+      /* Bottom-right band, from the bottom up: yaw pair (46px + gap) → throttle
+         + action column + FIRE all start 68px up. Capped at 40vh so the
+         throttle top stays clear of the horizon instrument on short phones. */
       .throttle {
         position: absolute;
-        bottom: calc(12px + var(--safe-b));
+        bottom: calc(68px + var(--safe-b));
         right: calc(10px + var(--safe-r));
-        width: 56px; height: min(230px, 44vh);
+        width: 56px; height: min(230px, 40vh);
         touch-action: none;
       }
       .throttle-track {
@@ -289,18 +294,22 @@
         padding: 0;
       }
       .tbtn:active, .tbtn.down { background: rgba(255,200,80,0.55); color: #000; }
-      /* Yaw pair — rudder "pedals" to the right of the stick, thumb-reachable. */
+      /* Yaw pair — rudder "pedals" in the bottom-RIGHT corner under the right
+         thumb (left thumb owns the stick: bank with the left, turn with the
+         right). Spans 122px: the throttle sits above the → pedal, the action
+         column above the ← pedal. */
       #yaw-buttons {
         position: absolute;
-        bottom: calc(16px + var(--safe-b));
-        left: calc(174px + var(--safe-l));
+        bottom: calc(12px + var(--safe-b));
+        right: calc(10px + var(--safe-r));
         display: flex; gap: 10px;
       }
       #yaw-buttons .tbtn { width: 56px; height: 46px; border-radius: 14px; }
-      /* Action column — G/R/BRK stacked just left of the throttle. */
+      /* Action column — G/R/BRK stacked just left of the throttle, above the
+         ← pedal. */
       #action-buttons {
         position: absolute;
-        bottom: calc(12px + var(--safe-b));
+        bottom: calc(68px + var(--safe-b));
         right: calc(78px + var(--safe-r));
         display: flex; flex-direction: column; gap: 10px;
       }
@@ -343,7 +352,7 @@
          shown while actually in a race (body.in-race set by main.js). */
       #btn-fire {
         position: absolute;
-        bottom: calc(16px + var(--safe-b));
+        bottom: calc(72px + var(--safe-b));
         right: calc(142px + var(--safe-r));
         width: 84px; height: 84px;
         display: none;
@@ -363,6 +372,14 @@
         .tb { width: 38px; height: 34px; font-size: 15px; }
         body.touch #hud { gap: 9px; padding: 6px 11px; }
         body.touch #hud .row > span:last-child { font-size: 11.5px; }
+      }
+      /* Short-landscape trim (≤340px tall, e.g. 568×320): the G/R/BRK column
+         stacked above the yaw pedals would reach the horizon instrument, so
+         the buttons shrink to 40px and the throttle to 36vh. */
+      @media (max-height: 340px) {
+        #action-buttons { gap: 8px; }
+        #action-buttons .tbtn { width: 40px; height: 40px; font-size: 12px; }
+        .throttle { height: min(230px, 36vh); }
       }
       /* Main menu */
       #menu {

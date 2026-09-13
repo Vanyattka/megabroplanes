@@ -218,7 +218,7 @@ export const STRINGS = {
     'guide.s7.keys': 'Space — fire · R — respawn at the gate (race only)',
     'guide.s8.title': 'On a phone or tablet',
     'guide.s8.body':
-      'Touch controls appear automatically: the left stick steers (and taxis on the ground), the right slider is the throttle, and the buttons handle gear, reset and brakes. Drag anywhere on the open screen to look around. The top bar holds the menu, races, photo mode, lights, sound and crash toggle. A FIRE button shows up during matches.',
+      'Touch controls appear automatically: the left stick pitches and banks (and taxis on the ground), the ← → pedals in the bottom-right corner yaw under your right thumb, the slider above them is the throttle, and the buttons handle gear, reset and brakes. Drag anywhere on the open screen to look around. The top bar holds the menu, races, photo mode, lights, sound and crash toggle. A FIRE button shows up during matches.',
   },
 
   ru: {
@@ -431,7 +431,7 @@ export const STRINGS = {
     'guide.s7.keys': 'Space — огонь · R — респавн у ворот (только в гонке)',
     'guide.s8.title': 'На телефоне или планшете',
     'guide.s8.body':
-      'Сенсорное управление появляется само: левый стик рулит (на земле — управляет носовой стойкой), правый слайдер — газ, кнопки отвечают за шасси, сброс и тормоза. Проведите пальцем по свободной части экрана, чтобы осмотреться. Сверху — панель: меню, гонки, фоторежим, фары, звук и краши. В матче добавляется кнопка ОГОНЬ.',
+      'Сенсорное управление появляется само: левый стик задаёт тангаж и крен (на земле — управляет носовой стойкой), педали ← → в правом нижнем углу — рыскание под правым большим пальцем, слайдер над ними — газ, кнопки отвечают за шасси, сброс и тормоза. Проведите пальцем по свободной части экрана, чтобы осмотреться. Сверху — панель: меню, гонки, фоторежим, фары, звук и краши. В матче добавляется кнопка ОГОНЬ.',
   },
 };
 

@@ -10,7 +10,7 @@
 // CHANGELOG notes stay ENGLISH-ONLY on purpose — it's a technical log, not
 // interface copy (the UI itself is translated, see src/ui/strings.js).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '1.3.2';
+export const GAME_VERSION = '1.3.3';
 export const GAME_CODENAME = 'India';
 export const GAME_CHANNEL = 'RELEASE';
 
@@ -19,6 +19,15 @@ export const GAME_CHANNEL = 'RELEASE';
 // CSS and markup are untouched.
 export const USE_NEW_MENU = true;
 export const CHANGELOG = [
+  {
+    version: '1.3.3',
+    codename: 'India',
+    channel: 'RELEASE',
+    date: '2026-09-13',
+    notes: [
+      'Touch controls: the ← → yaw pedals moved from beside the stick to the bottom-right corner, under the right thumb — bank and pitch with the left hand, turn with the right. The throttle, the G / R / BRK column and the FIRE button all moved up to make room, and the throttle is capped a little shorter so it stays clear of the attitude indicator on short screens. The flight guide describes the new layout.',
+    ],
+  },
   {
     version: '1.3.2',
     codename: 'India',
