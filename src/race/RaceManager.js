@@ -17,8 +17,11 @@ import {
   GUN_FIRE_INTERVAL,
   GUN_MUZZLE_OFFSET,
   RACE_RESPAWN_MS,
+  RACE_GATE_PROBE_STEP,
+  WATER_LEVEL,
 } from '../config.js';
 import { t } from '../ui/I18n.js';
+import { groundHeight } from '../world/Ground.js';
 
 // Owns the full race experience once the lobby launches: the isolated session
 // (the server only sends us other racers), the gate rings, checkpoint
@@ -136,7 +139,7 @@ export class RaceManager {
       // post-race UI in a dead lobby state.
       this.client.clearLobby();
       this.inRace = true;
-      this.course = r.course || [];
+      this.course = this._placeCourse(r.course || []);
       this._courseKey = this._key(r);
       this._buildRings();
       this._localCp = 0;
@@ -159,7 +162,7 @@ export class RaceManager {
     } else if (amPart && wasIn) {
       // Course shouldn't change mid-race, but keep it fresh just in case.
       const key = this._key(r);
-      if (key !== this._courseKey) { this._courseKey = key; this.course = r.course || []; this._buildRings(); }
+      if (key !== this._courseKey) { this._courseKey = key; this.course = this._placeCourse(r.course || []); this._buildRings(); }
     } else if (!amPart && wasIn) {
       this._teardown();
     }
@@ -167,6 +170,62 @@ export class RaceManager {
 
   _key(r) {
     return r.course && r.course.length ? `${r.course.length}:${r.course[0].x},${r.course[0].z}` : 'none';
+  }
+
+  // --- course placement ------------------------------------------------------
+  // Ground level under a point, water counting as ground.
+  _surfaceY(x, z) {
+    return Math.max(groundHeight(x, z), WATER_LEVEL);
+  }
+
+  // Highest surface along the straight leg a→b (both ends inclusive), probed
+  // every RACE_GATE_PROBE_STEP metres.
+  _legMaxSurface(ax, az, bx, bz) {
+    const dx = bx - ax, dz = bz - az;
+    const len = Math.hypot(dx, dz);
+    const steps = Math.max(1, Math.ceil(len / RACE_GATE_PROBE_STEP));
+    let maxY = -Infinity;
+    for (let i = 0; i <= steps; i++) {
+      const f = i / steps;
+      const y = this._surfaceY(ax + dx * f, az + dz * f);
+      if (y > maxY) maxY = y;
+    }
+    return maxY;
+  }
+
+  // The point a gate is approached from: the previous gate, or for the first
+  // gate a virtual point one leg back along the first leg — so the start line
+  // and the first ring are aligned with the direction of flight rather than
+  // with wherever the world origin happens to be.
+  _prevOf(i, cps = this.course) {
+    if (i > 0) return cps[i - 1];
+    const g0 = cps[0];
+    const g1 = cps[1];
+    if (!g0) return { x: 0, z: 0 };
+    if (!g1) return { x: g0.x, z: g0.z + 1 };
+    return { x: g0.x - (g1.x - g0.x), z: g0.z - (g1.z - g0.z) };
+  }
+
+  // Turn the server's terrain-agnostic gates ({x, z, alt}) into world
+  // positions: each ring sits `alt` above the highest surface on the legs into
+  // AND out of it, so the straight line between any two consecutive gates
+  // clears the terrain by at least the smaller of their two alts. Deterministic
+  // terrain ⇒ every client agrees. Gates that already carry an absolute `y`
+  // (an old server) are taken as-is.
+  _placeCourse(course) {
+    const cps = course.map((g) => ({ ...g }));
+    for (let i = 0; i < cps.length; i++) {
+      const g = cps[i];
+      if (g.alt == null) { if (g.y == null) g.y = 150; continue; }
+      const prev = this._prevOf(i, cps);
+      let base = this._legMaxSurface(prev.x, prev.z, g.x, g.z);
+      if (i + 1 < cps.length) {
+        const nxt = cps[i + 1];
+        base = Math.max(base, this._legMaxSurface(g.x, g.z, nxt.x, nxt.z));
+      }
+      g.y = Math.round(base + g.alt);
+    }
+    return cps;
   }
 
   // Bail out of the current race back to free flight — used when the player
@@ -212,7 +271,7 @@ export class RaceManager {
       const mat = new MeshBasicMaterial({ color: RACE_COLOR_FUTURE, transparent: true, opacity: 0.85, toneMapped: false });
       const mesh = new Mesh(geo, mat);
       mesh.position.set(cp.x, cp.y, cp.z);
-      const prev = i === 0 ? { x: 0, z: 0 } : cps[i - 1];
+      const prev = this._prevOf(i, cps);
       const dx = cp.x - prev.x, dz = cp.z - prev.z;
       if (dx * dx + dz * dz > 0.001) mesh.rotation.y = Math.atan2(dx, dz);
       this.group.add(mesh);
@@ -253,7 +312,7 @@ export class RaceManager {
   _gatePose(idx, slot, total, back) {
     const cps = this.course;
     const gate = cps[Math.min(idx, cps.length - 1)] || { x: 0, y: 150, z: 0 };
-    const prev = idx > 0 ? cps[idx - 1] : { x: 0, z: 0 };
+    const prev = cps.length ? this._prevOf(Math.min(idx, cps.length - 1), cps) : { x: 0, z: 1 };
     let dx = gate.x - prev.x, dz = gate.z - prev.z;
     const len = Math.hypot(dx, dz) || 1; dx /= len; dz /= len;
     const lateral = (slot - (total - 1) / 2) * 26;

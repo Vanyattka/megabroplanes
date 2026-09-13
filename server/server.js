@@ -87,6 +87,32 @@ const RESULTS_MS = 15000;
 const RACE_TIMEOUT_MS = 360000;
 const DEFAULT_GATES = 8;
 const GATE_OPTIONS = [8, 16, 32]; // votable flag counts
+// Race course placement (v1.3.2). Like the battle arena, a course lands a
+// seeded random bearing + distance out from the home runway so the terrain
+// under every race differs — the server never knows the relief: gates carry
+// `alt` (height above the surface) and every client derives the same absolute
+// height from its deterministic terrain (RaceManager._placeCourse).
+const RACE_COURSE_MIN_DIST = 3000;
+const RACE_COURSE_MAX_DIST = 15000;
+// Gate altitude above the highest terrain on the legs into and out of it.
+const RACE_GATE_ALT_MIN = 130;
+const RACE_GATE_ALT_SPAN = 180;
+// 8 gates = one lap (ring). 16/32 = a wandering course: every leg turns by a
+// random angle (never straight, never a full circle), S-curves preferred over
+// spirals, kept inside RACE_BOUND_R of the centre, gates never bunched up.
+const RACE_LEG_MIN = 650;
+const RACE_LEG_MAX = 1000;
+const RACE_TURN_MIN = 15 * Math.PI / 180;
+const RACE_TURN_MAX = 70 * Math.PI / 180;
+// Course radius grows with the gate count so 32 gates aren't crammed:
+// 16 → ~2000 m, 32 → ~2500 m.
+const RACE_BOUND_BASE = 1500;
+const RACE_BOUND_PER_GATE = 32;
+const RACE_GATE_SPACING = 420;
+const RACE_LEG_ATTEMPTS = 40;
+// When the walk is boxed in by earlier gates, later attempts may stretch the
+// leg to escape the cluster instead of settling for a cramped gate.
+const RACE_LEG_ESCAPE = 1.5;
 const MODE_OPTIONS = ['race', 'battle']; // votable match modes (v1.1)
 // Combat
 const MAX_HP = 100;
@@ -265,28 +291,92 @@ function lobbyActive() {
 }
 
 // Deterministic course generator (LCG, seeded → random each race). `n` is the
-// voted flag count (8/16/32). ~8 gates make one 360° loop, so bigger counts
-// wind into a longer multi-loop circuit; the radius oscillates so successive
-// loops sit at different distances instead of stacking. Gates stay over the
-// gentle spawn plains (≈500–1850 m, alt 130–310 m) so they're flyable.
+// voted flag count (8/16/32). Every gate is { x, z, alt, r }: `alt` is the
+// height ABOVE the surface — clients place the ring above the highest ground
+// along its two legs (RaceManager._placeCourse), so a course can land on any
+// terrain. The centre is a seeded random spot RACE_COURSE_MIN..MAX_DIST from
+// the home runway (v1.3.2 — every race used to run over the same spawn plains).
+//   8 gates  → one 360° lap around the centre (ring, random direction).
+//   16 / 32  → a wandering course: each leg turns 15–70° left or right, the
+//              turn direction prefers to alternate (S-bends, no spiral), a
+//              homing rule keeps it within RACE_BOUND_R of the centre, and no
+//              gate lands within RACE_GATE_SPACING of an earlier one.
 function generateCourse(seed, n) {
   let s = seed >>> 0;
   const rand = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
   const count = GATE_OPTIONS.includes(n) ? n : DEFAULT_GATES;
-  const baseR = 550, spanR = 1250;
+  const cAng = rand() * Math.PI * 2;
+  const cDist = RACE_COURSE_MIN_DIST + rand() * (RACE_COURSE_MAX_DIST - RACE_COURSE_MIN_DIST);
+  const cx = Math.cos(cAng) * cDist;
+  const cz = Math.sin(cAng) * cDist;
+  const gate = (x, z) => ({
+    x: Math.round(x),
+    z: Math.round(z),
+    alt: Math.round(RACE_GATE_ALT_MIN + rand() * RACE_GATE_ALT_SPAN),
+    r: 60,
+  });
   const cps = [];
-  let ang = rand() * Math.PI * 2;
-  const radPhase = rand() * Math.PI * 2;
-  const dir = rand() < 0.5 ? 1 : -1; // randomize circuit direction
-  for (let i = 0; i < count; i++) {
-    ang += dir * (Math.PI * 2 / 8) + (rand() - 0.5) * 0.5;
-    const r = baseR + spanR * (0.5 + 0.45 * Math.sin(i * 0.8 + radPhase)) + (rand() - 0.5) * 220;
-    cps.push({
-      x: Math.round(Math.cos(ang) * r),
-      y: Math.round(130 + rand() * 180),
-      z: Math.round(Math.sin(ang) * r),
-      r: 60,
-    });
+
+  if (count <= 8) {
+    // Ring lap — the radius oscillates a little so it isn't a perfect circle.
+    const baseR = 550, spanR = 1250;
+    let ang = rand() * Math.PI * 2;
+    const radPhase = rand() * Math.PI * 2;
+    const dir = rand() < 0.5 ? 1 : -1;
+    for (let i = 0; i < count; i++) {
+      ang += dir * (Math.PI * 2 / 8) + (rand() - 0.5) * 0.5;
+      const r = baseR + spanR * (0.5 + 0.45 * Math.sin(i * 0.8 + radPhase)) + (rand() - 0.5) * 220;
+      cps.push(gate(cx + Math.cos(ang) * r, cz + Math.sin(ang) * r));
+    }
+    return cps;
+  }
+
+  // Wandering course. Each leg: a random 15–70° turn (direction prefers to
+  // alternate after two same-way turns → S-bends, not spirals). A leg that
+  // would leave the bound is bent toward the centre instead, by at most
+  // RACE_TURN_MAX so there is never a hairpin. Candidates are retried until
+  // one keeps RACE_GATE_SPACING from every earlier gate; if none does, the
+  // best-spaced candidate wins.
+  const bound = RACE_BOUND_BASE + RACE_BOUND_PER_GATE * count;
+  const wrap = (a) => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; };
+  let heading = rand() * Math.PI * 2;
+  const startR = rand() * 500;
+  const startA = rand() * Math.PI * 2;
+  let px = cx + Math.cos(startA) * startR;
+  let pz = cz + Math.sin(startA) * startR;
+  cps.push(gate(px, pz));
+  let lastSign = rand() < 0.5 ? 1 : -1;
+  let sameRun = 0;
+  for (let i = 1; i < count; i++) {
+    let best = null;
+    for (let attempt = 0; attempt < RACE_LEG_ATTEMPTS; attempt++) {
+      let sign = rand() < 0.5 ? 1 : -1;
+      if (sameRun >= 2 && sign === lastSign && rand() < 0.75) sign = -sign;
+      let h = heading + sign * (RACE_TURN_MIN + rand() * (RACE_TURN_MAX - RACE_TURN_MIN));
+      const stretch = attempt >= RACE_LEG_ATTEMPTS / 2 ? RACE_LEG_ESCAPE : 1;
+      const leg = (RACE_LEG_MIN + rand() * (RACE_LEG_MAX - RACE_LEG_MIN)) * stretch;
+      let tx = px + Math.cos(h) * leg;
+      let tz = pz + Math.sin(h) * leg;
+      if (Math.hypot(tx - cx, tz - cz) > bound) {
+        // Bend toward the centre, capped at a normal turn.
+        const want = wrap(Math.atan2(cz - pz, cx - px) + (rand() - 0.5) * 0.6 - heading);
+        const turn = Math.max(-RACE_TURN_MAX, Math.min(RACE_TURN_MAX, want));
+        h = heading + turn;
+        sign = turn < 0 ? -1 : 1;
+        tx = px + Math.cos(h) * leg;
+        tz = pz + Math.sin(h) * leg;
+      }
+      let spacing = Infinity;
+      for (const g of cps) spacing = Math.min(spacing, Math.hypot(g.x - tx, g.z - tz));
+      const over = Math.max(0, Math.hypot(tx - cx, tz - cz) - bound);
+      const score = spacing - over;
+      if (!best || score > best.score) best = { tx, tz, h, sign, score };
+      if (spacing >= RACE_GATE_SPACING && over === 0) break;
+    }
+    sameRun = best.sign === lastSign ? sameRun + 1 : 1;
+    lastSign = best.sign;
+    px = best.tx; pz = best.tz; heading = best.h;
+    cps.push(gate(px, pz));
   }
   return cps;
 }

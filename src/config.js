@@ -10,7 +10,7 @@
 // CHANGELOG notes stay ENGLISH-ONLY on purpose — it's a technical log, not
 // interface copy (the UI itself is translated, see src/ui/strings.js).
 // ---------------------------------------------------------------------------
-export const GAME_VERSION = '1.3.1';
+export const GAME_VERSION = '1.3.2';
 export const GAME_CODENAME = 'India';
 export const GAME_CHANNEL = 'RELEASE';
 
@@ -19,6 +19,18 @@ export const GAME_CHANNEL = 'RELEASE';
 // CSS and markup are untouched.
 export const USE_NEW_MENU = true;
 export const CHANGELOG = [
+  {
+    version: '1.3.2',
+    codename: 'India',
+    channel: 'RELEASE',
+    date: '2026-09-13',
+    notes: [
+      'Races now land somewhere new every time. Like the battle arena, each course is thrown a random 3–15 km out from the home runway, so you race over hills, coast, forest or mountains instead of the same spawn plains. Gates sit a set height above the highest terrain on the legs into and out of them, so the straight line between any two gates always clears the ground.',
+      '16- and 32-gate courses are no longer laps of one ring: every leg turns 15–70° left or right, S-bends rather than spirals, never a straight run and never a hairpin, spread across a wider area (about 2 km across for 16 gates, 2.5 km for 32). The 8-gate race stays a single lap.',
+      'The start line and the first ring now face along the first leg instead of pointing away from the world origin.',
+      'Needs a matching client: the server now describes gates by height above the terrain, so update the Android app to 1.3.2 too.',
+    ],
+  },
   {
     version: '1.3.1',
     codename: 'India',
@@ -1477,6 +1489,15 @@ export const RACE_GATE_OPTIONS = [8, 16, 32]; // votable flag counts in the lobb
 export const RACE_COLOR_NEXT = 0xffd23a;    // the gate you're heading for (gold, blooms)
 export const RACE_COLOR_FUTURE = 0x39c6ff;  // upcoming gates (cyan)
 export const RACE_COLOR_DONE = 0x39ff8a;    // gates already cleared (green)
+// Gate placement (v1.3.2). The server sends gates as { x, z, alt, r } — `alt`
+// is height ABOVE the surface, because courses now land on random terrain the
+// server knows nothing about. Each client places a gate at
+//   max(surface along the leg into it, surface along the leg out of it) + alt
+// probing the surface (ground, or water level over the sea) every
+// RACE_GATE_PROBE_STEP metres — so flying the straight line between two gates
+// never meets terrain, with at least RACE_GATE_ALT_MIN(130 m, server) to
+// spare. Terrain is deterministic, so every client computes identical heights.
+export const RACE_GATE_PROBE_STEP = 100;
 
 // Combat (race mode) — guns + HP. Damage/HP are server-authoritative; these
 // are the client-side feel (fire rate, tracer visuals, local hit tolerance).
